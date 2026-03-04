@@ -12,6 +12,9 @@
 #include <ctype.h>
 #include <errno.h>
 
+/* Forward declaration — defined in snprintf.c */
+extern int solcompat_snprintf(char *, size_t, const char *, ...);
+
 char *
 strndup(const char *s, size_t n)
 {
@@ -196,6 +199,3 @@ solcompat_strerror_r(int errnum, char *buf, size_t buflen)
     solcompat_snprintf(buf, buflen, "Unknown error %d", errnum);
     return buf;
 }
-
-/* Avoid naming collision — define as macro in a header if needed */
-extern int solcompat_snprintf(char *, size_t, const char *, ...);

@@ -81,9 +81,13 @@ login_tty(int fd)
     if (setsid() < 0)
         return -1;
 
-    /* Set controlling terminal */
-    if (ioctl(fd, TIOCSCTTY, 0) < 0) {
-        /* Some systems don't support TIOCSCTTY — try opening the tty */
+    /*
+     * Acquire controlling terminal.
+     * Solaris doesn't have TIOCSCTTY. Instead, the first open() of a
+     * terminal device after setsid() automatically makes it the
+     * controlling terminal. Re-open the slave pty to trigger this.
+     */
+    {
         char *tty = ttyname(fd);
         if (tty) {
             int tmpfd = open(tty, O_RDWR);

@@ -25,6 +25,10 @@
 #include <stdarg.h>
 #include <pthread.h>
 
+/* Forward declarations for our own functions */
+extern int solcompat_snprintf(char *, size_t, const char *, ...);
+extern size_t strlcpy(char *, const char *, size_t);
+
 #ifndef AT_FDCWD
 #define AT_FDCWD (-100)
 #endif
@@ -129,8 +133,7 @@ renameat(int olddirfd, const char *oldpath,
      * If both are relative to different dirfds, we need full paths.
      */
     char old_full[1024], new_full[1024];
-    int saved, result;
-    extern int solcompat_snprintf(char *, size_t, const char *, ...);
+    int result;
 
     /* Simple case: both AT_FDCWD */
     if (olddirfd == AT_FDCWD && newdirfd == AT_FDCWD)
@@ -277,8 +280,6 @@ linkat(int olddirfd, const char *oldpath,
 {
     char old_full[1024], new_full[1024];
     int result;
-    extern int solcompat_snprintf(char *, size_t, const char *, ...);
-    extern size_t strlcpy(char *, const char *, size_t);
 
     (void)flags;
 

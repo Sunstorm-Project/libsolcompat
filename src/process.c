@@ -16,7 +16,12 @@
 #include <errno.h>
 #include <signal.h>
 
+#include "solcompat/process.h"
+
 extern int solcompat_snprintf(char *, size_t, const char *, ...);
+
+/* Forward declaration — defined below */
+static const char *getprogname(void);
 
 int
 daemon(int nochdir, int noclose)
@@ -117,7 +122,6 @@ warnx(const char *fmt, ...)
  * getprogname — Solaris 7 doesn't have it, but we can use
  * getexecname() which is available since Solaris 2.4
  */
-#ifndef HAVE_GETPROGNAME
 static const char *
 getprogname(void)
 {
@@ -130,7 +134,6 @@ getprogname(void)
     slash = strrchr(p, '/');
     return slash ? slash + 1 : p;
 }
-#endif
 
 int
 pipe2(int pipefd[2], int flags)
@@ -191,8 +194,7 @@ mkostemp(char *tmpl, int flags)
  * but covers the common case.
  */
 
-/* Types defined in process.h */
-#include "solcompat/process.h"
+/* undef posix_spawn macros if present, so we can define the actual functions */
 #undef posix_spawn
 #undef posix_spawnp
 

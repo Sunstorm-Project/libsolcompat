@@ -16,6 +16,10 @@
 #include <errno.h>
 #include <utime.h>
 
+/* Forward declarations for our own functions */
+extern int solcompat_snprintf(char *, size_t, const char *, ...);
+extern size_t strlcpy(char *, const char *, size_t);
+
 int
 utimes(const char *path, const struct timeval tv[2])
 {
@@ -41,7 +45,6 @@ futimens(int fd, const struct timespec times[2])
     char procpath[64];
     char linkpath[1024];
     ssize_t len;
-    extern int solcompat_snprintf(char *, size_t, const char *, ...);
 
     solcompat_snprintf(procpath, sizeof(procpath), "/proc/self/fd/%d", fd);
     len = readlink(procpath, linkpath, sizeof(linkpath) - 1);
@@ -73,7 +76,6 @@ utimensat(int dirfd, const char *pathname,
     struct stat st;
     struct utimbuf ut;
     time_t now_time;
-    extern int solcompat_snprintf(char *, size_t, const char *, ...);
 
     (void)flags;  /* AT_SYMLINK_NOFOLLOW not supportable via utime */
 
@@ -241,7 +243,6 @@ fdopendir(int fd)
     char procpath[64];
     char dirpath[1024];
     ssize_t len;
-    extern int solcompat_snprintf(char *, size_t, const char *, ...);
 
     solcompat_snprintf(procpath, sizeof(procpath), "/proc/self/fd/%d", fd);
     len = readlink(procpath, dirpath, sizeof(dirpath) - 1);
