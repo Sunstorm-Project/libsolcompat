@@ -14,30 +14,39 @@
 #include <unistd.h>
 
 /*
- * We need the real mmap(2) and mmap64(2) — prevent the solcompat macro
- * from redirecting.  Save the real syscall symbols before including our header.
+ * We need the real mmap(2) and mmap64(2) for our wrappers.
+ *
+ * Two usage modes:
+ * 1. Compile-time: macros redirect mmap/mmap64 → solcompat_mmap/solcompat_mmap64
+ * 2. Runtime (LD_PRELOAD): we export mmap/mmap64 symbols that interpose the
+ *    libc versions.  We use dlsym(RTLD_NEXT) to find the originals.
  *
  * On Solaris 7, mmap64 has signature:
- *   void *mmap64(void *, size_t, int, int, int, off64_t)
+ *   caddr_t mmap64(caddr_t, size_t, int, int, int, off64_t)
  * Programs compiled with _FILE_OFFSET_BITS=64 or _LARGEFILE64_SOURCE use
  * mmap64 instead of mmap — we must wrap both.
  */
 
+#include <dlfcn.h>
+
 typedef void *(*mmap_fn_t)(void *, size_t, int, int, int, long);
 typedef void *(*mmap64_fn_t)(void *, size_t, int, int, int, long long);
 
-static mmap_fn_t   real_mmap   = (mmap_fn_t)mmap;
+static mmap_fn_t   orig_mmap   = NULL;
+static mmap64_fn_t orig_mmap64 = NULL;
 
-/*
- * mmap64 — on Solaris 7 declared as:
- *   caddr_t mmap64(caddr_t, size_t, int, int, int, off64_t)
- * We cast through mmap64_fn_t to normalize the signature.
- */
-static mmap64_fn_t real_mmap64 = (mmap64_fn_t)mmap64;
+static void
+init_real_mmap(void)
+{
+    if (!orig_mmap)
+        orig_mmap = (mmap_fn_t)dlsym(RTLD_NEXT, "mmap");
+    if (!orig_mmap64)
+        orig_mmap64 = (mmap64_fn_t)dlsym(RTLD_NEXT, "mmap64");
+}
 
 /* Now include our header (which may redefine mmap/mmap64) */
 #include "solcompat/memory.h"
-/* Undo the macros for this file — we call real_mmap/real_mmap64 directly */
+/* Undo the macros for this file — we call orig_mmap/orig_mmap64 directly */
 #undef mmap
 #undef mmap64
 
@@ -98,6 +107,7 @@ solcompat_mmap_anon(void *addr, size_t length, int prot, int flags)
     int fd;
     void *result;
 
+    init_real_mmap();
     fd = open("/dev/zero", O_RDWR);
     if (fd < 0)
         return MAP_FAILED;
@@ -105,55 +115,88 @@ solcompat_mmap_anon(void *addr, size_t length, int prot, int flags)
     /* Strip our synthetic MAP_ANONYMOUS flag, use the fd */
     flags &= ~0x100;
 
-    result = mmap(addr, length, prot, flags, fd, 0);
+    result = orig_mmap(addr, length, prot, flags, fd, 0);
     close(fd);
 
     return result;
 }
 
 /*
- * Full mmap wrapper — intercepts MAP_ANONYMOUS.
- * If the flag is set, redirect to /dev/zero.
- * Otherwise call the real mmap(2).
+ * Internal helper: perform MAP_ANONYMOUS → /dev/zero for mmap.
+ */
+static void *
+do_mmap_anon_fixup(void *addr, size_t length, int prot, int flags,
+                   int fd, long offset)
+{
+    init_real_mmap();
+    if (flags & 0x100) {
+        int zfd = open("/dev/zero", O_RDWR);
+        void *result;
+        if (zfd < 0)
+            return MAP_FAILED;
+        flags &= ~0x100;
+        result = orig_mmap(addr, length, prot, flags, zfd, 0);
+        close(zfd);
+        return result;
+    }
+    return orig_mmap(addr, length, prot, flags, fd, offset);
+}
+
+/*
+ * Internal helper: perform MAP_ANONYMOUS → /dev/zero for mmap64.
+ */
+static void *
+do_mmap64_anon_fixup(void *addr, size_t length, int prot, int flags,
+                     int fd, long long offset)
+{
+    init_real_mmap();
+    if (flags & 0x100) {
+        int zfd = open("/dev/zero", O_RDWR);
+        void *result;
+        if (zfd < 0)
+            return MAP_FAILED;
+        flags &= ~0x100;
+        result = orig_mmap64(addr, length, prot, flags, zfd, 0);
+        close(zfd);
+        return result;
+    }
+    return orig_mmap64(addr, length, prot, flags, fd, offset);
+}
+
+/*
+ * solcompat_mmap / solcompat_mmap64 — compile-time macro targets.
+ * Code compiled with solcompat headers calls these via the mmap/mmap64 macros.
  */
 void *
 solcompat_mmap(void *addr, size_t length, int prot, int flags,
                int fd, long offset)
 {
-    if (flags & 0x100) {
-        /* MAP_ANONYMOUS requested — use /dev/zero approach */
-        int zfd = open("/dev/zero", O_RDWR);
-        void *result;
-        if (zfd < 0)
-            return MAP_FAILED;
-        flags &= ~0x100;
-        result = real_mmap(addr, length, prot, flags, zfd, 0);
-        close(zfd);
-        return result;
-    }
-    return real_mmap(addr, length, prot, flags, fd, offset);
+    return do_mmap_anon_fixup(addr, length, prot, flags, fd, offset);
 }
 
-/*
- * mmap64 wrapper — same logic as solcompat_mmap but for the
- * large-file-aware mmap64(2).  Programs compiled with
- * _FILE_OFFSET_BITS=64 (including GCC 11 itself) call mmap64,
- * not mmap, so this wrapper is essential.
- */
 void *
 solcompat_mmap64(void *addr, size_t length, int prot, int flags,
                  int fd, long long offset)
 {
-    if (flags & 0x100) {
-        /* MAP_ANONYMOUS requested — use /dev/zero approach */
-        int zfd = open("/dev/zero", O_RDWR);
-        void *result;
-        if (zfd < 0)
-            return MAP_FAILED;
-        flags &= ~0x100;
-        result = real_mmap64(addr, length, prot, flags, zfd, 0);
-        close(zfd);
-        return result;
-    }
-    return real_mmap64(addr, length, prot, flags, fd, offset);
+    return do_mmap64_anon_fixup(addr, length, prot, flags, fd, offset);
+}
+
+/*
+ * LD_PRELOAD interposition symbols.
+ * When this .so is loaded via LD_PRELOAD, these replace libc's mmap/mmap64.
+ * dlsym(RTLD_NEXT) finds the real libc versions.
+ *
+ * On Solaris 7 these use caddr_t (char *) returns and off_t/off64_t offsets,
+ * but the ABI is the same as void* returns — the interposition works.
+ */
+void *
+mmap(void *addr, size_t length, int prot, int flags, int fd, long offset)
+{
+    return do_mmap_anon_fixup(addr, length, prot, flags, fd, offset);
+}
+
+void *
+mmap64(void *addr, size_t length, int prot, int flags, int fd, long long offset)
+{
+    return do_mmap64_anon_fixup(addr, length, prot, flags, fd, offset);
 }
