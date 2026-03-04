@@ -64,9 +64,19 @@ getaddrinfo(const char *node, const char *service,
         socktype = hints->ai_socktype;
         protocol = hints->ai_protocol;
 
-        if (family != AF_UNSPEC && family != AF_INET)
+        if (family != AF_UNSPEC && family != AF_INET && family != AF_INET6)
             return EAI_FAMILY;
     }
+
+    /*
+     * IPv6: We cannot resolve AAAA records with gethostbyname().
+     * If the caller specifically asked for AF_INET6, we return
+     * EAI_NONAME (no addresses found) which is the honest answer
+     * on a system without IPv6 DNS resolution.  Callers like
+     * libcody handle this gracefully.
+     */
+    if (family == AF_INET6)
+        return EAI_NONAME;
 
     /* Resolve service */
     if (service) {
@@ -240,51 +250,62 @@ getnameinfo(const struct sockaddr *sa, socklen_t salen,
             char *host, socklen_t hostlen,
             char *serv, socklen_t servlen, int flags)
 {
-    const struct sockaddr_in *sin;
     struct hostent *he;
     struct servent *se;
+    unsigned short port;
 
-    if (sa->sa_family != AF_INET)
-        return EAI_FAMILY;
+    if (sa->sa_family == AF_INET) {
+        const struct sockaddr_in *sin = (const struct sockaddr_in *)sa;
+        port = sin->sin_port;
 
-    sin = (const struct sockaddr_in *)sa;
-
-    if (host && hostlen > 0) {
-        if (flags & NI_NUMERICHOST) {
-            char *ip = inet_ntoa(sin->sin_addr);
-            if (strlen(ip) >= hostlen)
-                return EAI_OVERFLOW;
-            strcpy(host, ip);
-        } else {
-            he = gethostbyaddr((const char *)&sin->sin_addr,
-                               sizeof(sin->sin_addr), AF_INET);
-            if (he) {
-                if (strlen(he->h_name) >= hostlen)
-                    return EAI_OVERFLOW;
-                strcpy(host, he->h_name);
-            } else {
-                if (flags & NI_NAMEREQD)
-                    return EAI_NONAME;
+        if (host && hostlen > 0) {
+            if (flags & NI_NUMERICHOST) {
                 char *ip = inet_ntoa(sin->sin_addr);
                 if (strlen(ip) >= hostlen)
                     return EAI_OVERFLOW;
                 strcpy(host, ip);
+            } else {
+                he = gethostbyaddr((const char *)&sin->sin_addr,
+                                   sizeof(sin->sin_addr), AF_INET);
+                if (he) {
+                    if (strlen(he->h_name) >= hostlen)
+                        return EAI_OVERFLOW;
+                    strcpy(host, he->h_name);
+                } else {
+                    if (flags & NI_NAMEREQD)
+                        return EAI_NONAME;
+                    char *ip = inet_ntoa(sin->sin_addr);
+                    if (strlen(ip) >= hostlen)
+                        return EAI_OVERFLOW;
+                    strcpy(host, ip);
+                }
             }
         }
+    } else if (sa->sa_family == AF_INET6) {
+        const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6 *)sa;
+        port = sin6->sin6_port;
+
+        if (host && hostlen > 0) {
+            /* Always numeric for IPv6 — no reverse DNS on Solaris 7 */
+            if (!inet_ntop(AF_INET6, &sin6->sin6_addr, host, hostlen))
+                return EAI_OVERFLOW;
+        }
+    } else {
+        return EAI_FAMILY;
     }
 
     if (serv && servlen > 0) {
         if (flags & NI_NUMERICSERV) {
-            solcompat_snprintf(serv, servlen, "%d", ntohs(sin->sin_port));
+            solcompat_snprintf(serv, servlen, "%d", ntohs(port));
         } else {
             const char *proto = (flags & NI_DGRAM) ? "udp" : "tcp";
-            se = getservbyport(sin->sin_port, proto);
+            se = getservbyport(port, proto);
             if (se) {
                 if (strlen(se->s_name) >= servlen)
                     return EAI_OVERFLOW;
                 strcpy(serv, se->s_name);
             } else {
-                solcompat_snprintf(serv, servlen, "%d", ntohs(sin->sin_port));
+                solcompat_snprintf(serv, servlen, "%d", ntohs(port));
             }
         }
     }
@@ -308,6 +329,21 @@ inet_ntop(int af, const void *src, char *dst, socklen_t size)
         }
         return dst;
     }
+    if (af == AF_INET6) {
+        const unsigned char *p = (const unsigned char *)src;
+        /* Full colon-hex representation (no :: shortening) */
+        int n = solcompat_snprintf(dst, size,
+            "%x:%x:%x:%x:%x:%x:%x:%x",
+            (p[0] << 8) | p[1], (p[2] << 8) | p[3],
+            (p[4] << 8) | p[5], (p[6] << 8) | p[7],
+            (p[8] << 8) | p[9], (p[10] << 8) | p[11],
+            (p[12] << 8) | p[13], (p[14] << 8) | p[15]);
+        if (n < 0 || (socklen_t)n >= size) {
+            errno = ENOSPC;
+            return NULL;
+        }
+        return dst;
+    }
     errno = EAFNOSUPPORT;
     return NULL;
 }
@@ -323,6 +359,86 @@ inet_pton(int af, const char *src, void *dst)
         if (inet_aton(src, &addr) == 0)
             return 0;
         memcpy(dst, &addr, sizeof(addr));
+        return 1;
+    }
+    if (af == AF_INET6) {
+        /*
+         * Minimal IPv6 address parser: handles full 8-group hex
+         * notation (a:b:c:d:e:f:g:h) and the :: abbreviation.
+         * Does NOT handle embedded IPv4 (::ffff:1.2.3.4).
+         */
+        unsigned char buf[16];
+        unsigned int groups[8];
+        int ngroups = 0, dcolon = -1;
+        const char *p = src;
+        int i;
+
+        memset(buf, 0, sizeof(buf));
+        memset(groups, 0, sizeof(groups));
+
+        /* Handle leading :: */
+        if (p[0] == ':' && p[1] == ':') {
+            dcolon = 0;
+            p += 2;
+            if (*p == '\0') {
+                /* :: = all zeros */
+                memcpy(dst, buf, 16);
+                return 1;
+            }
+        }
+
+        while (*p && ngroups < 8) {
+            char *endptr;
+            unsigned long val;
+
+            if (!isxdigit((unsigned char)*p))
+                return 0;
+
+            val = strtoul(p, &endptr, 16);
+            if (val > 0xFFFF)
+                return 0;
+            groups[ngroups++] = (unsigned int)val;
+            p = endptr;
+
+            if (*p == ':') {
+                p++;
+                if (*p == ':') {
+                    if (dcolon >= 0)
+                        return 0; /* only one :: allowed */
+                    dcolon = ngroups;
+                    p++;
+                    if (*p == '\0')
+                        break;
+                }
+            } else if (*p != '\0') {
+                return 0;
+            }
+        }
+
+        if (*p != '\0')
+            return 0;
+
+        if (dcolon >= 0) {
+            /* Expand :: by shifting groups right */
+            int tail = ngroups - dcolon;
+            int fill = 8 - ngroups;
+            if (fill < 0)
+                return 0;
+            for (i = tail - 1; i >= 0; i--)
+                groups[dcolon + fill + i] = groups[dcolon + i];
+            for (i = 0; i < fill; i++)
+                groups[dcolon + i] = 0;
+            ngroups = 8;
+        }
+
+        if (ngroups != 8)
+            return 0;
+
+        for (i = 0; i < 8; i++) {
+            buf[i * 2]     = (unsigned char)(groups[i] >> 8);
+            buf[i * 2 + 1] = (unsigned char)(groups[i] & 0xFF);
+        }
+        memcpy(dst, buf, 16);
         return 1;
     }
     errno = EAFNOSUPPORT;

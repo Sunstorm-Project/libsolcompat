@@ -3,7 +3,7 @@
  *
  * getaddrinfo, freeaddrinfo, gai_strerror, getnameinfo,
  * inet_ntop, inet_pton, struct addrinfo, struct sockaddr_storage,
- * getifaddrs, freeifaddrs
+ * getifaddrs, freeifaddrs, IPv6 type stubs (AF_INET6, sockaddr_in6)
  */
 #ifndef SOLCOMPAT_NETWORK_H
 #define SOLCOMPAT_NETWORK_H
@@ -24,6 +24,62 @@ extern "C" {
 #ifndef INET6_ADDRSTRLEN
 #define INET6_ADDRSTRLEN 46
 #endif
+
+/* --- IPv6 address family and protocol constants --- */
+/*
+ * Solaris 7 has experimental IPv6 support and may define AF_INET6 in
+ * <sys/socket.h>.  If the sysroot headers don't provide it (or if the
+ * installation lacks the IPv6 optional package), we define the constants
+ * and structures here so code referencing IPv6 will compile.
+ *
+ * At runtime on Solaris 7, socket(AF_INET6, ...) may return EAFNOSUPPORT
+ * if the IPv6 kernel module isn't loaded, but the calling code (e.g.
+ * libcody) handles socket creation failures gracefully.
+ */
+#ifndef AF_INET6
+#define AF_INET6 26   /* Solaris AF_INET6 value */
+#endif
+#ifndef PF_INET6
+#define PF_INET6 AF_INET6
+#endif
+#ifndef IPPROTO_IPV6
+#define IPPROTO_IPV6 41
+#endif
+
+/* --- struct in6_addr / sockaddr_in6 --- */
+/*
+ * Guard on s6_addr being defined — it is always a macro (required by
+ * POSIX/RFC 2553) when struct in6_addr exists. If the system already
+ * provides IPv6 types, s6_addr will be defined and we skip everything.
+ * On Solaris 7 sysroots that lack IPv6 headers, s6_addr won't exist.
+ */
+#ifndef s6_addr
+struct in6_addr {
+    union {
+        unsigned char  _S6_u8[16];
+        unsigned short _S6_u16[8];
+        unsigned int   _S6_u32[4];
+    } _S6_un;
+};
+#define s6_addr   _S6_un._S6_u8
+#define s6_addr16 _S6_un._S6_u16
+#define s6_addr32 _S6_un._S6_u32
+
+#ifndef IN6ADDR_ANY_INIT
+#define IN6ADDR_ANY_INIT      { { { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 } } }
+#endif
+#ifndef IN6ADDR_LOOPBACK_INIT
+#define IN6ADDR_LOOPBACK_INIT { { { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1 } } }
+#endif
+
+struct sockaddr_in6 {
+    sa_family_t     sin6_family;    /* AF_INET6 */
+    unsigned short  sin6_port;      /* transport layer port # (network byte order) */
+    unsigned int    sin6_flowinfo;  /* IPv6 flow info */
+    struct in6_addr sin6_addr;      /* IPv6 address */
+    unsigned int    sin6_scope_id;  /* scope zone index */
+};
+#endif /* !s6_addr */
 
 /* --- sockaddr_storage --- */
 #ifndef _SS_MAXSIZE

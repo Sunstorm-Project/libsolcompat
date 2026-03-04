@@ -12,9 +12,9 @@
 #define SOLCOMPAT_H
 
 #define SOLCOMPAT_VERSION_MAJOR 0
-#define SOLCOMPAT_VERSION_MINOR 1
+#define SOLCOMPAT_VERSION_MINOR 2
 #define SOLCOMPAT_VERSION_PATCH 0
-#define SOLCOMPAT_VERSION_STRING "0.1.0"
+#define SOLCOMPAT_VERSION_STRING "0.2.0"
 
 /* Pull in all subsystem headers */
 #include <solcompat/snprintf.h>
@@ -33,5 +33,9 @@
 #include <solcompat/poll_ext.h>
 #include <solcompat/random.h>
 #include <solcompat/stubs.h>
+#include <solcompat/kstat_ext.h>
+#include <solcompat/hwcap.h>
+#include <solcompat/xpg.h>
+#include <solcompat/compat_types.h>
 
 #endif /* SOLCOMPAT_H */
