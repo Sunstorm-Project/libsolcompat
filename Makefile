@@ -81,7 +81,7 @@ libsolcompat.a: $(OBJS)
 
 # Shared library — only built on request or when linking works
 $(SONAME): $(PIC_OBJS)
-	$(CC) -shared -Wl,-h,$(SONAME) -o $@ $(PIC_OBJS) $(LDFLAGS) -lrt -lsocket -lnsl -lm
+	$(CC) -shared -Wl,-h,$(SONAME) -Wl,-z,notext -o $@ $(PIC_OBJS) $(LDFLAGS) -lrt -lsocket -lnsl -lm -ldl
 
 # Compile rules
 .SUFFIXES: .c .o .lo
