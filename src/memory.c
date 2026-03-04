@@ -186,17 +186,17 @@ solcompat_mmap64(void *addr, size_t length, int prot, int flags,
  * When this .so is loaded via LD_PRELOAD, these replace libc's mmap/mmap64.
  * dlsym(RTLD_NEXT) finds the real libc versions.
  *
- * On Solaris 7 these use caddr_t (char *) returns and off_t/off64_t offsets,
- * but the ABI is the same as void* returns — the interposition works.
+ * Solaris 7 uses caddr_t (char *) for the address parameter and return type.
+ * We match the exact system header signatures from <sys/mman.h>.
  */
-void *
-mmap(void *addr, size_t length, int prot, int flags, int fd, long offset)
+caddr_t
+mmap(caddr_t addr, size_t length, int prot, int flags, int fd, off_t offset)
 {
-    return do_mmap_anon_fixup(addr, length, prot, flags, fd, offset);
+    return (caddr_t)do_mmap_anon_fixup((void *)addr, length, prot, flags, fd, (long)offset);
 }
 
-void *
-mmap64(void *addr, size_t length, int prot, int flags, int fd, long long offset)
+caddr_t
+mmap64(caddr_t addr, size_t length, int prot, int flags, int fd, off64_t offset)
 {
-    return do_mmap64_anon_fixup(addr, length, prot, flags, fd, offset);
+    return (caddr_t)do_mmap64_anon_fixup((void *)addr, length, prot, flags, fd, (long long)offset);
 }
