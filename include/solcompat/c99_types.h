@@ -1,12 +1,12 @@
 /*
- * solcompat/c99_types.h — C99 integer type compatibility
+ * solcompat/c99_types.h -- C99 integer type compatibility
  *
  * Solaris 7 has <inttypes.h> with int8_t..int64_t but lacks both
- * <stdint.h> (C99) and the PRI*/SCN* format macros.
+ * <stdint.h> (C99) and the PRIxxx/SCNxxx format macros.
  *
- * The override/inttypes.h header now provides both PRI* and SCN*
+ * The override/inttypes.h header now provides both PRIxxx and SCNxxx
  * macros automatically.  This internal header is kept for backward
- * compatibility and adds SCN* macros if included directly.
+ * compatibility and adds SCNxxx macros if included directly.
  */
 #ifndef SOLCOMPAT_C99_TYPES_H
 #define SOLCOMPAT_C99_TYPES_H
