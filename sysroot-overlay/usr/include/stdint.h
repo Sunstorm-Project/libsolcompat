@@ -2,77 +2,63 @@
  * override/stdint.h -- C99 integer types for Solaris 7 SPARC
  *
  * Solaris 7 has no native <stdint.h>.  Its <sys/int_types.h> provides
- * the base types, but guards int64_t/uint64_t behind
- *   #if __STDC__ - 0 == 0
- * which fails under -std=c99/-std=c11 (where __STDC__ == 1).
+ * the base integer types, but guards 64-bit types behind
+ *   !defined(__STRICT_ANSI__) && !defined(_NO_LONGLONG)
+ * which excludes -std=c99/-std=c11 modes.
  *
- * This header defines all types directly so they work in any mode.
+ * This header temporarily undefines __STRICT_ANSI__ before including
+ * <sys/int_types.h> so all types (including 64-bit) are provided,
+ * then supplements with fast types and C99 limit/constant macros.
  *
  * Part of libsolcompat -- https://github.com/firefly128/libsolcompat
  */
 #ifndef _SOLCOMPAT_OVERRIDE_STDINT_H
 #define _SOLCOMPAT_OVERRIDE_STDINT_H
 
+/*
+ * Pull in Solaris base types from <sys/int_types.h>.
+ *
+ * Problem: sys/int_types.h guards int64_t, uint64_t, intmax_t, uintmax_t,
+ * int_least64_t, and uint_least64_t behind !__STRICT_ANSI__ (after GCC
+ * fixincludes).  When -std=c99 or -std=c11 is used, __STRICT_ANSI__ is
+ * defined and those types are omitted — then intmax_t falls back to
+ * int32_t, which is wrong for C99 and causes conflicts if we try to
+ * redefine it later.
+ *
+ * Fix: temporarily undefine __STRICT_ANSI__ so sys/int_types.h provides
+ * ALL types including 64-bit.  GCC always supports long long, so this
+ * is safe.  We restore __STRICT_ANSI__ immediately after.
+ */
+#ifdef __STRICT_ANSI__
+#define _SOLCOMPAT_RESTORE_STRICT_ANSI 1
+#undef __STRICT_ANSI__
+#endif
+
+#include <sys/int_types.h>
+
+#ifdef _SOLCOMPAT_RESTORE_STRICT_ANSI
+#define __STRICT_ANSI__ 1
+#undef _SOLCOMPAT_RESTORE_STRICT_ANSI
+#endif
+
 /* ================================================================
- * Exact-width integer types -- defined unconditionally
+ * Fastest minimum-width integer types
+ * (Not provided by Solaris sys/int_types.h at all)
+ * SPARC favors 32-bit alignment for narrow types.
  * ================================================================ */
-#ifndef _INT8_T
-#define _INT8_T
-typedef signed char             int8_t;
-#endif
-#ifndef _INT16_T
-#define _INT16_T
-typedef short                   int16_t;
-#endif
-#ifndef _INT32_T
-#define _INT32_T
-typedef int                     int32_t;
-#endif
-#ifndef _INT64_T
-#define _INT64_T
-__extension__ typedef long long int64_t;
-#endif
-
-#ifndef _UINT8_T
-#define _UINT8_T
-typedef unsigned char           uint8_t;
-#endif
-#ifndef _UINT16_T
-#define _UINT16_T
-typedef unsigned short          uint16_t;
-#endif
-#ifndef _UINT32_T
-#define _UINT32_T
-typedef unsigned int            uint32_t;
-#endif
-#ifndef _UINT64_T
-#define _UINT64_T
-__extension__ typedef unsigned long long uint64_t;
-#endif
-
-/* intmax_t / uintmax_t */
-#ifndef _INTMAX_T
-#define _INTMAX_T
-__extension__ typedef long long intmax_t;
-#endif
-#ifndef _UINTMAX_T
-#define _UINTMAX_T
-__extension__ typedef unsigned long long uintmax_t;
-#endif
-
-/* intptr_t / uintptr_t (ILP32) */
-#ifndef _INTPTR_T
-#define _INTPTR_T
-typedef int                     intptr_t;
-#endif
-#ifndef _UINTPTR_T
-#define _UINTPTR_T
-typedef unsigned int            uintptr_t;
-#endif
+typedef int              int_fast8_t;
+typedef int              int_fast16_t;
+typedef int              int_fast32_t;
+__extension__ typedef long long int_fast64_t;
+typedef unsigned int     uint_fast8_t;
+typedef unsigned int     uint_fast16_t;
+typedef unsigned int     uint_fast32_t;
+__extension__ typedef unsigned long long uint_fast64_t;
 
 /* ================================================================
  * Exact-width integer limits
  * ================================================================ */
+#ifndef INT8_MIN
 #define INT8_MIN    (-128)
 #define INT8_MAX    127
 #define UINT8_MAX   255U
@@ -85,10 +71,12 @@ typedef unsigned int            uintptr_t;
 #define INT64_MIN   (-9223372036854775807LL-1LL)
 #define INT64_MAX   9223372036854775807LL
 #define UINT64_MAX  18446744073709551615ULL
+#endif
 
 /* ================================================================
  * Minimum-width integer limits
  * ================================================================ */
+#ifndef INT_LEAST8_MIN
 #define INT_LEAST8_MIN   INT8_MIN
 #define INT_LEAST8_MAX   INT8_MAX
 #define UINT_LEAST8_MAX  UINT8_MAX
@@ -101,10 +89,12 @@ typedef unsigned int            uintptr_t;
 #define INT_LEAST64_MIN  INT64_MIN
 #define INT_LEAST64_MAX  INT64_MAX
 #define UINT_LEAST64_MAX UINT64_MAX
+#endif
 
 /* ================================================================
  * Fastest minimum-width integer limits
  * ================================================================ */
+#ifndef INT_FAST8_MIN
 #define INT_FAST8_MIN    INT32_MIN
 #define INT_FAST8_MAX    INT32_MAX
 #define UINT_FAST8_MAX   UINT32_MAX
@@ -117,37 +107,53 @@ typedef unsigned int            uintptr_t;
 #define INT_FAST64_MIN   INT64_MIN
 #define INT_FAST64_MAX   INT64_MAX
 #define UINT_FAST64_MAX  UINT64_MAX
+#endif
 
 /* ================================================================
  * Pointer-width integer limits (ILP32 — SPARC 32-bit)
  * ================================================================ */
+#ifndef INTPTR_MIN
 #define INTPTR_MIN   INT32_MIN
 #define INTPTR_MAX   INT32_MAX
 #define UINTPTR_MAX  UINT32_MAX
+#endif
 
 /* ================================================================
  * Maximum-width integer limits
  * ================================================================ */
+#ifndef INTMAX_MIN
 #define INTMAX_MIN   INT64_MIN
 #define INTMAX_MAX   INT64_MAX
 #define UINTMAX_MAX  UINT64_MAX
+#endif
 
 /* ================================================================
  * Other limits
  * ================================================================ */
+#ifndef PTRDIFF_MIN
 #define PTRDIFF_MIN  INT32_MIN
 #define PTRDIFF_MAX  INT32_MAX
+#endif
+#ifndef SIZE_MAX
 #define SIZE_MAX     UINT32_MAX
+#endif
+#ifndef SIG_ATOMIC_MIN
 #define SIG_ATOMIC_MIN INT32_MIN
 #define SIG_ATOMIC_MAX INT32_MAX
+#endif
+#ifndef WCHAR_MIN
 #define WCHAR_MIN    0
 #define WCHAR_MAX    2147483647
+#endif
+#ifndef WINT_MIN
 #define WINT_MIN     INT32_MIN
 #define WINT_MAX     INT32_MAX
+#endif
 
 /* ================================================================
  * Integer constant macros
  * ================================================================ */
+#ifndef INT8_C
 #define INT8_C(x)    (x)
 #define UINT8_C(x)   (x ## U)
 #define INT16_C(x)   (x)
@@ -158,78 +164,6 @@ typedef unsigned int            uintptr_t;
 #define UINT64_C(x)  (x ## ULL)
 #define INTMAX_C(x)  (x ## LL)
 #define UINTMAX_C(x) (x ## ULL)
-
-/* ================================================================
- * Minimum-width integer types
- * ================================================================ */
-#ifndef _INT_LEAST8_T
-#define _INT_LEAST8_T
-typedef signed char      int_least8_t;
-#endif
-#ifndef _INT_LEAST16_T
-#define _INT_LEAST16_T
-typedef short            int_least16_t;
-#endif
-#ifndef _INT_LEAST32_T
-#define _INT_LEAST32_T
-typedef int              int_least32_t;
-#endif
-#ifndef _INT_LEAST64_T
-#define _INT_LEAST64_T
-__extension__ typedef long long int_least64_t;
-#endif
-#ifndef _UINT_LEAST8_T
-#define _UINT_LEAST8_T
-typedef unsigned char    uint_least8_t;
-#endif
-#ifndef _UINT_LEAST16_T
-#define _UINT_LEAST16_T
-typedef unsigned short   uint_least16_t;
-#endif
-#ifndef _UINT_LEAST32_T
-#define _UINT_LEAST32_T
-typedef unsigned int     uint_least32_t;
-#endif
-#ifndef _UINT_LEAST64_T
-#define _UINT_LEAST64_T
-__extension__ typedef unsigned long long uint_least64_t;
-#endif
-
-/* ================================================================
- * Fastest minimum-width integer types
- * (SPARC favors 32-bit alignment for narrow types)
- * ================================================================ */
-#ifndef _INT_FAST8_T
-#define _INT_FAST8_T
-typedef int              int_fast8_t;
-#endif
-#ifndef _INT_FAST16_T
-#define _INT_FAST16_T
-typedef int              int_fast16_t;
-#endif
-#ifndef _INT_FAST32_T
-#define _INT_FAST32_T
-typedef int              int_fast32_t;
-#endif
-#ifndef _INT_FAST64_T
-#define _INT_FAST64_T
-__extension__ typedef long long int_fast64_t;
-#endif
-#ifndef _UINT_FAST8_T
-#define _UINT_FAST8_T
-typedef unsigned int     uint_fast8_t;
-#endif
-#ifndef _UINT_FAST16_T
-#define _UINT_FAST16_T
-typedef unsigned int     uint_fast16_t;
-#endif
-#ifndef _UINT_FAST32_T
-#define _UINT_FAST32_T
-typedef unsigned int     uint_fast32_t;
-#endif
-#ifndef _UINT_FAST64_T
-#define _UINT_FAST64_T
-__extension__ typedef unsigned long long uint_fast64_t;
 #endif
 
 #endif /* _SOLCOMPAT_OVERRIDE_STDINT_H */
