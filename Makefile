@@ -50,7 +50,7 @@ SRCS = src/snprintf.c \
        src/xpg.c \
        src/getopt_long.c \
        src/ctype_compat.c \
-       src/atomic_compat.c
+       src/atomic_ops.c
 
 OBJS     = $(SRCS:.c=.o)
 PIC_OBJS = $(SRCS:.c=.lo)
@@ -69,7 +69,7 @@ LIBC_OBJS = src/snprintf.o src/string.o src/stdio.o src/stdlib.o \
             src/c99_types.o src/memory.o src/filesystem.o src/at_funcs.o \
             src/process.o src/pty.o src/poll.o src/random.o src/clock.o \
             src/stubs.o src/getopt_long.o src/ctype_compat.o \
-            src/atomic_compat.o
+            src/atomic_ops.o
 
 # Residual libsolcompat.a (doesn't belong in any system library)
 RESIDUAL_OBJS = src/xpg.o src/hwcap.o
