@@ -1,9 +1,11 @@
 /*
- * solcompat/network.h — Missing networking APIs
+ * solcompat/network.h — Missing networking APIs & IPv6 types for Solaris 7
  *
  * getaddrinfo, freeaddrinfo, gai_strerror, getnameinfo,
  * inet_ntop, inet_pton, struct addrinfo, struct sockaddr_storage,
- * getifaddrs, freeifaddrs, IPv6 type stubs (AF_INET6, sockaddr_in6)
+ * getifaddrs, freeifaddrs, if_nametoindex, if_indextoname,
+ * AF_INET6, struct in6_addr, struct sockaddr_in6, IN6_IS_ADDR_* macros,
+ * IPv6 socket options (IPV6_V6ONLY, etc.), in6addr_any, in6addr_loopback
  */
 #ifndef SOLCOMPAT_NETWORK_H
 #define SOLCOMPAT_NETWORK_H
@@ -11,6 +13,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <netdb.h>
 
 #ifdef __cplusplus
@@ -79,7 +82,142 @@ struct sockaddr_in6 {
     struct in6_addr sin6_addr;      /* IPv6 address */
     unsigned int    sin6_scope_id;  /* scope zone index */
 };
+
+/* --- Global IPv6 address constants (defined in network.c) --- */
+extern const struct in6_addr in6addr_any;
+extern const struct in6_addr in6addr_loopback;
+
+/* --- IN6_IS_ADDR_* classification macros (RFC 3513 / RFC 4291) --- */
+#ifndef IN6_IS_ADDR_UNSPECIFIED
+#define IN6_IS_ADDR_UNSPECIFIED(a) \
+    (((const unsigned int *)(a))[0] == 0 && \
+     ((const unsigned int *)(a))[1] == 0 && \
+     ((const unsigned int *)(a))[2] == 0 && \
+     ((const unsigned int *)(a))[3] == 0)
+#endif
+
+#ifndef IN6_IS_ADDR_LOOPBACK
+#define IN6_IS_ADDR_LOOPBACK(a) \
+    (((const unsigned int *)(a))[0] == 0 && \
+     ((const unsigned int *)(a))[1] == 0 && \
+     ((const unsigned int *)(a))[2] == 0 && \
+     ((const unsigned int *)(a))[3] == htonl(1))
+#endif
+
+#ifndef IN6_IS_ADDR_MULTICAST
+#define IN6_IS_ADDR_MULTICAST(a) \
+    (((const unsigned char *)(a))[0] == 0xff)
+#endif
+
+#ifndef IN6_IS_ADDR_LINKLOCAL
+#define IN6_IS_ADDR_LINKLOCAL(a) \
+    ((((const unsigned char *)(a))[0] == 0xfe) && \
+     (((const unsigned char *)(a))[1] & 0xc0) == 0x80)
+#endif
+
+#ifndef IN6_IS_ADDR_SITELOCAL
+#define IN6_IS_ADDR_SITELOCAL(a) \
+    ((((const unsigned char *)(a))[0] == 0xfe) && \
+     (((const unsigned char *)(a))[1] & 0xc0) == 0xc0)
+#endif
+
+#ifndef IN6_IS_ADDR_V4MAPPED
+#define IN6_IS_ADDR_V4MAPPED(a) \
+    (((const unsigned int *)(a))[0] == 0 && \
+     ((const unsigned int *)(a))[1] == 0 && \
+     ((const unsigned int *)(a))[2] == htonl(0x0000ffff))
+#endif
+
+#ifndef IN6_IS_ADDR_V4COMPAT
+#define IN6_IS_ADDR_V4COMPAT(a) \
+    (((const unsigned int *)(a))[0] == 0 && \
+     ((const unsigned int *)(a))[1] == 0 && \
+     ((const unsigned int *)(a))[2] == 0 && \
+     ((const unsigned int *)(a))[3] != 0 && \
+     ((const unsigned int *)(a))[3] != htonl(1))
+#endif
+
+#ifndef IN6_IS_ADDR_MC_NODELOCAL
+#define IN6_IS_ADDR_MC_NODELOCAL(a) \
+    (IN6_IS_ADDR_MULTICAST(a) && \
+     (((const unsigned char *)(a))[1] & 0x0f) == 0x01)
+#endif
+
+#ifndef IN6_IS_ADDR_MC_LINKLOCAL
+#define IN6_IS_ADDR_MC_LINKLOCAL(a) \
+    (IN6_IS_ADDR_MULTICAST(a) && \
+     (((const unsigned char *)(a))[1] & 0x0f) == 0x02)
+#endif
+
+#ifndef IN6_IS_ADDR_MC_SITELOCAL
+#define IN6_IS_ADDR_MC_SITELOCAL(a) \
+    (IN6_IS_ADDR_MULTICAST(a) && \
+     (((const unsigned char *)(a))[1] & 0x0f) == 0x05)
+#endif
+
+#ifndef IN6_IS_ADDR_MC_ORGLOCAL
+#define IN6_IS_ADDR_MC_ORGLOCAL(a) \
+    (IN6_IS_ADDR_MULTICAST(a) && \
+     (((const unsigned char *)(a))[1] & 0x0f) == 0x08)
+#endif
+
+#ifndef IN6_IS_ADDR_MC_GLOBAL
+#define IN6_IS_ADDR_MC_GLOBAL(a) \
+    (IN6_IS_ADDR_MULTICAST(a) && \
+     (((const unsigned char *)(a))[1] & 0x0f) == 0x0e)
+#endif
+
 #endif /* !s6_addr */
+
+/* --- IPv6 socket options (IPPROTO_IPV6 level) --- */
+/*
+ * These are needed by modern software (.NET, Node.js, etc.) for
+ * dual-stack and IPv6 multicast configuration.  Values match
+ * Solaris 8+ definitions.
+ */
+#ifndef IPV6_UNICAST_HOPS
+#define IPV6_UNICAST_HOPS    7
+#endif
+#ifndef IPV6_MULTICAST_IF
+#define IPV6_MULTICAST_IF    8
+#endif
+#ifndef IPV6_MULTICAST_HOPS
+#define IPV6_MULTICAST_HOPS  9
+#endif
+#ifndef IPV6_MULTICAST_LOOP
+#define IPV6_MULTICAST_LOOP  10
+#endif
+#ifndef IPV6_JOIN_GROUP
+#define IPV6_JOIN_GROUP      11
+#endif
+#ifndef IPV6_LEAVE_GROUP
+#define IPV6_LEAVE_GROUP     12
+#endif
+/* BSD compat aliases */
+#ifndef IPV6_ADD_MEMBERSHIP
+#define IPV6_ADD_MEMBERSHIP  IPV6_JOIN_GROUP
+#endif
+#ifndef IPV6_DROP_MEMBERSHIP
+#define IPV6_DROP_MEMBERSHIP IPV6_LEAVE_GROUP
+#endif
+#ifndef IPV6_V6ONLY
+#define IPV6_V6ONLY          39
+#endif
+#ifndef IPV6_PKTINFO
+#define IPV6_PKTINFO         11  /* control message type */
+#endif
+#ifndef IPV6_RECVPKTINFO
+#define IPV6_RECVPKTINFO     18
+#endif
+
+/* --- IPv6 multicast group request --- */
+#ifndef _SOLCOMPAT_IPV6_MREQ
+#define _SOLCOMPAT_IPV6_MREQ
+struct ipv6_mreq {
+    struct in6_addr ipv6mr_multiaddr;  /* IPv6 multicast address */
+    unsigned int    ipv6mr_interface;  /* interface index */
+};
+#endif
 
 /* --- sockaddr_storage --- */
 #ifndef _SS_MAXSIZE
@@ -174,6 +312,24 @@ struct ifaddrs {
 
 int  getifaddrs(struct ifaddrs **ifap);
 void freeifaddrs(struct ifaddrs *ifa);
+#endif
+
+/* --- if_nametoindex / if_indextoname (RFC 3493) --- */
+/*
+ * Needed for IPv6 scope IDs and modern socket code.
+ * Implementation uses SIOCGIFINDEX/SIOCGIFCONF ioctls.
+ */
+#ifndef HAVE_IF_NAMETOINDEX
+unsigned int if_nametoindex(const char *ifname);
+char        *if_indextoname(unsigned int ifindex, char *ifname);
+#endif
+
+/* IF_NAMESIZE — POSIX constant for max interface name length */
+#ifndef IF_NAMESIZE
+#define IF_NAMESIZE 16
+#endif
+#ifndef IFNAMSIZ
+#define IFNAMSIZ IF_NAMESIZE
 #endif
 
 #ifdef __cplusplus

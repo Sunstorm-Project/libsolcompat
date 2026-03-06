@@ -520,6 +520,223 @@ static void test_locale_stubs(void)
     PASS();
 }
 
+/* ===== IPv6 / Network tests ===== */
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+
+static void test_ipv6_types(void)
+{
+    struct sockaddr_in6 sin6;
+    struct sockaddr_storage ss;
+    struct in6_addr addr;
+
+    TEST(ipv6_types);
+
+    /* AF_INET6 should be 26 on Solaris */
+    ASSERT(AF_INET6 == 26, "AF_INET6 should be 26");
+    ASSERT(PF_INET6 == AF_INET6, "PF_INET6 should equal AF_INET6");
+
+    /* sockaddr_in6 should be usable */
+    memset(&sin6, 0, sizeof(sin6));
+    sin6.sin6_family = AF_INET6;
+    sin6.sin6_port = htons(80);
+    sin6.sin6_scope_id = 0;
+    ASSERT(sin6.sin6_family == AF_INET6, "sin6_family not set");
+
+    /* sockaddr_storage should fit both v4 and v6 */
+    ASSERT(sizeof(ss) >= sizeof(struct sockaddr_in), "ss too small for v4");
+    ASSERT(sizeof(ss) >= sizeof(struct sockaddr_in6), "ss too small for v6");
+
+    /* in6_addr should be 16 bytes */
+    ASSERT(sizeof(addr) == 16, "in6_addr should be 16 bytes");
+
+    PASS();
+}
+
+static void test_in6_macros(void)
+{
+    struct in6_addr any = IN6ADDR_ANY_INIT;
+    struct in6_addr lo  = IN6ADDR_LOOPBACK_INIT;
+    unsigned char mcast[16] = {0xff, 0x02, 0,0,0,0,0,0,0,0,0,0,0,0,0,1};
+    unsigned char ll[16]    = {0xfe, 0x80, 0,0,0,0,0,0,0,0,0,0,0,0,0,1};
+
+    TEST(in6_macros);
+
+    ASSERT(IN6_IS_ADDR_UNSPECIFIED(&any), ":: should be unspecified");
+    ASSERT(!IN6_IS_ADDR_UNSPECIFIED(&lo), "::1 should not be unspecified");
+
+    ASSERT(IN6_IS_ADDR_LOOPBACK(&lo), "::1 should be loopback");
+    ASSERT(!IN6_IS_ADDR_LOOPBACK(&any), ":: should not be loopback");
+
+    ASSERT(IN6_IS_ADDR_MULTICAST(mcast), "ff02::1 should be multicast");
+    ASSERT(!IN6_IS_ADDR_MULTICAST(&lo), "::1 should not be multicast");
+
+    ASSERT(IN6_IS_ADDR_LINKLOCAL(ll), "fe80::1 should be link-local");
+    ASSERT(!IN6_IS_ADDR_LINKLOCAL(&lo), "::1 should not be link-local");
+
+    /* in6addr_any/loopback globals should match */
+    ASSERT(IN6_IS_ADDR_UNSPECIFIED(&in6addr_any), "in6addr_any should be ::");
+    ASSERT(IN6_IS_ADDR_LOOPBACK(&in6addr_loopback), "in6addr_loopback should be ::1");
+
+    PASS();
+}
+
+static void test_inet_ntop_v6(void)
+{
+    char buf[INET6_ADDRSTRLEN];
+    struct in6_addr lo = IN6ADDR_LOOPBACK_INIT;
+    struct in6_addr any = IN6ADDR_ANY_INIT;
+    const char *result;
+
+    TEST(inet_ntop_v6);
+
+    result = inet_ntop(AF_INET6, &lo, buf, sizeof(buf));
+    ASSERT(result != NULL, "inet_ntop(::1) returned NULL");
+    /* With :: compression, ::1 should be exactly "::1" */
+    ASSERT(strcmp(buf, "::1") == 0, "inet_ntop(::1) should produce '::1'");
+
+    result = inet_ntop(AF_INET6, &any, buf, sizeof(buf));
+    ASSERT(result != NULL, "inet_ntop(::) returned NULL");
+    ASSERT(strcmp(buf, "::") == 0, "inet_ntop(::) should produce '::'");
+
+    /* IPv4 should still work */
+    {
+        struct in_addr v4;
+        v4.s_addr = htonl(0x7f000001); /* 127.0.0.1 */
+        result = inet_ntop(AF_INET, &v4, buf, sizeof(buf));
+        ASSERT(result != NULL, "inet_ntop(127.0.0.1) returned NULL");
+        ASSERT(strcmp(buf, "127.0.0.1") == 0, "wrong v4 output");
+    }
+
+    /* Non-trivial address: 2001:db8::1 */
+    {
+        struct in6_addr a;
+        memset(&a, 0, sizeof(a));
+        a.s6_addr[0] = 0x20; a.s6_addr[1] = 0x01;
+        a.s6_addr[2] = 0x0d; a.s6_addr[3] = 0xb8;
+        a.s6_addr[15] = 0x01;
+        result = inet_ntop(AF_INET6, &a, buf, sizeof(buf));
+        ASSERT(result != NULL, "inet_ntop(2001:db8::1) returned NULL");
+        ASSERT(strcmp(buf, "2001:db8::1") == 0, "expected '2001:db8::1'");
+    }
+
+    /* Address with no compressible run: fe80::1:2:3:4 */
+    {
+        struct in6_addr a;
+        memset(&a, 0, sizeof(a));
+        a.s6_addr[0] = 0xfe; a.s6_addr[1] = 0x80;
+        a.s6_addr[8] = 0x00; a.s6_addr[9] = 0x01;
+        a.s6_addr[10] = 0x00; a.s6_addr[11] = 0x02;
+        a.s6_addr[12] = 0x00; a.s6_addr[13] = 0x03;
+        a.s6_addr[14] = 0x00; a.s6_addr[15] = 0x04;
+        result = inet_ntop(AF_INET6, &a, buf, sizeof(buf));
+        ASSERT(result != NULL, "inet_ntop(fe80::1:2:3:4) returned NULL");
+        ASSERT(strcmp(buf, "fe80::1:2:3:4") == 0, "expected 'fe80::1:2:3:4'");
+    }
+    PASS();
+}
+
+static void test_inet_pton_v6(void)
+{
+    struct in6_addr addr;
+    int rc;
+
+    TEST(inet_pton_v6);
+
+    /* Full address */
+    rc = inet_pton(AF_INET6, "2001:db8:85a3:0:0:8a2e:370:7334", &addr);
+    ASSERT(rc == 1, "failed to parse full IPv6");
+    ASSERT(addr.s6_addr[0] == 0x20 && addr.s6_addr[1] == 0x01, "wrong first bytes");
+
+    /* :: abbreviation */
+    rc = inet_pton(AF_INET6, "::", &addr);
+    ASSERT(rc == 1, "failed to parse ::");
+    ASSERT(IN6_IS_ADDR_UNSPECIFIED(&addr), ":: should be unspecified");
+
+    /* ::1 */
+    rc = inet_pton(AF_INET6, "::1", &addr);
+    ASSERT(rc == 1, "failed to parse ::1");
+    ASSERT(IN6_IS_ADDR_LOOPBACK(&addr), "::1 should be loopback");
+
+    /* IPv4 should still work */
+    {
+        struct in_addr v4;
+        rc = inet_pton(AF_INET, "192.168.1.1", &v4);
+        ASSERT(rc == 1, "failed to parse IPv4");
+    }
+
+    PASS();
+}
+
+static void test_getaddrinfo_basic(void)
+{
+    struct addrinfo hints, *res = NULL;
+    int rc;
+
+    TEST(getaddrinfo_basic);
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;
+
+    /* NULL node + AI_PASSIVE should give INADDR_ANY */
+    rc = getaddrinfo(NULL, "80", &hints, &res);
+    ASSERT(rc == 0, "getaddrinfo(NULL, 80) failed");
+    ASSERT(res != NULL, "no results");
+    ASSERT(res->ai_family == AF_INET, "wrong family");
+    ASSERT(res->ai_addrlen == sizeof(struct sockaddr_in), "wrong addrlen");
+
+    {
+        struct sockaddr_in *sin = (struct sockaddr_in *)res->ai_addr;
+        ASSERT(sin->sin_port == htons(80), "wrong port");
+        ASSERT(sin->sin_addr.s_addr == INADDR_ANY, "should be INADDR_ANY");
+    }
+
+    freeaddrinfo(res);
+    PASS();
+}
+
+static void test_getaddrinfo_ipv6_returns_noname(void)
+{
+    struct addrinfo hints, *res = NULL;
+    int rc;
+
+    TEST(getaddrinfo_ipv6_noname);
+
+    /* AF_INET6 specifically requested — our impl honestly returns EAI_NONAME */
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET6;
+    hints.ai_socktype = SOCK_STREAM;
+
+    rc = getaddrinfo("localhost", "80", &hints, &res);
+    ASSERT(rc == EAI_NONAME, "should return EAI_NONAME for IPv6-only");
+    PASS();
+}
+
+static void test_gai_strerror(void)
+{
+    TEST(gai_strerror);
+    ASSERT(gai_strerror(0) != NULL, "gai_strerror(0) returned NULL");
+    ASSERT(gai_strerror(EAI_NONAME) != NULL, "gai_strerror(EAI_NONAME) returned NULL");
+    ASSERT(strlen(gai_strerror(EAI_MEMORY)) > 0, "empty error string");
+    PASS();
+}
+
+static void test_ipv6_sockopts_defined(void)
+{
+    TEST(ipv6_sockopts_defined);
+    /* Just verify the constants are defined and reasonable */
+    ASSERT(IPV6_UNICAST_HOPS > 0, "IPV6_UNICAST_HOPS should be > 0");
+    ASSERT(IPV6_MULTICAST_HOPS > 0, "IPV6_MULTICAST_HOPS should be > 0");
+    ASSERT(IPV6_V6ONLY > 0, "IPV6_V6ONLY should be > 0");
+    ASSERT(IPPROTO_IPV6 == 41, "IPPROTO_IPV6 should be 41");
+    ASSERT(IPV6_JOIN_GROUP == IPV6_ADD_MEMBERSHIP, "alias mismatch");
+    PASS();
+}
+
 /* ===== Main ===== */
 int
 main(void)
@@ -588,6 +805,16 @@ main(void)
 
     printf("\n[stubs]\n");
     test_locale_stubs();
+
+    printf("\n[ipv6/network]\n");
+    test_ipv6_types();
+    test_in6_macros();
+    test_inet_ntop_v6();
+    test_inet_pton_v6();
+    test_getaddrinfo_basic();
+    test_getaddrinfo_ipv6_returns_noname();
+    test_gai_strerror();
+    test_ipv6_sockopts_defined();
 
     printf("\n========================================\n");
     printf("Results: %d/%d tests passed\n", tests_passed, tests_run);

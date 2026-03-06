@@ -37,6 +37,22 @@ extern int solcompat_snprintf(char *, size_t, const char *, ...);
 #include "solcompat/network.h"
 
 /*
+ * Global IPv6 address constants (RFC 2553 / RFC 3493).
+ * in6addr_any is all-zeros (::), in6addr_loopback is ::1.
+ */
+#ifndef s6_addr
+/* If we defined in6_addr ourselves, provide the globals */
+const struct in6_addr in6addr_any      = IN6ADDR_ANY_INIT;
+const struct in6_addr in6addr_loopback = IN6ADDR_LOOPBACK_INIT;
+#else
+/* System has in6_addr but might not export globals — weak symbols */
+#pragma weak in6addr_any
+#pragma weak in6addr_loopback
+const struct in6_addr in6addr_any      = IN6ADDR_ANY_INIT;
+const struct in6_addr in6addr_loopback = IN6ADDR_LOOPBACK_INIT;
+#endif
+
+/*
  * getaddrinfo — resolve hostname and service to socket addresses.
  * This is an IPv4-only implementation using gethostbyname/getservbyname.
  */
@@ -331,17 +347,59 @@ inet_ntop(int af, const void *src, char *dst, socklen_t size)
     }
     if (af == AF_INET6) {
         const unsigned char *p = (const unsigned char *)src;
-        /* Full colon-hex representation (no :: shortening) */
-        int n = solcompat_snprintf(dst, size,
-            "%x:%x:%x:%x:%x:%x:%x:%x",
-            (p[0] << 8) | p[1], (p[2] << 8) | p[3],
-            (p[4] << 8) | p[5], (p[6] << 8) | p[7],
-            (p[8] << 8) | p[9], (p[10] << 8) | p[11],
-            (p[12] << 8) | p[13], (p[14] << 8) | p[15]);
-        if (n < 0 || (socklen_t)n >= size) {
+        unsigned int words[8];
+        int i;
+        /* Best run of consecutive zero-words for :: compression */
+        int best_start = -1, best_len = 0;
+        int cur_start = -1, cur_len = 0;
+        char tmp[INET6_ADDRSTRLEN];
+        char *tp = tmp;
+        int n;
+
+        for (i = 0; i < 8; i++)
+            words[i] = ((unsigned int)p[i * 2] << 8) | p[i * 2 + 1];
+
+        /* Find longest run of zero words (RFC 5952: first longest wins) */
+        for (i = 0; i < 8; i++) {
+            if (words[i] == 0) {
+                if (cur_start < 0)
+                    cur_start = i;
+                cur_len++;
+            } else {
+                if (cur_len > best_len && cur_len >= 2) {
+                    best_start = cur_start;
+                    best_len = cur_len;
+                }
+                cur_start = -1;
+                cur_len = 0;
+            }
+        }
+        if (cur_len > best_len && cur_len >= 2) {
+            best_start = cur_start;
+            best_len = cur_len;
+        }
+
+        /* Format with :: compression */
+        for (i = 0; i < 8; i++) {
+            if (i == best_start) {
+                *tp++ = ':';
+                *tp++ = ':';
+                i += best_len - 1;
+                continue;
+            }
+            if (i > 0 && !(i == best_start + best_len && best_start >= 0))
+                *tp++ = ':';
+            tp += solcompat_snprintf(tp, sizeof(tmp) - (size_t)(tp - tmp),
+                                     "%x", words[i]);
+        }
+        *tp = '\0';
+
+        n = (int)strlen(tmp);
+        if ((socklen_t)(n + 1) > size) {
             errno = ENOSPC;
             return NULL;
         }
+        memcpy(dst, tmp, (size_t)(n + 1));
         return dst;
     }
     errno = EAFNOSUPPORT;
@@ -537,3 +595,97 @@ freeifaddrs(struct ifaddrs *ifa)
         ifa = next;
     }
 }
+
+/*
+ * if_nametoindex — map interface name to index (RFC 3493)
+ *
+ * Uses SIOCGIFINDEX ioctl.  On Solaris 7 this ioctl may not exist
+ * (it was added in later Solaris versions), so we fall back to
+ * scanning SIOCGIFCONF and assigning indices based on position.
+ */
+#ifndef HAVE_IF_NAMETOINDEX
+unsigned int
+if_nametoindex(const char *ifname)
+{
+    int sock;
+
+    if (!ifname)
+        return 0;
+
+    sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock < 0)
+        return 0;
+
+    /*
+     * Solaris 7 likely lacks SIOCGIFINDEX, so we always use the
+     * SIOCGIFCONF fallback: scan the interface list and assign
+     * 1-based indices by position.
+     */
+    {
+        struct ifconf ifc;
+        char buf[4096];
+        struct ifreq *ifr_p;
+        int n, i;
+
+        ifc.ifc_len = sizeof(buf);
+        ifc.ifc_buf = buf;
+
+        if (ioctl(sock, SIOCGIFCONF, &ifc) < 0) {
+            close(sock);
+            return 0;
+        }
+
+        n = ifc.ifc_len / sizeof(struct ifreq);
+        ifr_p = ifc.ifc_req;
+
+        for (i = 0; i < n; i++) {
+            if (strcmp(ifr_p[i].ifr_name, ifname) == 0) {
+                close(sock);
+                return (unsigned int)(i + 1);  /* indices are 1-based */
+            }
+        }
+    }
+
+    close(sock);
+    return 0;
+}
+
+char *
+if_indextoname(unsigned int ifindex, char *ifname)
+{
+    int sock;
+    struct ifconf ifc;
+    char buf[4096];
+    struct ifreq *ifr_p;
+    int n;
+
+    if (ifindex == 0 || !ifname)
+        return NULL;
+
+    sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock < 0)
+        return NULL;
+
+    ifc.ifc_len = sizeof(buf);
+    ifc.ifc_buf = buf;
+
+    if (ioctl(sock, SIOCGIFCONF, &ifc) < 0) {
+        close(sock);
+        return NULL;
+    }
+
+    n = ifc.ifc_len / sizeof(struct ifreq);
+    ifr_p = ifc.ifc_req;
+
+    /* ifindex is 1-based (matching if_nametoindex fallback) */
+    if ((int)ifindex <= n) {
+        strncpy(ifname, ifr_p[ifindex - 1].ifr_name, IF_NAMESIZE - 1);
+        ifname[IF_NAMESIZE - 1] = '\0';
+        close(sock);
+        return ifname;
+    }
+
+    close(sock);
+    return NULL;
+}
+#endif /* HAVE_IF_NAMETOINDEX */

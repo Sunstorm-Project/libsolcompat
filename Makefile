@@ -146,13 +146,19 @@ install-toolchain: all
 	@echo ""
 	@# --- Create directory structure ---
 	mkdir -p $(COMPAT_BASE)/include/override/sys
+	mkdir -p $(COMPAT_BASE)/include/override/arpa
+	mkdir -p $(COMPAT_BASE)/include/override/net
+	mkdir -p $(COMPAT_BASE)/include/override/netinet
 	mkdir -p $(COMPAT_BASE)/include/solcompat
 	mkdir -p $(COMPAT_BASE)/lib
 	@# --- Install override wrapper headers ---
 	@echo "Installing override headers..."
 	cp include/override/*.h $(COMPAT_BASE)/include/override/
 	cp include/override/sys/*.h $(COMPAT_BASE)/include/override/sys/
-	@echo "  override/math.h, stdint.h, netdb.h, locale.h, etc."
+	cp include/override/arpa/*.h $(COMPAT_BASE)/include/override/arpa/
+	cp include/override/net/*.h $(COMPAT_BASE)/include/override/net/
+	cp include/override/netinet/*.h $(COMPAT_BASE)/include/override/netinet/
+	@echo "  override/math.h, stdint.h, netdb.h, sys/socket.h, netinet/in.h, arpa/inet.h, etc."
 	@# --- Install solcompat internal headers ---
 	@echo "Installing solcompat headers..."
 	cp include/solcompat/*.h $(COMPAT_BASE)/include/solcompat/
