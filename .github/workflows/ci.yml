@@ -3,9 +3,9 @@
 # Builds the library cross-compiled for SPARC Solaris 7 and creates a
 # versioned GitHub Release on tag push.
 #
-# PREREQUISITE: The sparc-toolchain Docker image must be published to GHCR
-# before this workflow will pass.  See sparc-build-host for how to build
-# and publish ghcr.io/firefly128/sparc-toolchain.
+# Runs on self-hosted runners labelled 'sparc-build' (primary: .244, backup: .212).
+# The sparc-toolchain image is cached locally on both runners; docker run uses
+# --pull=missing so it never tries to download what's already present.
 #
 # Cross-compiler location inside the container:
 #   /opt/cross/bin/sparc-sun-solaris2.7-{gcc,ar,ranlib,...}
@@ -27,12 +27,7 @@ jobs:
   # ------------------------------------------------------------------ #
   cross-compile:
     name: Cross-compile for SPARC Solaris 7
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/firefly128/sparc-toolchain:latest
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+    runs-on: [self-hosted, sparc-build]
 
     steps:
       - name: Check out source
@@ -40,16 +35,24 @@ jobs:
 
       - name: Build static library
         run: |
-          make \
-            CC=sparc-sun-solaris2.7-gcc \
-            AR=sparc-sun-solaris2.7-ar \
-            RANLIB=sparc-sun-solaris2.7-ranlib \
-            CFLAGS="-O2 --sysroot=/opt/sysroot-build -mcpu=v7 -D__EXTENSIONS__ -Wall -Wextra -Wno-unused-parameter"
+          docker run --rm --pull=missing \
+            -v "${{ github.workspace }}:/work" \
+            -w /work \
+            ghcr.io/firefly128/sparc-toolchain:latest \
+            make \
+              CC=sparc-sun-solaris2.7-gcc \
+              AR=sparc-sun-solaris2.7-ar \
+              RANLIB=sparc-sun-solaris2.7-ranlib \
+              CFLAGS="-O2 --sysroot=/opt/sysroot-build -mcpu=v7 -D__EXTENSIONS__ -Wall -Wextra -Wno-unused-parameter"
 
       - name: Verify library symbol table
         run: |
-          sparc-sun-solaris2.7-nm libsolcompat.a | grep -c ' T ' \
-            | xargs -I{} echo "Exported {} text symbols"
+          docker run --rm --pull=missing \
+            -v "${{ github.workspace }}:/work" \
+            -w /work \
+            ghcr.io/firefly128/sparc-toolchain:latest \
+            sh -c 'sparc-sun-solaris2.7-nm libsolcompat.a | grep -c " T " \
+              | xargs -I{} echo "Exported {} text symbols"'
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -66,7 +69,7 @@ jobs:
     name: Create GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
     needs: cross-compile
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, sparc-build]
     permissions:
       contents: write
 
