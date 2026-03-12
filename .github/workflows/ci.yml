@@ -38,7 +38,7 @@ jobs:
           docker run --rm --pull=missing \
             -v "${{ github.workspace }}:/work" \
             -v sparc-build-host_cross-build-cross:/opt/cross:ro \
-            -v /home/dockeradmin/sparc-build-host/cross-build/sysroot:/opt/sysroot-build:ro \
+            -v "$SPARC_BUILD_HOST/cross-build/sysroot:/opt/sysroot-build:ro" \
             -e PATH=/opt/cross/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
             -w /work \
             ghcr.io/firefly128/sparc-toolchain:latest \
@@ -96,7 +96,7 @@ jobs:
           docker run --rm --pull=missing \
             -v "${{ github.workspace }}:/work" \
             -v sparc-build-host_cross-build-cross:/opt/cross:ro \
-            -v /home/dockeradmin/sparc-build-host/cross-build/sysroot:/opt/sysroot-build:ro \
+            -v "$SPARC_BUILD_HOST/cross-build/sysroot:/opt/sysroot-build:ro" \
             -e PATH=/opt/cross/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
             -w /work \
             ghcr.io/firefly128/sparc-toolchain:latest \
@@ -110,7 +110,7 @@ jobs:
               -lrt -lsocket -lnsl -lm
 
       - name: Start Solaris VM
-        working-directory: /home/dockeradmin/sparc-build-host
+        working-directory: ${{ env.SPARC_BUILD_HOST }}
         run: docker compose --profile runtime up -d
 
       - name: Wait for SSH ready
@@ -158,7 +158,7 @@ jobs:
 
       - name: Stop Solaris VM
         if: always()
-        working-directory: /home/dockeradmin/sparc-build-host
+        working-directory: ${{ env.SPARC_BUILD_HOST }}
         run: |
           docker compose --profile runtime down
           rm -f /tmp/solaris-ci-key
