@@ -2,3 +2,4 @@ self-hosted-runner:
   labels:
     - sparc-build
     - docker
+    - sparc-qemu

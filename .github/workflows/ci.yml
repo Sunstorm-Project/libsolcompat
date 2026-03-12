@@ -68,6 +68,102 @@ jobs:
             include/
 
   # ------------------------------------------------------------------ #
+  # qemu-test: run test_all natively on Solaris 7 in QEMU              #
+  #                                                                     #
+  # Requires sparc-qemu runner (.244 only — only machine with disk      #
+  # images and QEMU ROM). Boots the installed Solaris VM, SCPs the     #
+  # test binary using the container's auto-generated SSH key, runs it, #
+  # then shuts QEMU down.  Boot takes ~10 minutes.                     #
+  # ------------------------------------------------------------------ #
+  qemu-test:
+    name: Integration test on SPARC Solaris 7
+    needs: cross-compile
+    runs-on: [self-hosted, sparc-qemu]
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: libsolcompat-sparc-solaris7-${{ github.sha }}
+          path: artifacts/
+
+      - name: Cross-compile test binary for SPARC
+        run: |
+          docker run --rm --pull=missing \
+            -v "${{ github.workspace }}:/work" \
+            -v sparc-build-host_cross-build-cross:/opt/cross:ro \
+            -v /home/dockeradmin/sparc-build-host/cross-build/sysroot:/opt/sysroot-build:ro \
+            -e PATH=/opt/cross/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+            -w /work \
+            ghcr.io/firefly128/sparc-toolchain:latest \
+            sparc-sun-solaris2.7-gcc \
+              --sysroot=/opt/sysroot-build \
+              -mcpu=v7 -D__EXTENSIONS__ \
+              -Iinclude \
+              -o test_all_sparc \
+              tests/test_all.c \
+              artifacts/libsolcompat.a \
+              -lrt -lsocket -lnsl -lm
+
+      - name: Start Solaris VM
+        working-directory: /home/dockeradmin/sparc-build-host
+        run: docker compose --profile runtime up -d
+
+      - name: Wait for SSH ready
+        # runtime-boot.expect installs the container's generated key into
+        # Solaris at /.ssh/authorized_keys and restarts sshd.  We extract
+        # the container's private key and poll until Solaris accepts it.
+        # Port 2222 on the host forwards to Solaris port 22 via SLIRP.
+        run: |
+          echo "Waiting for container SSH key to be generated..."
+          until docker exec solaris-runtime test -f /root/.ssh/id_ed25519 2>/dev/null; do
+            sleep 5
+          done
+          docker exec solaris-runtime cat /root/.ssh/id_ed25519 > /tmp/solaris-ci-key
+          chmod 600 /tmp/solaris-ci-key
+
+          echo "Polling SSH (up to 25 min for boot + SSH setup)..."
+          for attempt in $(seq 1 150); do
+            if ssh -i /tmp/solaris-ci-key \
+                   -p 2222 \
+                   -o StrictHostKeyChecking=no \
+                   -o ConnectTimeout=5 \
+                   -o BatchMode=yes \
+                   root@localhost true 2>/dev/null; then
+              echo "SSH ready after $((attempt * 10)) seconds"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Timeout: SSH not ready after 25 minutes" && exit 1
+
+      - name: Copy test binary to Solaris
+        run: |
+          scp -P 2222 \
+            -i /tmp/solaris-ci-key \
+            -o StrictHostKeyChecking=no \
+            test_all_sparc root@localhost:/export/home/test_all_sparc
+
+      - name: Run tests on Solaris 7
+        run: |
+          ssh -p 2222 \
+            -i /tmp/solaris-ci-key \
+            -o StrictHostKeyChecking=no \
+            root@localhost \
+            "chmod +x /export/home/test_all_sparc && /export/home/test_all_sparc"
+
+      - name: Stop Solaris VM
+        if: always()
+        working-directory: /home/dockeradmin/sparc-build-host
+        run: |
+          docker compose --profile runtime down
+          rm -f /tmp/solaris-ci-key
+
+  # ------------------------------------------------------------------ #
   # release: create GitHub Release on tag push (vX.Y.Z)                #
   # ------------------------------------------------------------------ #
   release:
