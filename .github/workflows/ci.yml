@@ -37,6 +37,9 @@ jobs:
         run: |
           docker run --rm --pull=missing \
             -v "${{ github.workspace }}:/work" \
+            -v sparc-build-host_cross-build-cross:/opt/cross:ro \
+            -v /home/dockeradmin/sparc-build-host/cross-build/sysroot:/opt/sysroot-build:ro \
+            -e PATH=/opt/cross/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
             -w /work \
             ghcr.io/firefly128/sparc-toolchain:latest \
             make \
@@ -49,6 +52,8 @@ jobs:
         run: |
           docker run --rm --pull=missing \
             -v "${{ github.workspace }}:/work" \
+            -v sparc-build-host_cross-build-cross:/opt/cross:ro \
+            -e PATH=/opt/cross/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
             -w /work \
             ghcr.io/firefly128/sparc-toolchain:latest \
             sh -c 'sparc-sun-solaris2.7-nm libsolcompat.a | grep -c " T " \
