@@ -108,7 +108,7 @@ jobs:
               -o test_all_sparc \
               tests/test_all.c \
               artifacts/libsolcompat.a \
-              -lrt -lsocket -lnsl -lm
+              -lrt -lsocket -lnsl -ldl -lm
 
       - name: Start Solaris VM
         working-directory: ${{ env.SPARC_BUILD_HOST }}
