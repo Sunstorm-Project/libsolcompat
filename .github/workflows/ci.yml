@@ -131,6 +131,9 @@ jobs:
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
+      - name: Ensure Solaris VM is stopped (clean slate)
+        run: cd "$SPARC_BUILD_HOST" && docker compose --profile runtime down || true
+
       - name: Start Solaris VM
         run: cd "$SPARC_BUILD_HOST" && docker compose --profile runtime up -d
 
