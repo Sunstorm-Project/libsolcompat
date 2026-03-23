@@ -34,6 +34,7 @@ SOVERSION = 1.0.0
 SRCS = src/snprintf.c \
        src/string.c \
        src/stdio.c \
+       src/memstream.c \
        src/stdlib.c \
        src/c99_types.c \
        src/network.c \
@@ -66,10 +67,10 @@ LIBM_OBJS = src/math.o
 LIBSOCKET_OBJS = src/network.o
 
 # Objects merged into system libc.a (general POSIX/C99)
-LIBC_OBJS = src/snprintf.o src/string.o src/stdio.o src/stdlib.o \
-            src/c99_types.o src/memory.o src/filesystem.o src/at_funcs.o \
-            src/process.o src/pty.o src/poll.o src/random.o src/clock.o \
-            src/stubs.o src/getopt_long.o src/ctype_compat.o \
+LIBC_OBJS = src/snprintf.o src/string.o src/stdio.o src/memstream.o \
+            src/stdlib.o src/c99_types.o src/memory.o src/filesystem.o \
+            src/at_funcs.o src/process.o src/pty.o src/poll.o src/random.o \
+            src/clock.o src/stubs.o src/getopt_long.o src/ctype_compat.o \
             src/atomic_ops.o
 
 # Residual libsolcompat.a (doesn't belong in any system library)
@@ -282,7 +283,7 @@ install-sysroot: all
 test: all
 	cd tests && $(CC) $(CPPFLAGS) $(CFLAGS) -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE=1 \
 		-o test_all test_all.c \
-		-L$(CURDIR) -lsolcompat -lrt -lsocket -lnsl -lm && ./test_all
+		-L$(CURDIR) -lsolcompat -lrt -lsocket -lnsl -lm -ldl && ./test_all
 
 # ====================================================================
 # Clean

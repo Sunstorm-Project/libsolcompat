@@ -1,7 +1,7 @@
 /*
  * solcompat/stdio_ext.h — Missing stdio functions
  *
- * vasprintf, asprintf, dprintf, getline, getdelim
+ * vasprintf, asprintf, dprintf, getline, getdelim, fmemopen, open_memstream
  */
 #ifndef SOLCOMPAT_STDIO_EXT_H
 #define SOLCOMPAT_STDIO_EXT_H
@@ -32,6 +32,20 @@ ssize_t getline(char **lineptr, size_t *n, FILE *stream);
 #ifndef HAVE_GETDELIM
 ssize_t getdelim(char **lineptr, size_t *n, int delim, FILE *stream);
 #endif
+
+#ifndef HAVE_FMEMOPEN
+FILE *fmemopen(void *buf, size_t size, const char *mode);
+#endif
+
+#ifndef HAVE_OPEN_MEMSTREAM
+FILE *open_memstream(char **ptr, size_t *sizeloc);
+#endif
+
+/*
+ * fclose and fflush are interposed by memstream.c to support open_memstream.
+ * The standard declarations from <stdio.h> already cover them; no extra
+ * declarations are needed here.
+ */
 
 #ifdef __cplusplus
 }

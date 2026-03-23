@@ -215,6 +215,77 @@ static void test_getline(void)
     PASS();
 }
 
+static void test_fmemopen_read(void)
+{
+    FILE       *fp;
+    char        buf[32];
+    const char *src = "hello world";
+
+    TEST(fmemopen_read);
+    fp = fmemopen((void *)src, strlen(src), "r");
+    ASSERT(fp != NULL, "fmemopen returned NULL");
+    ASSERT(fgets(buf, sizeof(buf), fp) != NULL, "fgets failed");
+    ASSERT(strcmp(buf, "hello world") == 0, "wrong content");
+    /* Next read should hit EOF */
+    ASSERT(fgetc(fp) == EOF, "expected EOF");
+    fclose(fp);
+    PASS();
+}
+
+static void test_fmemopen_write(void)
+{
+    char buf[64];
+    FILE *fp;
+
+    TEST(fmemopen_write);
+    fp = fmemopen(buf, sizeof(buf), "w");
+    ASSERT(fp != NULL, "fmemopen returned NULL");
+    fprintf(fp, "value=%d", 42);
+    fclose(fp);
+    ASSERT(strcmp(buf, "value=42") == 0, "wrong content after fclose");
+    PASS();
+}
+
+static void test_open_memstream_basic(void)
+{
+    char   *ptr    = NULL;
+    size_t  sizeloc = 0;
+    FILE   *fp;
+
+    TEST(open_memstream_basic);
+    fp = open_memstream(&ptr, &sizeloc);
+    ASSERT(fp != NULL, "open_memstream returned NULL");
+    fprintf(fp, "hello %s", "world");
+    fclose(fp);
+    ASSERT(ptr != NULL, "ptr is NULL after fclose");
+    ASSERT(sizeloc == 11, "sizeloc wrong");
+    ASSERT(strcmp(ptr, "hello world") == 0, "wrong content");
+    free(ptr);
+    PASS();
+}
+
+static void test_open_memstream_fflush(void)
+{
+    char   *ptr     = NULL;
+    size_t  sizeloc = 0;
+    FILE   *fp;
+
+    TEST(open_memstream_fflush);
+    fp = open_memstream(&ptr, &sizeloc);
+    ASSERT(fp != NULL, "open_memstream returned NULL");
+    fprintf(fp, "part1");
+    fflush(fp);
+    ASSERT(ptr != NULL, "ptr NULL after fflush");
+    ASSERT(sizeloc == 5, "sizeloc wrong after fflush");
+    ASSERT(strcmp(ptr, "part1") == 0, "wrong content after fflush");
+    fprintf(fp, "part2");
+    fclose(fp);
+    ASSERT(sizeloc == 10, "sizeloc wrong after fclose");
+    ASSERT(strcmp(ptr, "part1part2") == 0, "wrong content after fclose");
+    free(ptr);
+    PASS();
+}
+
 /* ===== stdlib tests ===== */
 static void test_setenv_unsetenv(void)
 {
@@ -955,6 +1026,10 @@ main(void)
     printf("\n[stdio]\n");
     test_vasprintf_wrapper();
     test_getline();
+    test_fmemopen_read();
+    test_fmemopen_write();
+    test_open_memstream_basic();
+    test_open_memstream_fflush();
 
     printf("\n[stdlib]\n");
     test_setenv_unsetenv();
