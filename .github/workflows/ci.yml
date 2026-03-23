@@ -91,17 +91,17 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Check out sparc-build-host (for QEMU scripts)
+      - name: Check out sst-build-pipeline (for QEMU scripts)
         uses: actions/checkout@v4
         with:
-          repository: Sunstorm-Project/sparc-build-host
+          repository: Sunstorm-Project/sst-build-pipeline
           token: ${{ secrets.SPARC_BUILD_HOST_TOKEN }}
-          path: sparc-build-host/
+          path: sst-build-pipeline/
 
       - name: Sync QEMU test scripts to install path
         run: |
           sudo rm -rf "$SPARC_BUILD_HOST/tests/"
-          sudo cp -a sparc-build-host/tests "$SPARC_BUILD_HOST/tests"
+          sudo cp -a sst-build-pipeline/tests "$SPARC_BUILD_HOST/tests"
           sudo chown -R "$(id -u):$(id -g)" "$SPARC_BUILD_HOST/tests/"
 
       - name: Download build artifacts
