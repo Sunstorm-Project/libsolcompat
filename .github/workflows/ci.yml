@@ -151,20 +151,21 @@ jobs:
           exit 1
 
       - name: Copy test binary into container
-        # The ci-run-test.expect script transfers it from /tmp into Solaris
-        # via uuencode over the QEMU serial console.
         run: docker cp test_all_sparc solaris-runtime:/tmp/test_all_sparc
 
       - name: Transfer and run tests on Solaris 7
-        # ci-run-test.expect is mounted at /tests/ inside the container
-        # (via ./tests:/tests:ro in docker-compose.yml).
-        # It uuencodes /tmp/test_all_sparc and sends it to Solaris via
-        # the QEMU serial console, then runs it and returns its exit code.
+        # SSH key is generated at VM boot and stored in /disks/.ssh/id_rsa.
+        # QEMU forwards container port 2222 → Solaris port 22.
         run: |
           docker exec solaris-runtime \
-            expect /tests/ci-run-test.expect \
-              /tmp/test_all_sparc \
-              /tmp/test_all_sparc
+            scp -P 2222 -o StrictHostKeyChecking=no -o BatchMode=yes \
+              -i /root/.ssh/id_rsa \
+              /tmp/test_all_sparc root@localhost:/tmp/test_all_sparc
+          docker exec solaris-runtime \
+            ssh -p 2222 -o StrictHostKeyChecking=no -o BatchMode=yes \
+              -i /root/.ssh/id_rsa \
+              root@localhost \
+              "chmod +x /tmp/test_all_sparc && /tmp/test_all_sparc"
 
       - name: Stop Solaris VM
         if: always()
