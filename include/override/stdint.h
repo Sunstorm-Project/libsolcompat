@@ -19,6 +19,20 @@
 #define _SOLCOMPAT_OVERRIDE_STDINT_H
 
 /*
+ * Sentinel: if GCC's include-fixed sys/int_types.h was already loaded
+ * before we were reached (via -isystem injection), the basic integer types
+ * are already defined.  Detect this BEFORE we set _SYS_INT_TYPES_H below.
+ *
+ * GCC 11 include-fixed defines e.g. `typedef char int8_t` but sets neither
+ * __int8_t_defined nor _INT8_T, so those guards alone are insufficient.
+ * _SYS_INT_TYPES_H (the file-level guard of the include-fixed header) is
+ * the reliable signal that the basic types are already in scope.
+ */
+#ifdef _SYS_INT_TYPES_H
+#  define _SOLCOMPAT_BASIC_INT_TYPES_DONE 1
+#endif
+
+/*
  * Prevent sys/int_types.h from being included after us.  That header
  * redefines intmax_t as int32_t under __STRICT_ANSI__ (i.e. -std=c99),
  * conflicting with our correct C99 long long definition.  Since we
@@ -29,15 +43,11 @@
 #endif
 
 /* ================================================================
- * Helper: choose the right underlying type.
- * When GCC predefines __INT8_TYPE__ etc. we MUST use those exact
- * types to stay compatible with GCC's include-fixed definitions.
- * ================================================================ */
-
-/* ----------------------------------------------------------------
  * Exact-width signed types
- * ---------------------------------------------------------------- */
-#if !defined(__int8_t_defined) && !defined(_INT8_T)
+ * Skipped when GCC include-fixed sys/int_types.h already provided them.
+ * ================================================================ */
+#if !defined(_SOLCOMPAT_BASIC_INT_TYPES_DONE) && \
+    !defined(__int8_t_defined) && !defined(_INT8_T)
 #  define __int8_t_defined
 #  define _INT8_T
 #  ifdef __INT8_TYPE__
@@ -47,7 +57,7 @@ typedef signed char    int8_t;
 #  endif
 #endif
 
-#ifndef _INT16_T
+#if !defined(_SOLCOMPAT_BASIC_INT_TYPES_DONE) && !defined(_INT16_T)
 #  define _INT16_T
 #  ifdef __INT16_TYPE__
 typedef __INT16_TYPE__ int16_t;
@@ -56,7 +66,7 @@ typedef short          int16_t;
 #  endif
 #endif
 
-#ifndef _INT32_T
+#if !defined(_SOLCOMPAT_BASIC_INT_TYPES_DONE) && !defined(_INT32_T)
 #  define _INT32_T
 #  ifdef __INT32_TYPE__
 typedef __INT32_TYPE__ int32_t;
@@ -65,7 +75,7 @@ typedef int            int32_t;
 #  endif
 #endif
 
-#ifndef _INT64_T
+#if !defined(_SOLCOMPAT_BASIC_INT_TYPES_DONE) && !defined(_INT64_T)
 #  define _INT64_T
 #  ifdef __INT64_TYPE__
 typedef __INT64_TYPE__ int64_t;
@@ -77,7 +87,7 @@ __extension__ typedef long long int64_t;
 /* ----------------------------------------------------------------
  * Exact-width unsigned types
  * ---------------------------------------------------------------- */
-#ifndef _UINT8_T
+#if !defined(_SOLCOMPAT_BASIC_INT_TYPES_DONE) && !defined(_UINT8_T)
 #  define _UINT8_T
 #  ifdef __UINT8_TYPE__
 typedef __UINT8_TYPE__  uint8_t;
@@ -86,7 +96,7 @@ typedef unsigned char   uint8_t;
 #  endif
 #endif
 
-#ifndef _UINT16_T
+#if !defined(_SOLCOMPAT_BASIC_INT_TYPES_DONE) && !defined(_UINT16_T)
 #  define _UINT16_T
 #  ifdef __UINT16_TYPE__
 typedef __UINT16_TYPE__ uint16_t;
@@ -95,7 +105,7 @@ typedef unsigned short  uint16_t;
 #  endif
 #endif
 
-#ifndef _UINT32_T
+#if !defined(_SOLCOMPAT_BASIC_INT_TYPES_DONE) && !defined(_UINT32_T)
 #  define _UINT32_T
 #  ifdef __UINT32_TYPE__
 typedef __UINT32_TYPE__ uint32_t;
@@ -104,7 +114,7 @@ typedef unsigned int    uint32_t;
 #  endif
 #endif
 
-#ifndef _UINT64_T
+#if !defined(_SOLCOMPAT_BASIC_INT_TYPES_DONE) && !defined(_UINT64_T)
 #  define _UINT64_T
 #  ifdef __UINT64_TYPE__
 typedef __UINT64_TYPE__ uint64_t;
@@ -116,7 +126,8 @@ __extension__ typedef unsigned long long uint64_t;
 /* ----------------------------------------------------------------
  * intmax_t / uintmax_t
  * ---------------------------------------------------------------- */
-#if !defined(__intmax_t_defined) && !defined(_INTMAX_T)
+#if !defined(_SOLCOMPAT_BASIC_INT_TYPES_DONE) && \
+    !defined(__intmax_t_defined) && !defined(_INTMAX_T)
 #  define __intmax_t_defined
 #  define _INTMAX_T
 #  ifdef __INTMAX_TYPE__
@@ -126,7 +137,7 @@ __extension__ typedef long long intmax_t;
 #  endif
 #endif
 
-#ifndef _UINTMAX_T
+#if !defined(_SOLCOMPAT_BASIC_INT_TYPES_DONE) && !defined(_UINTMAX_T)
 #  define _UINTMAX_T
 #  ifdef __UINTMAX_TYPE__
 typedef __UINTMAX_TYPE__ uintmax_t;
@@ -138,7 +149,8 @@ __extension__ typedef unsigned long long uintmax_t;
 /* ----------------------------------------------------------------
  * intptr_t / uintptr_t  (ILP32 SPARC)
  * ---------------------------------------------------------------- */
-#if !defined(__intptr_t_defined) && !defined(_INTPTR_T)
+#if !defined(_SOLCOMPAT_BASIC_INT_TYPES_DONE) && \
+    !defined(__intptr_t_defined) && !defined(_INTPTR_T)
 #  define __intptr_t_defined
 #  define _INTPTR_T
 #  ifdef __INTPTR_TYPE__
@@ -148,7 +160,7 @@ typedef int             intptr_t;
 #  endif
 #endif
 
-#ifndef _UINTPTR_T
+#if !defined(_SOLCOMPAT_BASIC_INT_TYPES_DONE) && !defined(_UINTPTR_T)
 #  define _UINTPTR_T
 #  ifdef __UINTPTR_TYPE__
 typedef __UINTPTR_TYPE__ uintptr_t;
@@ -178,7 +190,8 @@ typedef unsigned int     uintptr_t;
 /* ================================================================
  * Minimum-width integer types
  * ================================================================ */
-#if !defined(__int_least8_t_defined) && !defined(_INT_LEAST8_T)
+#if !defined(_SOLCOMPAT_BASIC_INT_TYPES_DONE) && \
+    !defined(__int_least8_t_defined) && !defined(_INT_LEAST8_T)
 #  define __int_least8_t_defined
 #  define _INT_LEAST8_T
 #  ifdef __INT_LEAST8_TYPE__
@@ -188,7 +201,7 @@ typedef signed char          int_least8_t;
 #  endif
 #endif
 
-#ifndef _INT_LEAST16_T
+#if !defined(_SOLCOMPAT_BASIC_INT_TYPES_DONE) && !defined(_INT_LEAST16_T)
 #  define _INT_LEAST16_T
 #  ifdef __INT_LEAST16_TYPE__
 typedef __INT_LEAST16_TYPE__ int_least16_t;
@@ -197,7 +210,7 @@ typedef short                int_least16_t;
 #  endif
 #endif
 
-#ifndef _INT_LEAST32_T
+#if !defined(_SOLCOMPAT_BASIC_INT_TYPES_DONE) && !defined(_INT_LEAST32_T)
 #  define _INT_LEAST32_T
 #  ifdef __INT_LEAST32_TYPE__
 typedef __INT_LEAST32_TYPE__ int_least32_t;
@@ -206,7 +219,7 @@ typedef int                  int_least32_t;
 #  endif
 #endif
 
-#ifndef _INT_LEAST64_T
+#if !defined(_SOLCOMPAT_BASIC_INT_TYPES_DONE) && !defined(_INT_LEAST64_T)
 #  define _INT_LEAST64_T
 #  ifdef __INT_LEAST64_TYPE__
 typedef __INT_LEAST64_TYPE__ int_least64_t;
@@ -215,7 +228,7 @@ __extension__ typedef long long int_least64_t;
 #  endif
 #endif
 
-#ifndef _UINT_LEAST8_T
+#if !defined(_SOLCOMPAT_BASIC_INT_TYPES_DONE) && !defined(_UINT_LEAST8_T)
 #  define _UINT_LEAST8_T
 #  ifdef __UINT_LEAST8_TYPE__
 typedef __UINT_LEAST8_TYPE__  uint_least8_t;
@@ -224,7 +237,7 @@ typedef unsigned char         uint_least8_t;
 #  endif
 #endif
 
-#ifndef _UINT_LEAST16_T
+#if !defined(_SOLCOMPAT_BASIC_INT_TYPES_DONE) && !defined(_UINT_LEAST16_T)
 #  define _UINT_LEAST16_T
 #  ifdef __UINT_LEAST16_TYPE__
 typedef __UINT_LEAST16_TYPE__ uint_least16_t;
@@ -233,7 +246,7 @@ typedef unsigned short        uint_least16_t;
 #  endif
 #endif
 
-#ifndef _UINT_LEAST32_T
+#if !defined(_SOLCOMPAT_BASIC_INT_TYPES_DONE) && !defined(_UINT_LEAST32_T)
 #  define _UINT_LEAST32_T
 #  ifdef __UINT_LEAST32_TYPE__
 typedef __UINT_LEAST32_TYPE__ uint_least32_t;
@@ -242,7 +255,7 @@ typedef unsigned int          uint_least32_t;
 #  endif
 #endif
 
-#ifndef _UINT_LEAST64_T
+#if !defined(_SOLCOMPAT_BASIC_INT_TYPES_DONE) && !defined(_UINT_LEAST64_T)
 #  define _UINT_LEAST64_T
 #  ifdef __UINT_LEAST64_TYPE__
 typedef __UINT_LEAST64_TYPE__ uint_least64_t;
