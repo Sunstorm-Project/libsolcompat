@@ -6,9 +6,9 @@
  * which is false under GCC (where __STDC__ == 1), so it provides NO
  * integer types in standard C mode.  This override pulls in our
  * override/stdint.h first to ensure int8_t..int64_t and friends are
- * always defined, then chains to the system header for PRI*/SCN* macros.
+ * always defined, then chains to the system header for PRI.../SCN... macros.
  *
- * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ * Part of libsolcompat - https://github.com/Sunstorm-Project/libsolcompat
  */
 #ifndef _SOLCOMPAT_OVERRIDE_INTTYPES_H
 #define _SOLCOMPAT_OVERRIDE_INTTYPES_H
