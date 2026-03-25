@@ -19,21 +19,6 @@
 #define _SOLCOMPAT_OVERRIDE_STDINT_H
 
 /*
- * Detect if GCC include-fixed sys/int_types.h already ran before us.
- * That header defines int8_t as plain `char` (not `signed char`) and
- * int_least8_t likewise, without setting __int8_t_defined or _INT8_T.
- * If it ran first we must skip those two typedefs to avoid a
- * conflicting-types error.  All other types (int16_t through int64_t,
- * uint*, intmax_t, etc.) are safe to define here because:
- *   - their fallback types match what include-fixed used, OR
- *   - include-fixed's __STDC__ guard blocks them under -std=c99 and we
- *     must supply them ourselves (the entire reason this file exists).
- */
-#ifdef _SYS_INT_TYPES_H
-#  define _SOLCOMPAT_INT8_ALREADY_DEFINED 1
-#endif
-
-/*
  * Prevent sys/int_types.h from being included after us.  That header
  * redefines intmax_t as int32_t under __STRICT_ANSI__ (i.e. -std=c99),
  * conflicting with our correct C99 long long definition.  Since we
@@ -50,13 +35,16 @@
 #if !defined(__int8_t_defined) && !defined(_INT8_T)
 #  define __int8_t_defined
 #  define _INT8_T
-  /* Skip typedef if include-fixed already defined int8_t as plain char. */
-#  ifndef _SOLCOMPAT_INT8_ALREADY_DEFINED
-#    ifdef __INT8_TYPE__
+  /*
+   * Use plain 'char' (not 'signed char') to match GCC include-fixed
+   * sys/int_types.h which typedefs int8_t as 'char'.  Both are 8-bit
+   * signed on SPARC; using the same underlying type avoids a
+   * 'conflicting types' error regardless of include order.
+   */
+#  ifdef __INT8_TYPE__
 typedef __INT8_TYPE__  int8_t;
-#    else
-typedef signed char    int8_t;
-#    endif
+#  else
+typedef char           int8_t;
 #  endif
 #endif
 
@@ -194,13 +182,11 @@ typedef unsigned int     uintptr_t;
 #if !defined(__int_least8_t_defined) && !defined(_INT_LEAST8_T)
 #  define __int_least8_t_defined
 #  define _INT_LEAST8_T
-  /* Skip typedef if include-fixed already defined int_least8_t as plain char. */
-#  ifndef _SOLCOMPAT_INT8_ALREADY_DEFINED
-#    ifdef __INT_LEAST8_TYPE__
+  /* Use plain 'char' to match GCC include-fixed sys/int_types.h. */
+#  ifdef __INT_LEAST8_TYPE__
 typedef __INT_LEAST8_TYPE__  int_least8_t;
-#    else
-typedef signed char          int_least8_t;
-#    endif
+#  else
+typedef char                 int_least8_t;
 #  endif
 #endif
 
