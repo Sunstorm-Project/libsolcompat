@@ -36,16 +36,13 @@
 #  define __int8_t_defined
 #  define _INT8_T
   /*
-   * Use plain 'char' (not 'signed char') to match GCC include-fixed
-   * sys/int_types.h which typedefs int8_t as 'char'.  Both are 8-bit
-   * signed on SPARC; using the same underlying type avoids a
-   * 'conflicting types' error regardless of include order.
+   * Always use plain 'char', never __INT8_TYPE__ (which GCC 11 defines
+   * as 'signed char' on SPARC).  GCC include-fixed sys/int_types.h
+   * unconditionally uses 'char'; 'char' and 'signed char' are distinct
+   * C types and a mismatch causes "conflicting types" regardless of
+   * include order.  On SPARC char is signed, so 'char' IS int8_t.
    */
-#  ifdef __INT8_TYPE__
-typedef __INT8_TYPE__  int8_t;
-#  else
-typedef char           int8_t;
-#  endif
+typedef char int8_t;
 #endif
 
 #if !defined(_INT16_T)
@@ -182,12 +179,8 @@ typedef unsigned int     uintptr_t;
 #if !defined(__int_least8_t_defined) && !defined(_INT_LEAST8_T)
 #  define __int_least8_t_defined
 #  define _INT_LEAST8_T
-  /* Use plain 'char' to match GCC include-fixed sys/int_types.h. */
-#  ifdef __INT_LEAST8_TYPE__
-typedef __INT_LEAST8_TYPE__  int_least8_t;
-#  else
-typedef char                 int_least8_t;
-#  endif
+  /* Always 'char' — same reason as int8_t above. */
+typedef char int_least8_t;
 #endif
 
 #if !defined(_INT_LEAST16_T)
