@@ -49,6 +49,14 @@ int clock_nanosleep(clockid_t clk_id, int flags,
                     struct timespec *remain);
 #endif
 
+/*
+ * timegm — interpret struct tm as UTC, return time_t.
+ * Inverse of gmtime(). Not in Solaris 7 (BSD/GNU extension).
+ */
+#ifndef HAVE_TIMEGM
+time_t timegm(struct tm *tm);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

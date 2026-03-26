@@ -88,6 +88,11 @@ int dirfd(DIR *dir_stream);
 int posix_fadvise(int fd, off_t offset, off_t len, int advice);
 #endif
 
+/* --- posix_fallocate (emulated via ftruncate) --- */
+#ifndef HAVE_POSIX_FALLOCATE
+int posix_fallocate(int fd, off_t offset, off_t len);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

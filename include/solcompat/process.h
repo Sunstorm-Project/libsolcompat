@@ -109,6 +109,23 @@ int posix_spawn_file_actions_adddup2(posix_spawn_file_actions_t *fact,
     int fildes, int newfildes);
 #endif
 
+/*
+ * getgrouplist — enumerate a user's group memberships.
+ * BSD/POSIX.1-2008 function, not in Solaris 7.
+ */
+#ifndef HAVE_GETGROUPLIST
+int getgrouplist(const char *user, gid_t group, gid_t *groups, int *ngroups);
+#endif
+
+/*
+ * sem_timedwait — wait on semaphore with timeout.
+ * POSIX.1-2001 function, not in Solaris 7 (which only has sem_wait/sem_trywait).
+ */
+#include <semaphore.h>
+#ifndef HAVE_SEM_TIMEDWAIT
+int sem_timedwait(sem_t *sem, const struct timespec *abs_timeout);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

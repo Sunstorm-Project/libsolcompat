@@ -332,6 +332,19 @@ char        *if_indextoname(unsigned int ifindex, char *ifname);
 #define IFNAMSIZ IF_NAMESIZE
 #endif
 
+/* --- SOCK_CLOEXEC / SOCK_NONBLOCK flags for accept4 --- */
+#ifndef SOCK_CLOEXEC
+#define SOCK_CLOEXEC  0x80000
+#endif
+#ifndef SOCK_NONBLOCK
+#define SOCK_NONBLOCK 0x800
+#endif
+
+/* --- accept4 --- */
+#ifndef HAVE_ACCEPT4
+int accept4(int sockfd, struct sockaddr *addr, socklen_t *addrlen, int flags);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

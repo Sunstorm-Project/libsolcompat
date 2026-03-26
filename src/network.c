@@ -22,7 +22,16 @@
 #include <stdio.h>
 #include <errno.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <ctype.h>
+
+/* SOCK_CLOEXEC / SOCK_NONBLOCK — Linux/BSD socket flags */
+#ifndef SOCK_CLOEXEC
+#define SOCK_CLOEXEC  0x80000
+#endif
+#ifndef SOCK_NONBLOCK
+#define SOCK_NONBLOCK 0x800
+#endif
 
 /* Unhide — we define the real functions here */
 #undef getaddrinfo
@@ -689,3 +698,39 @@ if_indextoname(unsigned int ifindex, char *ifname)
     return NULL;
 }
 #endif /* HAVE_IF_NAMETOINDEX */
+
+/*
+ * accept4 — accept a connection with flags (SOCK_CLOEXEC, SOCK_NONBLOCK).
+ *
+ * Solaris 7 has accept() but not accept4().  We emulate by calling accept()
+ * then setting the flags via fcntl().  There is a small window between
+ * accept() and fcntl() where the fd lacks the flags — unavoidable without
+ * kernel support, but harmless in practice.
+ */
+int
+accept4(int sockfd, struct sockaddr *addr, socklen_t *addrlen, int flags)
+{
+    int accepted_fd;
+    int fcntl_flags;
+
+    accepted_fd = accept(sockfd, addr, addrlen);
+    if (accepted_fd < 0)
+        return -1;
+
+    if (flags & SOCK_CLOEXEC) {
+        if (fcntl(accepted_fd, F_SETFD, FD_CLOEXEC) < 0) {
+            close(accepted_fd);
+            return -1;
+        }
+    }
+
+    if (flags & SOCK_NONBLOCK) {
+        fcntl_flags = fcntl(accepted_fd, F_GETFL);
+        if (fcntl_flags < 0 || fcntl(accepted_fd, F_SETFL, fcntl_flags | O_NONBLOCK) < 0) {
+            close(accepted_fd);
+            return -1;
+        }
+    }
+
+    return accepted_fd;
+}

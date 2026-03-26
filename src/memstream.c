@@ -81,6 +81,8 @@ struct memstream_entry {
     /* fmemopen-write fields */
     void                   *fixed_buf;
     size_t                  fixed_size;
+    /* fmemopen-read: both ptr and fixed_buf are NULL.
+     * We still register these so fclose can clean up _bufendtab. */
     struct memstream_entry *next;
 };
 
@@ -227,6 +229,14 @@ fmemopen(void *buf, size_t size, const char *mode)
         if (devnull_fd < _NFILE)
             _bufendtab[devnull_fd] = (unsigned char *)buf + size;
 
+        /* Register so fclose can clean up _bufendtab.
+         * Read-mode entries have both ptr==NULL and fixed_buf==NULL. */
+        if (make_entry(fp, NULL, NULL, NULL, 0) == NULL) {
+            ensure_real_fns();
+            real_fclose(fp);
+            return NULL;
+        }
+
         return fp;
     }
 
@@ -299,7 +309,15 @@ fclose(FILE *fp)
 
     entry = memstream_remove(fp);
     if (entry != NULL) {
-        memstream_sync(fp, entry);
+        if (entry->fixed_buf == NULL && entry->ptr == NULL) {
+            /* Read-mode fmemopen: clean up _bufendtab so the fd slot
+             * doesn't carry a stale buffer-end pointer after reuse. */
+            int stream_fd = fileno(fp);
+            if (stream_fd >= 0 && stream_fd < _NFILE)
+                _bufendtab[stream_fd] = NULL;
+        } else {
+            memstream_sync(fp, entry);
+        }
         free(entry);
     }
 

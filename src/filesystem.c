@@ -360,3 +360,37 @@ posix_fadvise(int fd, off_t offset, off_t len, int advice)
     (void)advice;
     return 0;
 }
+
+/*
+ * posix_fallocate — ensure disk space is allocated for a file region.
+ *
+ * Solaris 7 has no fallocate or posix_fallocate.  We emulate by extending
+ * the file with ftruncate if needed.  This doesn't guarantee contiguous
+ * allocation, but it does reserve the space (which is what callers care about).
+ *
+ * Returns 0 on success, or an error number (not -1).
+ */
+int
+posix_fallocate(int fd, off_t offset, off_t len)
+{
+    struct stat file_stat;
+    off_t required_size;
+
+    if (offset < 0 || len <= 0)
+        return EINVAL;
+
+    required_size = offset + len;
+
+    if (fstat(fd, &file_stat) < 0)
+        return errno;
+
+    /* Already large enough — nothing to do */
+    if (file_stat.st_size >= required_size)
+        return 0;
+
+    /* Extend the file; ftruncate zero-fills the gap */
+    if (ftruncate(fd, required_size) < 0)
+        return errno;
+
+    return 0;
+}

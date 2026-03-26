@@ -147,3 +147,73 @@ getline(char **lineptr, size_t *n, FILE *stream)
 {
     return getdelim(lineptr, n, '\n', stream);
 }
+
+/*
+ * preadv / pwritev — scatter/gather I/O at an offset.
+ *
+ * Solaris 7 has pread/pwrite (POSIX.1) but not preadv/pwritev (POSIX.1-2008).
+ * We emulate by looping over the iovec array and calling pread/pwrite for
+ * each element, advancing the file offset manually.
+ *
+ * This is not atomic (a concurrent writer can interleave), but neither is
+ * the kernel implementation on most systems for regular files.
+ */
+#include <sys/uio.h>
+
+ssize_t
+preadv(int fd, const struct iovec *iov, int iovcnt, off_t offset)
+{
+    ssize_t total_bytes = 0;
+    int vector_index;
+
+    for (vector_index = 0; vector_index < iovcnt; vector_index++) {
+        ssize_t bytes_read;
+
+        if (iov[vector_index].iov_len == 0)
+            continue;
+
+        bytes_read = pread(fd, iov[vector_index].iov_base,
+                           iov[vector_index].iov_len, offset);
+        if (bytes_read < 0)
+            return (total_bytes > 0) ? total_bytes : -1;
+        if (bytes_read == 0)
+            break;
+
+        total_bytes += bytes_read;
+        offset += bytes_read;
+
+        /* Short read means no more data available right now */
+        if ((size_t)bytes_read < iov[vector_index].iov_len)
+            break;
+    }
+
+    return total_bytes;
+}
+
+ssize_t
+pwritev(int fd, const struct iovec *iov, int iovcnt, off_t offset)
+{
+    ssize_t total_bytes = 0;
+    int vector_index;
+
+    for (vector_index = 0; vector_index < iovcnt; vector_index++) {
+        ssize_t bytes_written;
+
+        if (iov[vector_index].iov_len == 0)
+            continue;
+
+        bytes_written = pwrite(fd, iov[vector_index].iov_base,
+                               iov[vector_index].iov_len, offset);
+        if (bytes_written < 0)
+            return (total_bytes > 0) ? total_bytes : -1;
+
+        total_bytes += bytes_written;
+        offset += bytes_written;
+
+        /* Short write means we should stop */
+        if ((size_t)bytes_written < iov[vector_index].iov_len)
+            break;
+    }
+
+    return total_bytes;
+}

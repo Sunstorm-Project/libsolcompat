@@ -4,11 +4,14 @@
  * CLOCK_MONOTONIC via gethrtime() (available since Solaris 2.3)
  * CLOCK_PROCESS_CPUTIME_ID via /proc/self/usage or getrusage
  * clock_nanosleep via nanosleep with adjustment
+ * timegm — inverse of gmtime (UTC mktime), not in Solaris 7
  */
 
 #include <time.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <stdlib.h>
+#include <string.h>
 #include <errno.h>
 
 /* gethrtime() is a Solaris builtin — returns hrtime_t (nanoseconds) */
@@ -140,4 +143,39 @@ clock_nanosleep(clockid_t clk_id, int flags,
         return errno;
 
     return 0;
+}
+
+/*
+ * timegm — interpret struct tm as UTC and return time_t.
+ *
+ * Solaris 7 has mktime (local time) but not timegm (UTC).
+ * We use the portable setenv("TZ","UTC")/mktime/restore approach.
+ *
+ * Not thread-safe, but neither is mktime on Solaris 7.
+ * Single-CPU QEMU makes this a non-issue in practice.
+ */
+time_t
+timegm(struct tm *tm)
+{
+    time_t result;
+    char *saved_tz;
+    char *tz_env;
+
+    tz_env = getenv("TZ");
+    saved_tz = tz_env ? strdup(tz_env) : NULL;
+
+    setenv("TZ", "UTC", 1);
+    tzset();
+
+    result = mktime(tm);
+
+    if (saved_tz != NULL) {
+        setenv("TZ", saved_tz, 1);
+        free(saved_tz);
+    } else {
+        unsetenv("TZ");
+    }
+    tzset();
+
+    return result;
 }

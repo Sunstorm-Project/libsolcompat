@@ -108,3 +108,51 @@ duplocale(void *locobj)
 }
 
 #endif /* HAVE_USELOCALE */
+
+/*
+ * sem_timedwait — wait on a semaphore with a timeout.
+ *
+ * Solaris 7 has sem_wait() and sem_trywait() (POSIX.1b real-time) but
+ * not sem_timedwait() (POSIX.1-2001).  We emulate by polling sem_trywait()
+ * with nanosleep() intervals.
+ *
+ * This is not efficient for long waits, but Python's usage is primarily
+ * for thread synchronization with short timeouts.  For the single-CPU
+ * QEMU target, the polling approach is acceptable.
+ */
+#include <semaphore.h>
+#include <time.h>
+#include <sys/time.h>
+
+#ifndef HAVE_SEM_TIMEDWAIT
+int
+sem_timedwait(sem_t *sem, const struct timespec *abs_timeout)
+{
+    struct timespec poll_interval;
+    struct timeval now;
+
+    /* 10ms poll interval — balances responsiveness vs CPU */
+    poll_interval.tv_sec = 0;
+    poll_interval.tv_nsec = 10000000L; /* 10 ms */
+
+    for (;;) {
+        /* Try to acquire immediately */
+        if (sem_trywait(sem) == 0)
+            return 0;
+
+        if (errno != EAGAIN)
+            return -1; /* Real error, not just "would block" */
+
+        /* Check if we've exceeded the deadline */
+        gettimeofday(&now, NULL);
+        if (now.tv_sec > abs_timeout->tv_sec ||
+            (now.tv_sec == abs_timeout->tv_sec &&
+             now.tv_usec * 1000L >= abs_timeout->tv_nsec)) {
+            errno = ETIMEDOUT;
+            return -1;
+        }
+
+        nanosleep(&poll_interval, NULL);
+    }
+}
+#endif /* HAVE_SEM_TIMEDWAIT */

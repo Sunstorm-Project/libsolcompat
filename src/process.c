@@ -463,3 +463,56 @@ posix_spawnp(pid_t *pid, const char *file,
         *pid = child;
     return 0;
 }
+
+/*
+ * getgrouplist — get list of groups a user belongs to.
+ *
+ * Solaris 7 has getgrent() but not getgrouplist() (BSD/POSIX.1-2008).
+ * We iterate through the group database checking membership.
+ *
+ * group is the user's primary GID (always included in the result).
+ * On entry, *ngroups is the size of groups[]. On return, *ngroups is
+ * set to the actual count. Returns -1 if groups[] is too small.
+ */
+#include <grp.h>
+
+int
+getgrouplist(const char *user, gid_t group, gid_t *groups, int *ngroups)
+{
+    struct group *grp_entry;
+    int max_groups = *ngroups;
+    int group_count = 0;
+    int member_index;
+    int result = 0;
+
+    /* Always include the primary group */
+    if (group_count < max_groups)
+        groups[group_count] = group;
+    group_count++;
+
+    /* Scan the group database for supplementary memberships */
+    setgrent();
+    while ((grp_entry = getgrent()) != NULL) {
+        /* Skip if this is the primary group (already added) */
+        if (grp_entry->gr_gid == group)
+            continue;
+
+        /* Check if user is a member of this group */
+        for (member_index = 0; grp_entry->gr_mem[member_index] != NULL;
+             member_index++) {
+            if (strcmp(grp_entry->gr_mem[member_index], user) == 0) {
+                if (group_count < max_groups)
+                    groups[group_count] = grp_entry->gr_gid;
+                group_count++;
+                break;
+            }
+        }
+    }
+    endgrent();
+
+    if (group_count > max_groups)
+        result = -1;
+
+    *ngroups = group_count;
+    return result;
+}

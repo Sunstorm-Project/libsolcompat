@@ -199,3 +199,37 @@ solcompat_strerror_r(int errnum, char *buf, size_t buflen)
     solcompat_snprintf(buf, buflen, "Unknown error %d", errnum);
     return buf;
 }
+
+/*
+ * strsignal — return a string describing a signal number.
+ *
+ * Solaris 7 has _sys_siglist[] in <signal.h> but no strsignal().
+ * We provide a wrapper that returns the table entry or a formatted
+ * string for unknown signals.
+ *
+ * The returned string is in a static buffer (not thread-safe, matches
+ * the POSIX.1-2008 spec which says the return value need not be
+ * thread-safe).
+ */
+#include <signal.h>
+
+#ifndef NSIG
+#define NSIG 64
+#endif
+
+char *
+strsignal(int signum)
+{
+    static char unknown_buf[32];
+
+    if (signum > 0 && signum < NSIG) {
+        /* Solaris 7 provides _sys_siglist as an array of signal descriptions */
+        extern const char *_sys_siglist[];
+        if (_sys_siglist[signum] != NULL)
+            return (char *)_sys_siglist[signum];
+    }
+
+    solcompat_snprintf(unknown_buf, sizeof(unknown_buf),
+                       "Unknown signal %d", signum);
+    return unknown_buf;
+}

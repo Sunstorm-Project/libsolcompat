@@ -47,6 +47,15 @@ FILE *open_memstream(char **ptr, size_t *sizeloc);
  * declarations are needed here.
  */
 
+/* --- preadv / pwritev (scatter/gather I/O at offset) --- */
+#include <sys/uio.h>
+#ifndef HAVE_PREADV
+ssize_t preadv(int fd, const struct iovec *iov, int iovcnt, off_t offset);
+#endif
+#ifndef HAVE_PWRITEV
+ssize_t pwritev(int fd, const struct iovec *iov, int iovcnt, off_t offset);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
