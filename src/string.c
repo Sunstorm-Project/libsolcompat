@@ -223,10 +223,10 @@ strsignal(int signum)
     static char unknown_buf[32];
 
     if (signum > 0 && signum < NSIG) {
-        /* Solaris 7 provides _sys_siglist as an array of signal descriptions */
-        extern const char *_sys_siglist[];
-        if (_sys_siglist[signum] != NULL)
-            return (char *)_sys_siglist[signum];
+        /* GCC include-fixed/signal.h declares _sys_siglistp as const char ** */
+        extern const char **_sys_siglistp;
+        if (_sys_siglistp && _sys_siglistp[signum] != NULL)
+            return (char *)_sys_siglistp[signum];
     }
 
     solcompat_snprintf(unknown_buf, sizeof(unknown_buf),
