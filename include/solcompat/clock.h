@@ -7,7 +7,9 @@
 #ifndef SOLCOMPAT_CLOCK_H
 #define SOLCOMPAT_CLOCK_H
 
-#include <time.h>
+/* Use sys headers directly to avoid circular include with override/time.h.
+   clockid_t is in <sys/types.h>, struct timespec in <sys/time.h>. */
+#include <sys/types.h>
 #include <sys/time.h>
 
 #ifdef __cplusplus
