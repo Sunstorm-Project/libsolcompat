@@ -1,8 +1,8 @@
 # libsolcompat
 
-POSIX/C99/C11 compatibility library for Solaris 7 SPARC.
+POSIX.1-2024 compatibility library for Solaris 7 SPARC.
 
-libsolcompat bridges the gap between Solaris 7's SUSv2/POSIX.1-1997 APIs and what modern (2026-era) open source software expects. It provides 300+ functions across 23 source files that are missing from Solaris 7 but required by current versions of GCC, GNU coreutils, Python, OpenSSL, git, SDL2, ScummVM, and other tools.
+libsolcompat bridges the gap between Solaris 7's SUSv2/POSIX.1-1997 APIs and the POSIX.1-2024 (Issue 8) standard. It provides 300+ functions across 23 source files that are missing from Solaris 7 but required by current versions of GCC, GNU coreutils, Python, OpenSSL, git, SDL2, ScummVM, and other tools.
 
 Part of the [Sunstorm Project](https://github.com/Sunstorm-Project). Installed as Wave 0 in the SST build pipeline — every subsequent package links against it.
 
@@ -100,7 +100,7 @@ Three jobs:
 
 ## POSIX Coverage Auditing
 
-The SST build pipeline includes `scripts/audit-posix-coverage.sh` which compares Solaris 7 system libraries + libsolcompat against POSIX.1-2024 to identify remaining gaps. Run it with the sysroot for accurate results:
+The SST build pipeline includes `scripts/audit-posix-coverage.sh` which compares Solaris 7 system libraries + libsolcompat against the POSIX.1-2024 (Issue 8) mandatory function list to identify remaining gaps. Run it with the sysroot for accurate results:
 
 ```sh
 ./scripts/audit-posix-coverage.sh \
