@@ -40,9 +40,15 @@ void *memrchr(const void *s, int c, size_t n);
 /* --- strsignal --- */
 char *strsignal(int signum);
 
-/* --- strerror_r (GNU-compatible) --- */
+/*
+ * strerror_r — GNU-compatible wrapper (returns char*, not int).
+ * Solaris 7 has strerror_r with POSIX (int) signature.  Only override
+ * when the build hasn't already opted to use the system version.
+ */
+#ifndef HAVE_STRERROR_R
 char *solcompat_strerror_r(int errnum, char *buf, size_t buflen);
 #define strerror_r solcompat_strerror_r
+#endif
 
 #ifdef __cplusplus
 }
