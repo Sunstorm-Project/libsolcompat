@@ -1,0 +1,23 @@
+/*
+ * override/cstdlib — C++ <cstdlib> with C99/POSIX extensions for Solaris 7
+ *
+ * GCC's <cstdlib> does "using ::atoll;" etc. to pull C symbols into
+ * namespace std.  But Solaris 7's <stdlib.h> doesn't declare atoll,
+ * setenv, unsetenv, strtoll, strtoull, or other C99/POSIX additions.
+ *
+ * Fix: include our override stdlib.h first (which adds the missing
+ * declarations to the global namespace), then let GCC's <cstdlib>
+ * pull them into std::.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+#ifndef _SOLCOMPAT_OVERRIDE_CSTDLIB
+#define _SOLCOMPAT_OVERRIDE_CSTDLIB
+
+/* Ensure all C99/POSIX stdlib symbols are declared in :: first */
+#include <stdlib.h>
+
+/* Now let GCC's real <cstdlib> do "using ::atoll;" etc. */
+#include_next <cstdlib>
+
+#endif /* _SOLCOMPAT_OVERRIDE_CSTDLIB */
