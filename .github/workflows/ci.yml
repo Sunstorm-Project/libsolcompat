@@ -111,30 +111,34 @@ jobs:
           path: artifacts/
 
       - name: Cross-compile test binary for SPARC
-        # Use docker create + docker cp instead of bind mount to avoid
-        # WSL2 Docker Desktop bind-mount flush issue where writes from
-        # the container are not reliably synced back to the host.
+        # Use docker cp to extract the binary instead of relying on
+        # bind-mount flush (WSL2 Docker Desktop known issue).
         run: |
-          TEMP_CID=$(docker create --pull=missing \
+          # Stage source + artifacts into a single temp directory
+          STAGE=$(mktemp -d)
+          cp -a tests/ include/ "${STAGE}/"
+          cp artifacts/libsolcompat.a "${STAGE}/"
+
+          TEMP_CID=$(docker create \
             -v sparc-build-host_cross-build-cross:/opt/cross:ro \
             -v "$SPARC_BUILD_HOST/sysroot:/opt/sysroot-build:ro" \
             -e PATH=/opt/cross/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-            -w /work \
+            -w /build \
             ghcr.io/sunstorm-project/sparc-toolchain:latest \
-            sh -c 'sparc-sun-solaris2.7-gcc \
+            sh -c 'ls -la /build/ && sparc-sun-solaris2.7-gcc \
               --sysroot=/opt/sysroot-build \
               -mcpu=v7 -D__EXTENSIONS__ -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE=1 \
               -Iinclude -Iinclude/override \
               -o test_all_sparc \
               tests/test_all.c \
-              artifacts/libsolcompat.a \
-              -lrt -lsocket -lnsl -lresolv -ldl -lm')
-          docker cp "${{ github.workspace }}/." "${TEMP_CID}:/work/"
-          docker cp artifacts/. "${TEMP_CID}:/work/artifacts/"
+              libsolcompat.a \
+              -lrt -lsocket -lnsl -lresolv -ldl -lm && file test_all_sparc')
+          docker cp "${STAGE}/." "${TEMP_CID}:/build/"
           docker start -a "${TEMP_CID}"
-          docker cp "${TEMP_CID}:/work/test_all_sparc" test_all_sparc
+          docker cp "${TEMP_CID}:/build/test_all_sparc" test_all_sparc
           docker rm "${TEMP_CID}"
-          file test_all_sparc
+          rm -rf "${STAGE}"
+          ls -la test_all_sparc
 
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
