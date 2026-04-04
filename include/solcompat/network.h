@@ -301,7 +301,13 @@ int inet_pton(int af, const char *src, void *dst);
 #endif
 
 /* --- getifaddrs --- */
-#ifndef HAVE_GETIFADDRS
+/*
+ * Struct ifaddrs is always needed — even when HAVE_GETIFADDRS is set
+ * (meaning configure detected our libsolcompat getifaddrs function),
+ * the struct definition isn't provided by Solaris 7's system headers.
+ */
+#ifndef _SOLCOMPAT_STRUCT_IFADDRS
+#define _SOLCOMPAT_STRUCT_IFADDRS
 struct ifaddrs {
     struct ifaddrs  *ifa_next;
     char            *ifa_name;
@@ -320,7 +326,9 @@ struct ifaddrs {
 #ifndef ifa_dstaddr
 #define ifa_dstaddr   ifa_ifu.ifu_dstaddr
 #endif
+#endif /* _SOLCOMPAT_STRUCT_IFADDRS */
 
+#ifndef HAVE_GETIFADDRS
 int  getifaddrs(struct ifaddrs **ifap);
 void freeifaddrs(struct ifaddrs *ifa);
 #endif
