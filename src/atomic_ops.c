@@ -77,6 +77,64 @@ void membar_producer(void) { /* no-op on single-CPU */ }
 void membar_consumer(void) { /* no-op on single-CPU */ }
 
 /* ================================================================
+ * Solaris 10+ convenience wrappers
+ *
+ * These functions exist in Solaris 10+ but not Solaris 7.
+ * They are thin wrappers around the primitives above.
+ * SDL2 2.32.10's Solaris codepath uses these directly.
+ * ================================================================ */
+
+uint_t
+atomic_cas_uint(volatile uint_t *target, uint_t cmp, uint_t newval)
+{
+	return (uint_t)cas32((uint32_t *)target, (uint32_t)cmp,
+	    (uint32_t)newval);
+}
+
+void *
+atomic_cas_ptr(volatile void *target, void *cmp, void *newval)
+{
+	return casptr((void *)target, cmp, newval);
+}
+
+uint_t
+atomic_swap_uint(volatile uint_t *target, uint_t newval)
+{
+	uint_t old_value;
+	do {
+		old_value = *target;
+	} while (atomic_cas_uint(target, old_value, newval) != old_value);
+	return old_value;
+}
+
+void *
+atomic_swap_ptr(volatile void *target, void *newval)
+{
+	void *old_value;
+	do {
+		old_value = *(void *volatile *)target;
+	} while (atomic_cas_ptr(target, old_value, newval) != old_value);
+	return old_value;
+}
+
+void
+atomic_add_int(volatile uint_t *target, int delta)
+{
+	atomic_add_32((uint32_t *)target, (int32_t)delta);
+}
+
+uint_t
+atomic_or_uint(volatile uint_t *target, uint_t bits)
+{
+	uint_t old_value;
+	do {
+		old_value = *target;
+	} while (atomic_cas_uint(target, old_value, old_value | bits)
+	    != old_value);
+	return old_value;
+}
+
+/* ================================================================
  * Utility
  * ================================================================ */
 
