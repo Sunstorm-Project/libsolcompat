@@ -33,8 +33,9 @@ long long strtoll(const char *nptr, char **endptr, int base);
 unsigned long long strtoull(const char *nptr, char **endptr, int base);
 long long atoll(const char *nptr);
 
-/* C99 strtof — not in Solaris 7 libc at all; implemented in stdlib.c */
+/* C99 strtof/strtold — not in Solaris 7 libc; implemented in stdlib.c */
 float strtof(const char *nptr, char **endptr);
+long double strtold(const char *nptr, char **endptr);
 
 /*
  * qsort_r — reentrant sort with caller-supplied context argument.
