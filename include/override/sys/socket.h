@@ -17,4 +17,18 @@
 /* Add AF_INET6, sockaddr_storage, and related IPv6 types */
 #include <solcompat/network.h>
 
+/*
+ * POSIX.1-2001 CMSG_LEN and CMSG_SPACE macros.
+ * Solaris 7 has CMSG_DATA/CMSG_FIRSTHDR/CMSG_NXTHDR but lacks these two.
+ */
+#ifndef CMSG_LEN
+#define CMSG_LEN(data_length) \
+    (_CMSG_HDR_ALIGN(sizeof(struct cmsghdr)) + (data_length))
+#endif
+
+#ifndef CMSG_SPACE
+#define CMSG_SPACE(data_length) \
+    (_CMSG_HDR_ALIGN(sizeof(struct cmsghdr) + (data_length)))
+#endif
+
 #endif /* _SOLCOMPAT_OVERRIDE_SYS_SOCKET_H */
