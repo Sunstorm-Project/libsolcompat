@@ -110,6 +110,9 @@ getaddrinfo(const char *node, const char *service,
         if (*endptr == '\0' && portnum >= 0 && portnum <= 65535) {
             port = htons((unsigned short)portnum);
         } else {
+            /* AI_NUMERICSERV: reject non-numeric service names */
+            if (flags & AI_NUMERICSERV)
+                return EAI_NONAME;
             const char *proto = NULL;
             if (socktype == SOCK_STREAM) proto = "tcp";
             else if (socktype == SOCK_DGRAM) proto = "udp";

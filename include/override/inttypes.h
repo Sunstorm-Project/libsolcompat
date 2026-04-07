@@ -168,14 +168,31 @@
 /* ================================================================
  * Printf format macros — pointer and max-width types
  * ================================================================ */
+/*
+ * GCC __PRIPTR_PREFIX — used by gnulib/gettext to generate PRIxPTR etc.
+ * On SPARC32 ILP32, intptr_t is int, so the prefix is empty.
+ */
+#ifndef __PRIPTR_PREFIX
+#define __PRIPTR_PREFIX ""
+#endif
+
 #ifndef PRIdPTR
 #define PRIdPTR  PRId32    /* ILP32 */
+#endif
+#ifndef PRIiPTR
+#define PRIiPTR  PRIi32
+#endif
+#ifndef PRIoPTR
+#define PRIoPTR  PRIo32
 #endif
 #ifndef PRIuPTR
 #define PRIuPTR  PRIu32
 #endif
 #ifndef PRIxPTR
 #define PRIxPTR  PRIx32
+#endif
+#ifndef PRIXPTR
+#define PRIXPTR  PRIX32
 #endif
 
 #ifndef PRIdMAX
