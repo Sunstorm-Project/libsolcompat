@@ -14,6 +14,11 @@
 #include <string.h>
 #include <errno.h>
 
+/* Forward declarations for functions implemented in stdlib.c —
+   Solaris 7 stdlib.h doesn't declare these. */
+int setenv(const char *name, const char *value, int overwrite);
+int unsetenv(const char *name);
+
 /* gethrtime() is a Solaris builtin — returns hrtime_t (nanoseconds) */
 extern hrtime_t gethrtime(void);
 
