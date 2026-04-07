@@ -162,8 +162,17 @@ sem_timedwait(sem_t *sem, const struct timespec *abs_timeout)
  * ================================================================ */
 
 #include <sys/types.h>
+#include <unistd.h>
+#include <stropts.h>      /* ioctl() on Solaris 7 */
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/sockio.h>   /* SIOCATMARK on Solaris */
+
+/* Solaris 7 declares ioctl in <unistd.h> and <stropts.h> but only when
+   __EXTENSIONS__ is defined. GCC 15 cross-compile may not have it —
+   provide a fallback declaration. */
+extern int ioctl(int, int, ...);
+
 #include <langinfo.h>
 
 /* Solaris 7 net/if.h lacks struct if_nameindex — define it here */
