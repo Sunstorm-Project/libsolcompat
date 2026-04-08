@@ -38,4 +38,37 @@
     #error "Cannot determine byte order for this platform"
 #endif
 
+/*
+ * POSIX/BSD byte-swap conversion macros (htobe16, le32toh, etc.)
+ * glibc and BSD provide these in <endian.h>; Solaris 7 has none.
+ * GCC has __builtin_bswap{16,32,64} since GCC 4.8.
+ */
+#if __BYTE_ORDER == __BIG_ENDIAN
+    #define htobe16(x) ((uint16_t)(x))
+    #define htobe32(x) ((uint32_t)(x))
+    #define htobe64(x) ((uint64_t)(x))
+    #define htole16(x) __builtin_bswap16(x)
+    #define htole32(x) __builtin_bswap32(x)
+    #define htole64(x) __builtin_bswap64(x)
+    #define be16toh(x) ((uint16_t)(x))
+    #define be32toh(x) ((uint32_t)(x))
+    #define be64toh(x) ((uint64_t)(x))
+    #define le16toh(x) __builtin_bswap16(x)
+    #define le32toh(x) __builtin_bswap32(x)
+    #define le64toh(x) __builtin_bswap64(x)
+#elif __BYTE_ORDER == __LITTLE_ENDIAN
+    #define htobe16(x) __builtin_bswap16(x)
+    #define htobe32(x) __builtin_bswap32(x)
+    #define htobe64(x) __builtin_bswap64(x)
+    #define htole16(x) ((uint16_t)(x))
+    #define htole32(x) ((uint32_t)(x))
+    #define htole64(x) ((uint64_t)(x))
+    #define be16toh(x) __builtin_bswap16(x)
+    #define be32toh(x) __builtin_bswap32(x)
+    #define be64toh(x) __builtin_bswap64(x)
+    #define le16toh(x) ((uint16_t)(x))
+    #define le32toh(x) ((uint32_t)(x))
+    #define le64toh(x) ((uint64_t)(x))
+#endif
+
 #endif /* _SOLCOMPAT_OVERRIDE_ENDIAN_H */
