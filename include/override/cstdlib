@@ -1,13 +1,16 @@
 /*
  * override/cstdlib — C++ <cstdlib> with C99/POSIX extensions for Solaris 7
  *
- * GCC's <cstdlib> does "using ::atoll;" etc. to pull C symbols into
- * namespace std.  But Solaris 7's <stdlib.h> doesn't declare atoll,
- * setenv, unsetenv, strtoll, strtoull, or other C99/POSIX additions.
+ * GCC 15's <cstdlib> does "using ::_Exit; using ::strtof;" etc. to pull
+ * C99 symbols into namespace std. But Solaris 7's <stdlib.h> doesn't
+ * declare these, so GCC's cstdlib fails.
  *
- * Fix: include our override stdlib.h first (which adds the missing
- * declarations to the global namespace), then let GCC's <cstdlib>
- * pull them into std::.
+ * We declare the missing functions BEFORE #include_next <cstdlib> so
+ * GCC's "using" declarations find them in the global namespace.
+ *
+ * IMPORTANT: Do NOT #include <stdlib.h> here — that triggers the
+ * override/stdlib.h → GCC C++ stdlib.h → cstdlib circular dependency.
+ * GCC's cstdlib includes the system stdlib.h internally via #include_next.
  *
  * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
  */
@@ -15,26 +18,37 @@
 #define _SOLCOMPAT_OVERRIDE_CSTDLIB
 
 /*
- * First let GCC's real <cstdlib> run — it includes the system <stdlib.h>
- * internally and pulls whatever Solaris 7 provides into namespace std.
+ * Declare C99/POSIX functions that Solaris 7's stdlib.h lacks.
+ * These must be in the global namespace BEFORE GCC's <cstdlib>
+ * tries "using ::_Exit;" etc.
+ */
+/* Need size_t for aligned_alloc */
+typedef unsigned int __solcompat_size_t;
+
+/* lldiv_t must be declared as a type before cstdlib does "using ::lldiv_t" */
+typedef struct { long long quot; long long rem; } lldiv_t;
+
+extern "C" {
+    long long atoll(const char *);
+    long long strtoll(const char *, char **, int);
+    unsigned long long strtoull(const char *, char **, int);
+    float strtof(const char *, char **);
+    long double strtold(const char *, char **);
+    void _Exit(int);
+    int setenv(const char *, const char *, int);
+    int unsetenv(const char *);
+    char *mkdtemp(char *);
+    long long llabs(long long);
+    lldiv_t lldiv(long long, long long);
+    void *aligned_alloc(__solcompat_size_t, __solcompat_size_t);
+    void at_quick_exit(void (*)(void));
+    void quick_exit(int);
+}
+
+/* Now let GCC's real <cstdlib> run — it will:
+ * 1. #include_next <stdlib.h> to get the system Solaris stdlib.h
+ * 2. Pull everything (including our declarations) into namespace std
  */
 #include_next <cstdlib>
-
-/*
- * Now declare the C99/POSIX functions that Solaris 7's stdlib.h lacked.
- * These go into the global namespace (::), then we pull them into std::.
- */
-#include <solcompat/stdlib_ext.h>
-
-namespace std {
-    using ::atoll;
-    using ::strtoll;
-    using ::strtoull;
-    using ::strtof;
-    using ::strtold;
-    using ::setenv;
-    using ::unsetenv;
-    using ::mkdtemp;
-}
 
 #endif /* _SOLCOMPAT_OVERRIDE_CSTDLIB */

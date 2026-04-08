@@ -63,16 +63,21 @@ extern "C" {
 int solcompat_fpclassify_d(double x);
 int solcompat_fpclassify_f(float x);
 
+#ifndef __cplusplus
 #ifndef fpclassify
 #define fpclassify(x) \
     (sizeof(x) == sizeof(float) ? solcompat_fpclassify_f(x) : solcompat_fpclassify_d(x))
 #endif
+#endif /* !__cplusplus */
 
 /* GCC's __builtin_fpclassify needs these on some targets */
 int __fpclassifyf(float x);
 int __fpclassifyd(double x);
 
-/* C99 isnan/isinf/isfinite/isnormal macros (type-generic) */
+/* C99 isnan/isinf/isfinite/isnormal macros (type-generic).
+ * In C++ mode, GCC provides these as builtins via <cmath> so we only
+ * define them for C.  Defining them as macros in C++ breaks std::isinf() etc. */
+#ifndef __cplusplus
 #ifndef isfinite
 #define isfinite(x) (fpclassify(x) != FP_NAN && fpclassify(x) != FP_INFINITE)
 #endif
@@ -82,6 +87,7 @@ int __fpclassifyd(double x);
 #ifndef isnormal
 #define isnormal(x) (fpclassify(x) == FP_NORMAL)
 #endif
+#endif /* !__cplusplus */
 
 /* ================================================================
  * Missing double-precision C99 math functions
