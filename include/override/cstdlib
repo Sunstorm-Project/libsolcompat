@@ -9,11 +9,21 @@
  * GCC's "using" declarations find them in the global namespace.
  *
  * IMPORTANT: Do NOT #include <stdlib.h> here — that triggers the
- * override/stdlib.h → GCC C++ stdlib.h → cstdlib circular dependency.
+ * override/stdlib.h -> GCC C++ stdlib.h -> cstdlib circular dependency.
  * GCC's cstdlib includes the system stdlib.h internally via #include_next.
  *
  * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
  */
+
+/* __STRICT_ANSI__ suppression must be OUTSIDE the include guard.
+ * GCC's include-fixed/stdlib.h gates lldiv_t/lldiv/llabs on
+ * !__STRICT_ANSI__, but -std=c++17 defines it. We must undefine it
+ * every time cstdlib is included, not just the first time. */
+#ifdef __STRICT_ANSI__
+#define _SOLCOMPAT_RESTORE_STRICT_ANSI
+#undef __STRICT_ANSI__
+#endif
+
 #ifndef _SOLCOMPAT_OVERRIDE_CSTDLIB
 #define _SOLCOMPAT_OVERRIDE_CSTDLIB
 
@@ -24,9 +34,6 @@
  */
 /* Need size_t for aligned_alloc */
 typedef unsigned int __solcompat_size_t;
-
-/* lldiv_t must be declared as a type before cstdlib does "using ::lldiv_t" */
-typedef struct { long long quot; long long rem; } lldiv_t;
 
 extern "C" {
     long long atoll(const char *);
@@ -39,16 +46,18 @@ extern "C" {
     int unsetenv(const char *);
     char *mkdtemp(char *);
     long long llabs(long long);
-    lldiv_t lldiv(long long, long long);
     void *aligned_alloc(__solcompat_size_t, __solcompat_size_t);
     void at_quick_exit(void (*)(void));
     void quick_exit(int);
 }
 
-/* Now let GCC's real <cstdlib> run — it will:
- * 1. #include_next <stdlib.h> to get the system Solaris stdlib.h
- * 2. Pull everything (including our declarations) into namespace std
- */
+#endif /* _SOLCOMPAT_OVERRIDE_CSTDLIB */
+
+/* Now let GCC's real <cstdlib> run (always, even on re-include). */
 #include_next <cstdlib>
 
-#endif /* _SOLCOMPAT_OVERRIDE_CSTDLIB */
+/* Restore __STRICT_ANSI__ if we removed it */
+#ifdef _SOLCOMPAT_RESTORE_STRICT_ANSI
+#define __STRICT_ANSI__
+#undef _SOLCOMPAT_RESTORE_STRICT_ANSI
+#endif
