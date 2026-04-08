@@ -167,10 +167,142 @@ __atomic_compare_exchange_1(volatile void *ptr, void *expected,
 unsigned char
 __atomic_exchange_1(volatile void *ptr, unsigned char val, int memorder)
 {
-	volatile unsigned char *p = (volatile unsigned char *)ptr;
-	unsigned char old = *p;
-	*p = val;
-	return old;
+	volatile unsigned char *target_ptr = (volatile unsigned char *)ptr;
+	unsigned char old_value = *target_ptr;
+	(void)memorder;
+	*target_ptr = val;
+	return old_value;
+}
+
+unsigned char
+__atomic_fetch_add_1(volatile void *ptr, unsigned char val, int memorder)
+{
+	volatile unsigned char *target_ptr = (volatile unsigned char *)ptr;
+	unsigned char old_value = *target_ptr;
+	(void)memorder;
+	*target_ptr = old_value + val;
+	return old_value;
+}
+
+unsigned char
+__atomic_fetch_sub_1(volatile void *ptr, unsigned char val, int memorder)
+{
+	volatile unsigned char *target_ptr = (volatile unsigned char *)ptr;
+	unsigned char old_value = *target_ptr;
+	(void)memorder;
+	*target_ptr = old_value - val;
+	return old_value;
+}
+
+unsigned char
+__atomic_fetch_and_1(volatile void *ptr, unsigned char val, int memorder)
+{
+	volatile unsigned char *target_ptr = (volatile unsigned char *)ptr;
+	unsigned char old_value = *target_ptr;
+	(void)memorder;
+	*target_ptr = old_value & val;
+	return old_value;
+}
+
+unsigned char
+__atomic_fetch_or_1(volatile void *ptr, unsigned char val, int memorder)
+{
+	volatile unsigned char *target_ptr = (volatile unsigned char *)ptr;
+	unsigned char old_value = *target_ptr;
+	(void)memorder;
+	*target_ptr = old_value | val;
+	return old_value;
+}
+
+unsigned char
+__atomic_fetch_xor_1(volatile void *ptr, unsigned char val, int memorder)
+{
+	volatile unsigned char *target_ptr = (volatile unsigned char *)ptr;
+	unsigned char old_value = *target_ptr;
+	(void)memorder;
+	*target_ptr = old_value ^ val;
+	return old_value;
+}
+
+/* ================================================================
+ * 2-byte (uint16_t) atomic operations
+ * On single-CPU SPARC, simple load/store is sufficient.
+ * ================================================================ */
+
+int
+__atomic_compare_exchange_2(volatile void *ptr, void *expected,
+    unsigned short desired, int weak, int success_memorder,
+    int failure_memorder)
+{
+	volatile unsigned short *target_ptr = (volatile unsigned short *)ptr;
+	unsigned short *expected_ptr = (unsigned short *)expected;
+	(void)weak; (void)success_memorder; (void)failure_memorder;
+	if (*target_ptr == *expected_ptr) {
+		*target_ptr = desired;
+		return 1;
+	}
+	*expected_ptr = *target_ptr;
+	return 0;
+}
+
+unsigned short
+__atomic_exchange_2(volatile void *ptr, unsigned short val, int memorder)
+{
+	volatile unsigned short *target_ptr = (volatile unsigned short *)ptr;
+	unsigned short old_value = *target_ptr;
+	(void)memorder;
+	*target_ptr = val;
+	return old_value;
+}
+
+unsigned short
+__atomic_fetch_add_2(volatile void *ptr, unsigned short val, int memorder)
+{
+	volatile unsigned short *target_ptr = (volatile unsigned short *)ptr;
+	unsigned short old_value = *target_ptr;
+	(void)memorder;
+	*target_ptr = old_value + val;
+	return old_value;
+}
+
+unsigned short
+__atomic_fetch_sub_2(volatile void *ptr, unsigned short val, int memorder)
+{
+	volatile unsigned short *target_ptr = (volatile unsigned short *)ptr;
+	unsigned short old_value = *target_ptr;
+	(void)memorder;
+	*target_ptr = old_value - val;
+	return old_value;
+}
+
+unsigned short
+__atomic_fetch_and_2(volatile void *ptr, unsigned short val, int memorder)
+{
+	volatile unsigned short *target_ptr = (volatile unsigned short *)ptr;
+	unsigned short old_value = *target_ptr;
+	(void)memorder;
+	*target_ptr = old_value & val;
+	return old_value;
+}
+
+unsigned short
+__atomic_fetch_or_2(volatile void *ptr, unsigned short val, int memorder)
+{
+	volatile unsigned short *target_ptr = (volatile unsigned short *)ptr;
+	unsigned short old_value = *target_ptr;
+	(void)memorder;
+	*target_ptr = old_value | val;
+	return old_value;
+}
+
+unsigned short
+__atomic_fetch_xor_2(volatile void *ptr, unsigned short val, int memorder)
+{
+	volatile unsigned short *target_ptr = (volatile unsigned short *)ptr;
+	unsigned short old_value = *target_ptr;
+	(void)memorder;
+	*target_ptr = old_value ^ val;
+	return old_value;
 }
 
 /* ================================================================
