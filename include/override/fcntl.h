@@ -18,4 +18,16 @@
 #define O_CLOEXEC 0x800000
 #endif
 
+/* O_NOFOLLOW -- Solaris 7 lacks this; define as no-op placeholder.
+ * Solaris 8+ uses 0x20000 for this. The kernel ignores unknown bits. */
+#ifndef O_NOFOLLOW
+#define O_NOFOLLOW 0x20000
+#endif
+
+/* O_DIRECTORY -- open must fail if path is not a directory.
+ * Not present on Solaris 7; defined as no-op placeholder. */
+#ifndef O_DIRECTORY
+#define O_DIRECTORY 0x40000
+#endif
+
 #endif /* _SOLCOMPAT_OVERRIDE_FCNTL_H */

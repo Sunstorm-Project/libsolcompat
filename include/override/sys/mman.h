@@ -1,11 +1,10 @@
 /*
- * override/sys/mman.h — MAP_ANONYMOUS support for Solaris 7
+ * override/sys/mman.h — MAP_ANONYMOUS + POSIX munmap for Solaris 7
  *
- * Solaris 7's mman.h lacks MAP_ANONYMOUS.  This wrapper pulls in the
- * real header via #include_next, then adds the flag and a transparent
- * mmap wrapper that uses /dev/zero for anonymous mappings.
+ * Solaris 7's mman.h lacks MAP_ANONYMOUS and declares munmap(caddr_t, ...)
+ * instead of the POSIX munmap(void *, ...).  This wrapper adds both.
  *
- * Part of libsolcompat — https://github.com/firefly128/libsolcompat
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
  */
 #ifndef _SOLCOMPAT_OVERRIDE_SYS_MMAN_H
 #define _SOLCOMPAT_OVERRIDE_SYS_MMAN_H
@@ -15,5 +14,16 @@
 
 /* Add MAP_ANONYMOUS compatibility */
 #include <solcompat/memory.h>
+
+/*
+ * Solaris 7 declares munmap(caddr_t, size_t) where caddr_t is char*.
+ * POSIX and modern code expects munmap(void*, size_t).
+ * In C++ mode, provide an inline overload that accepts void*.
+ */
+#ifdef __cplusplus
+static inline int munmap(void *addr, size_t len) {
+    return munmap(static_cast<caddr_t>(addr), len);
+}
+#endif
 
 #endif /* _SOLCOMPAT_OVERRIDE_SYS_MMAN_H */

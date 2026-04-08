@@ -18,4 +18,25 @@
 /* Pull in CLOCK_MONOTONIC and related definitions */
 #include <solcompat/clock.h>
 
+/*
+ * Solaris 7's time.h only declares gmtime_r and localtime_r when
+ * _REENTRANT is defined. Many packages (OpenSSL, etc.) don't define
+ * _REENTRANT but still use these functions. Ensure they're always
+ * declared.
+ *
+ * Note: ctime_r and asctime_r are NOT included here because Solaris 7
+ * uses non-standard 3-argument versions (extra int buflen parameter)
+ * which conflict with the POSIX 2-argument signatures.
+ */
+#ifndef _REENTRANT
+#ifdef __cplusplus
+extern "C" {
+#endif
+extern struct tm *gmtime_r(const time_t *, struct tm *);
+extern struct tm *localtime_r(const time_t *, struct tm *);
+#ifdef __cplusplus
+}
+#endif
+#endif /* !_REENTRANT */
+
 #endif /* _SOLCOMPAT_OVERRIDE_TIME_H */

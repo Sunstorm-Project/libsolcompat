@@ -16,4 +16,14 @@
 /* Add execvpe() and related process helpers */
 #include <solcompat/process.h>
 
+/* Add *at() functions — openat, fstatat, linkat, renameat, etc. */
+#include <solcompat/at_funcs.h>
+
+/* _SC_SYMLOOP_MAX -- not defined on Solaris 7.
+ * POSIX says sysconf returns -1 with errno EINVAL for unsupported names,
+ * but some code checks the constant at compile time. */
+#ifndef _SC_SYMLOOP_MAX
+#define _SC_SYMLOOP_MAX 0x200  /* arbitrary unused sysconf name */
+#endif
+
 #endif /* _SOLCOMPAT_OVERRIDE_UNISTD_H */
