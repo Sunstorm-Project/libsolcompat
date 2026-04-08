@@ -220,6 +220,27 @@ extern const struct in6_addr in6addr_loopback;
 #ifndef IPV6_RECVPKTINFO
 #define IPV6_RECVPKTINFO     18
 #endif
+#ifndef IPV6_HOPLIMIT
+#define IPV6_HOPLIMIT        12
+#endif
+#ifndef IPV6_RECVHOPLIMIT
+#define IPV6_RECVHOPLIMIT    19
+#endif
+#ifndef IPV6_RECVTCLASS
+#define IPV6_RECVTCLASS      25
+#endif
+#ifndef IPV6_TCLASS
+#define IPV6_TCLASS          26
+#endif
+
+/* struct in6_pktinfo -- used with IPV6_PKTINFO ancillary data */
+#ifndef _SOLCOMPAT_IN6_PKTINFO
+#define _SOLCOMPAT_IN6_PKTINFO
+struct in6_pktinfo {
+    struct in6_addr ipi6_addr;      /* source/destination IPv6 address */
+    unsigned int    ipi6_ifindex;   /* interface index */
+};
+#endif
 
 /* --- IPv6 multicast group request --- */
 #ifndef _SOLCOMPAT_IPV6_MREQ

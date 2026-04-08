@@ -217,3 +217,48 @@ pwritev(int fd, const struct iovec *iov, int iovcnt, off_t offset)
 
     return total_bytes;
 }
+
+/*
+ * C99 vscanf family — Solaris 7 libc lacks these.
+ * Required by libstdc++ <cstdio> when _GLIBCXX_USE_C99_STDIO is enabled.
+ *
+ * These are simple wrappers that use the Solaris fscanf/sscanf with
+ * va_list. Solaris 7 libc actually HAS the internal implementations
+ * (vfscanf is used by fscanf internally), but doesn't export them.
+ * We implement via the doscan() internal or via a format-parse approach.
+ *
+ * Simple implementation: use __vfscanf if available, otherwise
+ * fall back to a hack using a temporary FILE for vsscanf.
+ */
+
+/* Solaris 7 has _doscan internally but doesn't export vfscanf.
+   Use the __va_list version from libc if available. */
+extern int _doscan(FILE *, const char *, va_list);
+
+int
+vfscanf(FILE *stream, const char *format, va_list ap)
+{
+    return _doscan(stream, format, ap);
+}
+
+int
+vscanf(const char *format, va_list ap)
+{
+    return vfscanf(stdin, format, ap);
+}
+
+int
+vsscanf(const char *str, const char *format, va_list ap)
+{
+    /* Create a temporary FILE from the string using fmemopen-like approach.
+       Solaris 7 doesn't have fmemopen, so use a pipe or tmpfile trick. */
+    FILE *tmp_stream = tmpfile();
+    int result;
+    if (!tmp_stream)
+        return -1;
+    fputs(str, tmp_stream);
+    rewind(tmp_stream);
+    result = vfscanf(tmp_stream, format, ap);
+    fclose(tmp_stream);
+    return result;
+}

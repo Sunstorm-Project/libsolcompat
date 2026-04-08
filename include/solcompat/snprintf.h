@@ -20,15 +20,25 @@ extern "C" {
 int solcompat_snprintf(char *str, size_t size, const char *fmt, ...);
 int solcompat_vsnprintf(char *str, size_t size, const char *fmt, va_list ap);
 
-/*
- * Override libc versions.  Link with -lsolcompat BEFORE -lc, or use
- * -include solcompat/solcompat.h to get these macros automatically.
- */
-#define snprintf  solcompat_snprintf
-#define vsnprintf solcompat_vsnprintf
-
 #ifdef __cplusplus
 }
+#endif
+
+/*
+ * In C: macro-redirect snprintf → solcompat_snprintf so all calls
+ * get C99 return values automatically.
+ *
+ * In C++: declare snprintf/vsnprintf as real functions in the global
+ * namespace. This lets std::snprintf work via <cstdio>. At link time,
+ * -lsolcompat before -lc ensures the solcompat version is used.
+ * We can't use macros because #define snprintf breaks std::snprintf.
+ */
+#ifdef __cplusplus
+extern "C" int snprintf(char *str, size_t size, const char *fmt, ...);
+extern "C" int vsnprintf(char *str, size_t size, const char *fmt, va_list ap);
+#else
+#define snprintf  solcompat_snprintf
+#define vsnprintf solcompat_vsnprintf
 #endif
 
 #endif /* SOLCOMPAT_SNPRINTF_H */

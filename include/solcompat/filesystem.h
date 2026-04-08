@@ -12,24 +12,24 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <time.h>
+#include <sys/time.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* --- utimes --- */
-struct timeval;  /* forward decl, <sys/time.h> */
-int utimes(const char *path, const struct timeval tv[2]);
+int utimes(const char *path, const struct timeval *tv);
 
 /* --- futimens / utimensat --- */
-int futimens(int fd, const struct timespec times[2]);
+int futimens(int fd, const struct timespec *times);
 
 #ifndef UTIME_NOW
 #define UTIME_NOW  ((1l << 30) - 1l)
 #define UTIME_OMIT ((1l << 30) - 2l)
 #endif
 int utimensat(int dirfd, const char *pathname,
-              const struct timespec times[2], int flags);
+              const struct timespec *times, int flags);
 
 /* --- flock --- */
 #ifndef LOCK_SH
