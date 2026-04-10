@@ -557,6 +557,67 @@ static void test_explicit_bzero(void)
     PASS();
 }
 
+/* ===== futimesat (libuv / cmake compat) ===== */
+#include <sys/time.h>
+static void test_futimesat(void)
+{
+    int fd;
+    char path[] = "/tmp/sol_futimesat_test_XXXXXX";
+    struct timeval tv[2];
+    struct stat st;
+
+    TEST(futimesat);
+    fd = mkstemp(path);
+    ASSERT(fd >= 0, "mkstemp failed");
+    close(fd);
+
+    /* Set atime/mtime to a known epoch (2026-01-01 00:00:00 UTC) */
+    tv[0].tv_sec  = 1767225600L;
+    tv[0].tv_usec = 0;
+    tv[1].tv_sec  = 1767225600L;
+    tv[1].tv_usec = 0;
+    ASSERT(futimesat(AT_FDCWD, path, tv) == 0, "futimesat returned non-zero");
+
+    ASSERT(stat(path, &st) == 0, "stat after futimesat failed");
+    ASSERT(st.st_mtime == 1767225600L, "futimesat did not set mtime");
+
+    unlink(path);
+    PASS();
+}
+
+/* ===== hwcap stubs (getisax / getauxval) ===== */
+#include <solcompat/hwcap.h>
+#include <sys/auxv.h>
+
+static void test_getisax_stub(void)
+{
+    uint32_t array[4] = { 0xdeadbeef, 0xdeadbeef, 0xdeadbeef, 0xdeadbeef };
+    int rc;
+
+    TEST(getisax_stub);
+    rc = getisax(array, 4);
+    ASSERT(rc == 0, "getisax should return 0 on Solaris 7");
+    ASSERT(array[0] == 0 && array[1] == 0 &&
+           array[2] == 0 && array[3] == 0,
+           "getisax should clear the array");
+    PASS();
+}
+
+static void test_getauxval_stub(void)
+{
+    /*
+     * Linux glibc returns the actual aux-vector entry; on Solaris 7 we
+     * stub to 0 universally.  Software like Qt 6 treats 0 as "feature
+     * not detected" and falls back accordingly.
+     */
+    TEST(getauxval_stub);
+    ASSERT(getauxval(AT_HWCAP) == 0UL, "AT_HWCAP must stub to 0");
+    ASSERT(getauxval(AT_PLATFORM) == 0UL, "AT_PLATFORM must stub to 0");
+    ASSERT(getauxval(AT_RANDOM) == 0UL, "AT_RANDOM must stub to 0");
+    ASSERT(getauxval(0xdeadbeef) == 0UL, "unknown type must stub to 0");
+    PASS();
+}
+
 /* ===== ppoll test ===== */
 static void test_ppoll(void)
 {
@@ -1082,6 +1143,13 @@ main(void)
 
     printf("\n[stubs]\n");
     test_locale_stubs();
+
+    printf("\n[hwcap]\n");
+    test_getisax_stub();
+    test_getauxval_stub();
+
+    printf("\n[at_funcs]\n");
+    test_futimesat();
 
     printf("\n[ipv6/network]\n");
     test_ipv6_types();

@@ -394,3 +394,32 @@ posix_fallocate(int fd, off_t offset, off_t len)
 
     return 0;
 }
+
+/*
+ * futimesat — early POSIX-2008 draft API for setting file timestamps
+ * relative to a directory file descriptor with microsecond resolution.
+ * Solaris 10+ provides it; Solaris 7 doesn't.
+ *
+ * Modern POSIX deprecates it in favor of utimensat(dirfd, ..., AT_FDCWD,
+ * times, 0), but libuv (and therefore cmake) still calls it.
+ *
+ * We implement it as a thin wrapper over our utimensat shim, converting
+ * the timeval pair to timespec.  Microsecond precision survives; the
+ * underlying utimensat further degrades to second precision because
+ * Solaris 7's utime(2) only accepts time_t.
+ */
+int
+futimesat(int dirfd, const char *pathname, const struct timeval times[2])
+{
+    struct timespec ts[2];
+
+    if (times == NULL)
+        return utimensat(dirfd, pathname, NULL, 0);
+
+    ts[0].tv_sec  = times[0].tv_sec;
+    ts[0].tv_nsec = (long)times[0].tv_usec * 1000L;
+    ts[1].tv_sec  = times[1].tv_sec;
+    ts[1].tv_nsec = (long)times[1].tv_usec * 1000L;
+
+    return utimensat(dirfd, pathname, ts, 0);
+}

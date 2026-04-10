@@ -21,7 +21,7 @@ extern "C" {
 /* --- utimes --- */
 int utimes(const char *path, const struct timeval *tv);
 
-/* --- futimens / utimensat --- */
+/* --- futimens / utimensat / futimesat --- */
 int futimens(int fd, const struct timespec *times);
 
 #ifndef UTIME_NOW
@@ -30,6 +30,15 @@ int futimens(int fd, const struct timespec *times);
 #endif
 int utimensat(int dirfd, const char *pathname,
               const struct timespec *times, int flags);
+
+/*
+ * futimesat — early POSIX-2008 draft API; modern POSIX deprecates it
+ * in favour of utimensat with AT_FDCWD.  libuv (and therefore cmake)
+ * still calls it.  Implemented as a thin wrapper over utimensat in
+ * src/at_funcs.c.
+ */
+struct timeval; /* forward decl — sys/time.h not pulled in here */
+int futimesat(int dirfd, const char *pathname, const struct timeval times[2]);
 
 /* --- flock --- */
 #ifndef LOCK_SH
