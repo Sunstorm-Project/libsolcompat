@@ -2,6 +2,7 @@
  * ctype_compat.c -- C99/POSIX ctype functions missing from Solaris 7
  *
  * isblank() — C99
+ * iswblank() — POSIX.1-2001 wide-char predicate
  * *_l() locale variants — POSIX.1-2008
  *
  * Solaris 7 has no per-thread locale support, so the _l variants
@@ -11,6 +12,8 @@
  */
 
 #include <ctype.h>
+#include <wchar.h>
+#include <wctype.h>
 
 /* isblank() -- C99 character classification function
  * Returns non-zero if c is a blank character (space or horizontal tab).
@@ -18,6 +21,16 @@
 int isblank(int c)
 {
     return (c == ' ' || c == '\t');
+}
+
+/* iswblank() -- POSIX.1-2001 wide-char blank predicate.
+ * Solaris 7's <wctype.h> predates POSIX 2001 and ships only the
+ * original C90 set (iswspace, iswalpha, ...). gnulib modules like
+ * wordwrap.c emit a bare iswblank reference and the link fails.
+ */
+int iswblank(wint_t wc)
+{
+    return (wc == (wint_t)L' ' || wc == (wint_t)L'\t');
 }
 
 /*
