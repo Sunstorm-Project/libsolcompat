@@ -22,6 +22,9 @@ on:
     branches: [master]
   workflow_dispatch:
 
+env:
+  REGISTRY: 10.0.0.212:5000
+
 jobs:
   # ------------------------------------------------------------------ #
   # cross-compile: build libsolcompat.a targeting SPARC Solaris 7       #
@@ -59,13 +62,12 @@ jobs:
           docker rm "${BUILD_CID}"
           ls -la libsolcompat.a
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: libsolcompat-sparc-solaris7-${{ github.sha }}
-          path: |
-            libsolcompat.a
-            include/
+      - name: Push build artifacts to registry
+        run: |
+          tar czf libsolcompat-build-${{ github.sha }}.tar.gz libsolcompat.a include/
+          oras push "${REGISTRY}/libsolcompat/build:${{ github.sha }}" --insecure \
+            libsolcompat-build-${{ github.sha }}.tar.gz
+          echo "Pushed build artifacts to registry"
 
   # ------------------------------------------------------------------ #
   # qemu-test: run test_all natively on Solaris 7 in QEMU              #
@@ -102,11 +104,11 @@ jobs:
           sudo cp -a sst-build-pipeline/tests "$SPARC_BUILD_HOST/tests"
           sudo chown -R "$(id -u):$(id -g)" "$SPARC_BUILD_HOST/tests/"
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: libsolcompat-sparc-solaris7-${{ github.sha }}
-          path: artifacts/
+      - name: Pull build artifacts from registry
+        run: |
+          mkdir -p artifacts
+          oras pull "${REGISTRY}/libsolcompat/build:${{ github.sha }}" --insecure --output artifacts/
+          tar xzf artifacts/libsolcompat-build-${{ github.sha }}.tar.gz -C artifacts/
 
       - name: Cross-compile test binary for SPARC
         # Use docker cp to extract the binary instead of relying on
@@ -203,11 +205,11 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: libsolcompat-sparc-solaris7-${{ github.sha }}
-          path: release-staging/
+      - name: Pull build artifacts from registry
+        run: |
+          mkdir -p release-staging
+          oras pull "${REGISTRY}/libsolcompat/build:${{ github.sha }}" --insecure --output release-staging/
+          tar xzf release-staging/libsolcompat-build-${{ github.sha }}.tar.gz -C release-staging/
 
       - name: Package release tarball
         run: |
