@@ -187,9 +187,16 @@ strtoumax(const char *nptr, char **endptr, int base)
  * GNU-compatible strerror_r: returns a pointer to the error string.
  * The POSIX version returns int — we provide the GNU version since
  * that's what most GNU software expects.
+ *
+ * Solaris 7 libc has no strerror_r at all, so we own the symbol
+ * outright. Earlier revisions exposed this as solcompat_strerror_r
+ * with a #define in string_ext.h, but call sites that don't pull our
+ * override <string.h> (gnulib's error.c is the canonical offender)
+ * still emitted bare strerror_r references and the link failed.
+ * Owning the bare symbol fixes both call paths.
  */
 char *
-solcompat_strerror_r(int errnum, char *buf, size_t buflen)
+strerror_r(int errnum, char *buf, size_t buflen)
 {
     const char *msg = strerror(errnum);
     if (msg) {

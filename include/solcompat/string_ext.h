@@ -42,13 +42,14 @@ char *strsignal(int signum);
 
 /*
  * strerror_r — GNU-compatible wrapper (returns char*, not int).
- * Solaris 7 has strerror_r with POSIX (int) signature.  Only override
- * when the build hasn't already opted to use the system version.
+ * Solaris 7 libc does NOT provide strerror_r at all (verified via nm
+ * on libc.a and libpthread.a), so libsolcompat owns the bare symbol
+ * directly. No macro indirection: gnulib's error.c does not always
+ * pull our override <string.h>, so a #define-based redirect would
+ * leave the link with an unresolved strerror_r reference even when
+ * libsolcompat is on the link line.
  */
-#ifndef HAVE_STRERROR_R
-char *solcompat_strerror_r(int errnum, char *buf, size_t buflen);
-#define strerror_r solcompat_strerror_r
-#endif
+char *strerror_r(int errnum, char *buf, size_t buflen);
 
 #ifdef __cplusplus
 }
