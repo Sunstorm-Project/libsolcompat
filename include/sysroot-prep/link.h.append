@@ -1,0 +1,76 @@
+/*
+ * link.h.append — Solaris 7 <link.h> shim, appended to the sysroot
+ *
+ * Solaris 7's /usr/include/link.h predates several glibc-isms that
+ * GCC's libgcc and libgcov assume are universally available. This
+ * file is appended to the sysroot's link.h by the toolchain build
+ * (toolchain/patches.sh patch #6) before any libgcc compilation
+ * runs. The toolchain build cannot use libsolcompat's normal
+ * override-header mechanism because GCC itself isn't built yet,
+ * so this file is the canonical "what link.h needs" source of
+ * truth: future gaps go here, not into per-package patches.
+ *
+ * The implementations of dl_iterate_phdr (and friends) are in
+ * libsolcompat proper (src/process.c). This file only exposes the
+ * declarations and constants the toolchain compiler needs to parse
+ * libgcc successfully.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+/* libsolcompat: dl_iterate_phdr for Solaris 7 (provided by libsolcompat) */
+#ifndef _DL_ITERATE_PHDR_COMPAT
+#define _DL_ITERATE_PHDR_COMPAT
+
+#include <sys/elf.h>
+
+/* glibc-style ElfW() macro. GCC's libgcc/unwind-dw2-fde-dip.c uses
+ * ElfW(Phdr), ElfW(Addr), etc. to abstract over 32/64-bit ELF.
+ * Solaris 7 SPARC is always 32-bit (sparcv8), so ElfW(X) -> Elf32_X.
+ * Without this macro, libgcc fails to compile with cryptic "expected
+ * ':', ',', ';', '}' or '__attribute__' before '*' token" errors at
+ * every const ElfW(Phdr) * declaration. */
+#ifndef ElfW
+#define ElfW(type) Elf32_##type
+#endif
+
+/* ELF program header type ranges. Solaris 7's <sys/elf.h> predates
+ * these standard ELF constants; modern glibc <elf.h> defines them
+ * unconditionally. libgcc/unwind-dw2-fde-dip.c references PT_LOOS
+ * directly when recognizing OS-specific phdr entries. The values
+ * are fixed by the ELF spec, not platform-dependent. */
+#ifndef PT_LOOS
+#define PT_LOOS    0x60000000  /* OS-specific range start */
+#endif
+#ifndef PT_HIOS
+#define PT_HIOS    0x6fffffff  /* OS-specific range end */
+#endif
+#ifndef PT_LOPROC
+#define PT_LOPROC  0x70000000  /* Processor-specific range start */
+#endif
+#ifndef PT_HIPROC
+#define PT_HIPROC  0x7fffffff  /* Processor-specific range end */
+#endif
+#ifndef PT_GNU_EH_FRAME
+#define PT_GNU_EH_FRAME (PT_LOOS + 0x474e550)  /* GCC unwind tables */
+#endif
+
+struct dl_phdr_info {
+    Elf32_Addr        dlpi_addr;
+    const char       *dlpi_name;
+    const Elf32_Phdr *dlpi_phdr;
+    Elf32_Half        dlpi_phnum;
+};
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+int dl_iterate_phdr(int (*callback)(struct dl_phdr_info *, size_t, void *),
+                    void *data);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _DL_ITERATE_PHDR_COMPAT */
