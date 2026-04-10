@@ -17,6 +17,7 @@
 CC       ?= gcc
 AR       ?= ar
 RANLIB   ?= ranlib
+NM       ?= nm
 CFLAGS   ?= -O2 -Wall -Wextra -Wno-unused-parameter
 CPPFLAGS ?= -D_REENTRANT -I$(CURDIR)/include
 LDFLAGS  ?=
@@ -81,11 +82,20 @@ RESIDUAL_OBJS = src/xpg.o src/hwcap.o
 # ====================================================================
 # Build targets
 # ====================================================================
-all: libsolcompat.a
+all: libsolcompat.a check
 
 # Full monolithic library (used for development and traditional installs)
 libsolcompat.a: $(OBJS)
 	$(AR) rcs $@ $(OBJS)
+
+# Static header/symbol consistency suite. Runs as part of the default
+# build so CI picks it up automatically. Uses the same CC/CFLAGS/sysroot
+# as the library build itself.
+check: libsolcompat.a
+	@CC="$(CC)" NM="$(NM)" \
+	 CFLAGS="$(CFLAGS)" CPPFLAGS="$(CPPFLAGS)" \
+	 LIB=libsolcompat.a \
+	 sh tests/check_headers.sh
 
 # Shared library — only built on request or when linking works
 $(SONAME): $(PIC_OBJS)
@@ -293,5 +303,6 @@ test: all
 clean:
 	rm -f $(OBJS) $(PIC_OBJS) libsolcompat.a $(SONAME)
 	rm -f tests/test_all
+	rm -rf tests/gen
 
-.PHONY: all install install-toolchain install-sysroot test clean
+.PHONY: all check install install-toolchain install-sysroot test clean
