@@ -53,6 +53,19 @@ OVERRIDE_INC="$INC/override"
 TEST_CPPFLAGS="-isystem $OVERRIDE_INC -I$INC $CPPFLAGS"
 TEST_CFLAGS="$CFLAGS"
 
+# Probe for -lrt: present on Linux/Solaris 9+, missing on Solaris 7
+# (clock_gettime etc. live in libc on Solaris 9+ and in -lposix4 on
+# Solaris 7). Detect once so the link smoke test stays portable across
+# both host and the sst-build-pipeline cross-build sysroot.
+RT_LIB=""
+probe_c="$GEN/probe_rt.c"
+printf 'int main(void) { return 0; }\n' > "$probe_c"
+# shellcheck disable=SC2086
+if $CC $TEST_CFLAGS -o "$GEN/probe_rt" "$probe_c" -lrt > "$GEN/probe_rt.log" 2>&1; then
+    RT_LIB="-lrt"
+fi
+rm -f "$probe_c" "$GEN/probe_rt" "$GEN/probe_rt.log"
+
 PASS=0
 FAIL=0
 
@@ -168,7 +181,7 @@ if $CC $TEST_CFLAGS $TEST_CPPFLAGS \
         -o "$LINK_BIN" \
         "$GEN_C" \
         "$ROOT/$LIB" \
-        -lm -lsocket -lnsl -lresolv -lrt -ldl -lpthread \
+        -lm -lsocket -lnsl -lresolv $RT_LIB -ldl -lpthread \
         > "$LINK_LOG" 2>&1; then
     ok "link_smoke compiled and linked"
 else
