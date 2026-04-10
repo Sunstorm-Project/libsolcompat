@@ -871,6 +871,24 @@ static void test_ipv6_sockopts_defined(void)
     PASS();
 }
 
+static void test_source_specific_multicast(void)
+{
+    struct ip_mreq_source mreq;
+    struct group_source_req gsr;
+
+    TEST(source_specific_multicast);
+    /* Compile-time check: structures and constants are defined.
+     * Runtime calls would fail with EOPNOTSUPP on Solaris 7 (no kernel
+     * support), but unmodified networking code compiles. */
+    memset(&mreq, 0, sizeof(mreq));
+    memset(&gsr, 0, sizeof(gsr));
+    ASSERT(IP_ADD_SOURCE_MEMBERSHIP > 0, "IP_ADD_SOURCE_MEMBERSHIP undefined");
+    ASSERT(MCAST_JOIN_SOURCE_GROUP > 0, "MCAST_JOIN_SOURCE_GROUP undefined");
+    ASSERT(sizeof(mreq) > 0, "ip_mreq_source size invalid");
+    ASSERT(sizeof(gsr) > 0, "group_source_req size invalid");
+    PASS();
+}
+
 /* ===== qsort_r tests ===== */
 
 static int compare_ints_ascending(const void *left_element,
@@ -1160,6 +1178,7 @@ main(void)
     test_getaddrinfo_ipv6_returns_noname();
     test_gai_strerror();
     test_ipv6_sockopts_defined();
+    test_source_specific_multicast();
 
     printf("\n========================================\n");
     printf("Results: %d/%d tests passed\n", tests_passed, tests_run);

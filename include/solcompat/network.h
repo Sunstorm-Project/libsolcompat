@@ -266,6 +266,71 @@ struct sockaddr_storage {
 };
 #endif
 
+/* --- Source-specific multicast (RFC 3678 / Solaris 10+) ---
+ *
+ * Solaris 7 lacks source-specific multicast.  Modern networking code
+ * (libuv, etc.) references these structures unconditionally on __sun.
+ * Provide compile-time stubs so the source builds; runtime calls would
+ * fail with EOPNOTSUPP since Solaris 7's kernel has no support.
+ *
+ * Defined after sockaddr_storage because group_req/group_source_req
+ * embed it.
+ */
+#ifndef IP_ADD_SOURCE_MEMBERSHIP
+#define IP_ADD_SOURCE_MEMBERSHIP   39
+#endif
+#ifndef IP_DROP_SOURCE_MEMBERSHIP
+#define IP_DROP_SOURCE_MEMBERSHIP  40
+#endif
+#ifndef IP_BLOCK_SOURCE
+#define IP_BLOCK_SOURCE            41
+#endif
+#ifndef IP_UNBLOCK_SOURCE
+#define IP_UNBLOCK_SOURCE          42
+#endif
+
+#ifndef _SOLCOMPAT_IP_MREQ_SOURCE
+#define _SOLCOMPAT_IP_MREQ_SOURCE
+struct ip_mreq_source {
+    struct in_addr imr_multiaddr;   /* IP multicast address of group */
+    struct in_addr imr_interface;   /* local IP address of interface */
+    struct in_addr imr_sourceaddr;  /* IP address of source */
+};
+#endif
+
+#ifndef MCAST_JOIN_GROUP
+#define MCAST_JOIN_GROUP           41
+#endif
+#ifndef MCAST_LEAVE_GROUP
+#define MCAST_LEAVE_GROUP          42
+#endif
+#ifndef MCAST_JOIN_SOURCE_GROUP
+#define MCAST_JOIN_SOURCE_GROUP    46
+#endif
+#ifndef MCAST_LEAVE_SOURCE_GROUP
+#define MCAST_LEAVE_SOURCE_GROUP   47
+#endif
+#ifndef MCAST_BLOCK_SOURCE
+#define MCAST_BLOCK_SOURCE         43
+#endif
+#ifndef MCAST_UNBLOCK_SOURCE
+#define MCAST_UNBLOCK_SOURCE       44
+#endif
+
+#ifndef _SOLCOMPAT_GROUP_REQ
+#define _SOLCOMPAT_GROUP_REQ
+struct group_req {
+    uint32_t                gr_interface; /* interface index */
+    struct sockaddr_storage gr_group;     /* group address */
+};
+
+struct group_source_req {
+    uint32_t                gsr_interface; /* interface index */
+    struct sockaddr_storage gsr_group;     /* group address */
+    struct sockaddr_storage gsr_source;    /* source address */
+};
+#endif
+
 /* --- struct addrinfo --- */
 #ifndef AI_PASSIVE
 #define AI_PASSIVE     0x0001
