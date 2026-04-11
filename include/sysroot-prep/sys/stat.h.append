@@ -1,0 +1,60 @@
+/*
+ * sys/stat.h.append — POSIX 2008 nanosecond-resolution timestamp API
+ *
+ * Solaris 7's <sys/stat.h> predates POSIX 2008 and has no utimensat /
+ * futimens / fstatat / mkdirat / unlinkat. binutils 2.44
+ * binutils/rename.c calls utimensat(AT_FDCWD, ...) unconditionally
+ * when configure detected HAVE_UTIMENSAT=1; libsolcompat provides the
+ * runtime in src/filesystem.c so configure's link-probe succeeds, but
+ * without a declaration the compile itself fails with "implicit
+ * declaration of function 'utimensat'".
+ *
+ * UTIME_NOW and UTIME_OMIT must be defined before the utimensat
+ * prototype so gnulib-using packages can pass them as tv_nsec values.
+ *
+ * struct timespec is already in <time.h> on Solaris 7 (POSIX.1-1996
+ * pthreads), so the prototype does not forward-declare it.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_SYS_STAT_H_APPEND
+#define _SOLCOMPAT_SYS_STAT_H_APPEND
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* POSIX 2008 utimensat() tv_nsec sentinels. Values match libsolcompat
+ * src/filesystem.c and the POSIX 2008 standard. */
+#ifndef UTIME_NOW
+#define UTIME_NOW  ((1L << 30) - 1L)
+#endif
+#ifndef UTIME_OMIT
+#define UTIME_OMIT ((1L << 30) - 2L)
+#endif
+
+/* POSIX 2008 high-resolution timestamp API. Implementations live in
+ * libsolcompat/src/filesystem.c and link via the sol2.h LIB_SPEC
+ * auto-append of -lsolcompat.
+ *
+ * struct timespec comes from Solaris 7's <time.h>, pulled in via
+ * <sys/stat.h>'s own #include <sys/time.h>. */
+extern int utimensat(int dirfd, const char *pathname,
+                     const struct timespec times[2], int flags);
+extern int futimens(int fd, const struct timespec times[2]);
+
+/* POSIX 2008 *at() family — gnulib-using packages expect these in
+ * sys/stat.h. libsolcompat implements each via the fchdir() dance
+ * in src/at_funcs.c. */
+extern int fstatat(int dirfd, const char *pathname,
+                   struct stat *statbuf, int flags);
+extern int mkdirat(int dirfd, const char *pathname, mode_t mode);
+extern int fchmodat(int dirfd, const char *pathname,
+                    mode_t mode, int flags);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _SOLCOMPAT_SYS_STAT_H_APPEND */

@@ -1,0 +1,43 @@
+/*
+ * fcntl.h.append — POSIX 2008 dirfd sentinels for Solaris 7
+ *
+ * Solaris 7's <fcntl.h> predates POSIX 2008 and has no AT_FDCWD /
+ * AT_SYMLINK_NOFOLLOW / AT_REMOVEDIR / AT_EACCESS. binutils 2.44
+ * binutils/rename.c uses AT_FDCWD unconditionally when configure
+ * detected HAVE_UTIMENSAT=1 (libsolcompat provides the runtime), so
+ * the compile fails with "AT_FDCWD undeclared" even though the
+ * implementation links fine.
+ *
+ * Values must match libsolcompat's src/at_funcs.c and
+ * src/filesystem.c, which use the sentinel AT_FDCWD = -3041965 that
+ * gnulib expects. libsolcompat also accepts the Linux value -100 via
+ * an IS_AT_FDCWD() macro, so cross-compiled gnulib binaries can use
+ * either without a runtime rebuild.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_FCNTL_H_APPEND
+#define _SOLCOMPAT_FCNTL_H_APPEND
+
+#ifndef AT_FDCWD
+#define AT_FDCWD (-3041965)
+#endif
+
+#ifndef AT_SYMLINK_NOFOLLOW
+#define AT_SYMLINK_NOFOLLOW 0x0100
+#endif
+
+#ifndef AT_REMOVEDIR
+#define AT_REMOVEDIR 0x0200
+#endif
+
+#ifndef AT_SYMLINK_FOLLOW
+#define AT_SYMLINK_FOLLOW 0x0400
+#endif
+
+#ifndef AT_EACCESS
+#define AT_EACCESS 0x0010
+#endif
+
+#endif /* _SOLCOMPAT_FCNTL_H_APPEND */
