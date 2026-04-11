@@ -1,0 +1,74 @@
+/*
+ * stdlib.h.append — Solaris 7 <stdlib.h> shim, appended to the sysroot
+ *
+ * Solaris 7's /usr/include/stdlib.h predates C99 and C11, so it lacks
+ * declarations for functions that GCC's libstdc++ pulls into the std::
+ * namespace via `using ::` in <cstdlib>, <cstdint>, <cinttypes>, and
+ * <cstring>.  During the canadian-cross gcc build, libstdc++ compiles
+ * its own headers (stdc++.h precompiled header, etc.) and its
+ * `#include <stdlib.h>` is resolved against gcc's own include-fixed/
+ * directory (via the driver's -B path) BEFORE any user -isystem path
+ * — so the libsolcompat override/*.h trees never get a chance.
+ *
+ * The toolchain's path of last resort is to append the missing
+ * declarations to the source of truth (the Solaris 7 sysroot header)
+ * so fixincludes copies the extended version into include-fixed/.
+ * Once that lands, `using ::aligned_alloc` (and friends) in
+ * libstdc++'s cstdlib resolves to these declarations, compile
+ * succeeds, and libsolcompat provides the implementations at link
+ * time via the LIB_SPEC auto-append of -lsolcompat.
+ *
+ * The implementations of these functions all live in libsolcompat
+ * proper (src/memory.c, src/stdlib.c, src/string.c, src/process.c).
+ * This file only exposes the declarations and typedefs the toolchain
+ * compiler needs to parse libstdc++ successfully.  Future C99/C11
+ * stdlib gaps go here, not into per-package patches or toolchain/
+ * inline sed dances.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+/* libsolcompat: C99 / C11 stdlib functions for Solaris 7 */
+#ifndef _SOLCOMPAT_STDLIB_H_APPEND
+#define _SOLCOMPAT_STDLIB_H_APPEND
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* C11 aligned_alloc — libstdc++ <cstdlib> does `using ::aligned_alloc`.
+ * size_t is already defined by the sysroot stdlib.h above us. */
+void *aligned_alloc(size_t alignment, size_t size);
+
+/* POSIX.1-2001 posix_memalign — libsolcompat wraps memalign */
+int posix_memalign(void **memptr, size_t alignment, size_t size);
+
+/* C11 quick_exit / at_quick_exit — libstdc++ <cstdlib> pulls them in */
+void quick_exit(int status);
+int  at_quick_exit(void (*func)(void));
+
+/* C99 _Exit — libstdc++ <cstdlib> does `using ::_Exit` */
+void _Exit(int status);
+
+/* C99 long long arithmetic — Solaris 7 stdlib.h hides these behind
+ * `#if !defined(__STDC__) || defined(__EXTENSIONS__) || !defined(_STRICT_STDC)`
+ * which trips libstdc++'s `-std=c++17` compile. Redeclare unconditionally. */
+long long            atoll(const char *nptr);
+long long            strtoll(const char *nptr, char **endptr, int base);
+unsigned long long   strtoull(const char *nptr, char **endptr, int base);
+
+/* BSD-compat reallocarray — libstdc++ may `using ::reallocarray` on GCC 15 */
+void *reallocarray(void *ptr, size_t nmemb, size_t size);
+
+/* POSIX mkdtemp — gnulib-using packages often expect it in stdlib.h */
+char *mkdtemp(char *template_path);
+
+/* POSIX setenv / unsetenv — Solaris 7 /usr/include/stdlib.h omits both */
+int setenv(const char *name, const char *value, int overwrite);
+int unsetenv(const char *name);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _SOLCOMPAT_STDLIB_H_APPEND */
