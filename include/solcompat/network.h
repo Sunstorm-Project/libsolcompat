@@ -331,33 +331,107 @@ struct group_source_req {
 };
 #endif
 
-/* --- struct addrinfo --- */
+/* --- struct addrinfo --- *
+ *
+ * The guard here MUST NOT be `#ifndef AI_PASSIVE`: we `#include
+ * <netdb.h>` at the top of this file, and when gnulib's
+ * generated <netdb.h> is in the search path (as it is during every
+ * gettext / coreutils / bison build) that header defines AI_PASSIVE
+ * as a side-effect of its body.  Using AI_PASSIVE as the sentinel
+ * means the struct-addrinfo block below is skipped after the
+ * include-chain re-enters network.h from gnulib's netdb.h — and
+ * packages that rely on solcompat's struct addrinfo (gettext's
+ * hostname.c being the canonical example) fail at compile time
+ * with "storage size of 'hints' isn't known".
+ *
+ * Use a libsolcompat-private sentinel instead so the struct is
+ * always defined exactly once per compilation unit.  If another
+ * header (the system netdb.h, the gnulib netdb.h, or WS2TCPIP on
+ * mingw) has already supplied a struct addrinfo, GCC will happily
+ * accept redeclaration of compatible types — or we can tighten the
+ * guard later by also honoring GNULIB_defined_struct_addrinfo. */
+#ifndef _SOLCOMPAT_STRUCT_ADDRINFO_DEFINED
+#define _SOLCOMPAT_STRUCT_ADDRINFO_DEFINED
+
 #ifndef AI_PASSIVE
 #define AI_PASSIVE     0x0001
+#endif
+#ifndef AI_CANONNAME
 #define AI_CANONNAME   0x0002
+#endif
+#ifndef AI_NUMERICHOST
 #define AI_NUMERICHOST 0x0004
+#endif
+#ifndef AI_NUMERICSERV
 #define AI_NUMERICSERV 0x0008
+#endif
+#ifndef AI_ADDRCONFIG
 #define AI_ADDRCONFIG  0x0020
+#endif
 
+#ifndef NI_MAXHOST
 #define NI_MAXHOST     1025
+#endif
+#ifndef NI_MAXSERV
 #define NI_MAXSERV     32
+#endif
+#ifndef NI_NUMERICHOST
 #define NI_NUMERICHOST 0x0001
+#endif
+#ifndef NI_NUMERICSERV
 #define NI_NUMERICSERV 0x0002
+#endif
+#ifndef NI_NOFQDN
 #define NI_NOFQDN      0x0004
+#endif
+#ifndef NI_NAMEREQD
 #define NI_NAMEREQD    0x0008
+#endif
+#ifndef NI_DGRAM
 #define NI_DGRAM       0x0010
+#endif
 
+#ifndef EAI_AGAIN
 #define EAI_AGAIN      2
+#endif
+#ifndef EAI_BADFLAGS
 #define EAI_BADFLAGS   3
+#endif
+#ifndef EAI_FAIL
 #define EAI_FAIL       4
+#endif
+#ifndef EAI_FAMILY
 #define EAI_FAMILY     5
+#endif
+#ifndef EAI_MEMORY
 #define EAI_MEMORY     6
+#endif
+#ifndef EAI_NONAME
 #define EAI_NONAME     8
+#endif
+#ifndef EAI_SERVICE
 #define EAI_SERVICE    9
+#endif
+#ifndef EAI_SOCKTYPE
 #define EAI_SOCKTYPE   10
+#endif
+#ifndef EAI_SYSTEM
 #define EAI_SYSTEM     11
+#endif
+#ifndef EAI_OVERFLOW
 #define EAI_OVERFLOW   14
+#endif
 
+/* GNULIB_defined_struct_addrinfo is set by gnulib's netdb.in.h after
+ * it emits its own `struct addrinfo` body.  If we're being included
+ * AFTER gnulib already did that (unlikely — HAVE_STRUCT_ADDRINFO=yes
+ * in sst-config.cache tells gnulib to skip its own definition), don't
+ * redefine.  Note that HAVE_STRUCT_ADDRINFO is deliberately NOT part
+ * of this guard: that macro is set in the CALLER's config.h to say
+ * "the system headers define struct addrinfo" — and libsolcompat IS
+ * the system at that point, so we are the definition the caller is
+ * trusting. */
+#if !defined(GNULIB_defined_struct_addrinfo)
 struct addrinfo {
     int              ai_flags;
     int              ai_family;
@@ -368,6 +442,8 @@ struct addrinfo {
     struct sockaddr *ai_addr;
     struct addrinfo *ai_next;
 };
+#define GNULIB_defined_struct_addrinfo 1
+#endif
 
 int  getaddrinfo(const char *node, const char *service,
                  const struct addrinfo *hints, struct addrinfo **res);
@@ -376,7 +452,7 @@ const char *gai_strerror(int errcode);
 int  getnameinfo(const struct sockaddr *sa, socklen_t salen,
                  char *host, socklen_t hostlen,
                  char *serv, socklen_t servlen, int flags);
-#endif /* AI_PASSIVE */
+#endif /* _SOLCOMPAT_STRUCT_ADDRINFO_DEFINED */
 
 /* --- inet_ntop / inet_pton --- */
 const char *inet_ntop(int af, const void *src, char *dst, socklen_t size);
