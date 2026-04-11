@@ -82,7 +82,7 @@ RESIDUAL_OBJS = src/xpg.o src/hwcap.o
 # ====================================================================
 # Build targets
 # ====================================================================
-all: libsolcompat.a check
+all: libsolcompat.a
 
 # Full monolithic library (used for development and traditional installs)
 libsolcompat.a: $(OBJS)
