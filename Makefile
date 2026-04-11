@@ -275,6 +275,67 @@ install-toolchain: all
 	@echo ""
 
 # ====================================================================
+# install-headers — compiler-free subset of install-toolchain
+# ====================================================================
+# Installs override headers, solcompat internal headers, and the
+# sysroot-overlay (stdint.h) WITHOUT requiring any of the .o files
+# built by `all`. Safe to run before a cross compiler exists,
+# e.g. during toolchain bootstrap Phase 4 (writable sysroot setup)
+# where there is nothing yet that can compile for the target.
+#
+# Usage:
+#   make install-headers SYSROOT=/path/to/sysroot
+#
+# After the cross compiler is available, run `make install-toolchain`
+# for the full install (augmented libm/libsocket/libc + specs patches).
+install-headers:
+	@echo ""
+	@echo "=== libsolcompat install-headers ==="
+	@echo "  SYSROOT:     $(SYSROOT)"
+	@echo "  COMPAT_BASE: $(COMPAT_BASE)"
+	@echo ""
+	@# --- Create directory structure (matches install-toolchain) ---
+	mkdir -p $(COMPAT_BASE)/include/override/sys
+	mkdir -p $(COMPAT_BASE)/include/override/arpa
+	mkdir -p $(COMPAT_BASE)/include/override/net
+	mkdir -p $(COMPAT_BASE)/include/override/netinet
+	mkdir -p $(COMPAT_BASE)/include/solcompat
+	@# --- Install override wrapper headers ---
+	@echo "Installing override headers..."
+	cp include/override/*.h $(COMPAT_BASE)/include/override/
+	cp include/override/sys/*.h $(COMPAT_BASE)/include/override/sys/
+	cp include/override/arpa/*.h $(COMPAT_BASE)/include/override/arpa/
+	cp include/override/net/*.h $(COMPAT_BASE)/include/override/net/
+	cp include/override/netinet/*.h $(COMPAT_BASE)/include/override/netinet/
+	@# --- Install solcompat internal headers ---
+	@echo "Installing solcompat headers..."
+	cp include/solcompat/*.h $(COMPAT_BASE)/include/solcompat/
+	@# --- Install stdint.h directly into sysroot for GCC's fixincludes ---
+	@if [ -d "$(SYSROOT)/usr/include" ] && [ ! -f "$(SYSROOT)/usr/include/stdint.h" ]; then \
+		cp include/override/stdint.h "$(SYSROOT)/usr/include/stdint.h"; \
+		echo "  stdint.h installed to $(SYSROOT)/usr/include/"; \
+	fi
+	@# --- Install sysroot-overlay (anything else that ships pre-built) ---
+	@if [ -d sysroot-overlay ]; then \
+		cp -r sysroot-overlay/* "$(SYSROOT)/"; \
+		echo "  sysroot-overlay installed"; \
+	fi
+	@# --- Mirror solcompat headers into sysroot /usr/include/solcompat ---
+	@# Needed because fixincludes-patched copies in include-fixed/ can
+	@# reach these via the normal sysroot search path; -isystem override
+	@# only catches code that gets there via the override directory.
+	@if [ -d "$(SYSROOT)/usr/include" ]; then \
+		mkdir -p "$(SYSROOT)/usr/include/solcompat"; \
+		cp include/solcompat/*.h "$(SYSROOT)/usr/include/solcompat/"; \
+		echo "  solcompat/*.h mirrored into sysroot /usr/include"; \
+	fi
+	@echo ""
+	@echo "=== install-headers complete ==="
+	@echo "  Compile with: -isystem $(COMPAT_BASE)/include/override -I$(COMPAT_BASE)/include"
+	@echo "  (Run install-toolchain after cross compiler is built for the full install)"
+	@echo ""
+
+# ====================================================================
 # install-sysroot — Legacy: simple sysroot overlay install
 # ====================================================================
 install-sysroot: all
@@ -305,4 +366,4 @@ clean:
 	rm -f tests/test_all
 	rm -rf tests/gen
 
-.PHONY: all check install install-toolchain install-sysroot test clean
+.PHONY: all check install install-toolchain install-headers install-sysroot test clean
