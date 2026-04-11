@@ -72,6 +72,17 @@ char *mkdtemp(char *template_path);
 int setenv(const char *name, const char *value, int overwrite);
 int unsetenv(const char *name);
 
+/* GNU qsort_r — binutils 2.44 libctf (ctf-decls.h) calls this; native
+ * binutils in bootstrap.sh Phase 8 compiles against the raw Solaris 7
+ * sysroot with -Wimplicit-function-declaration promoted to an error
+ * under GCC 15 defaults, so the declaration has to live in the sysroot
+ * header itself.  libsolcompat/src/stdlib.c implements it with the
+ * GNU signature (context pointer as last argument to both qsort_r and
+ * the comparator). */
+void qsort_r(void *base, size_t element_count, size_t element_size,
+             int (*compare_fn)(const void *, const void *, void *),
+             void *context_arg);
+
 #ifdef __cplusplus
 }
 #endif
