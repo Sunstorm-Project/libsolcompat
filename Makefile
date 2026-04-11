@@ -156,7 +156,7 @@ SYSROOT     ?= /opt/sysroot-gcc11
 GCC_PREFIX  ?=
 COMPAT_BASE  = $(SYSROOT)/opt/sst/lib/solcompat
 
-install-toolchain: all
+install-toolchain: libsolcompat.a
 	@echo ""
 	@echo "=== libsolcompat scatter-install ==="
 	@echo "  SYSROOT:     $(SYSROOT)"
