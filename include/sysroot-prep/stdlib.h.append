@@ -43,11 +43,16 @@ void *aligned_alloc(size_t alignment, size_t size);
 /* POSIX.1-2001 posix_memalign — libsolcompat wraps memalign */
 int posix_memalign(void **memptr, size_t alignment, size_t size);
 
-/* C11 quick_exit / at_quick_exit — libstdc++ <cstdlib> pulls them in */
-void quick_exit(int status);
-int  at_quick_exit(void (*func)(void));
-
-/* C99 _Exit — libstdc++ <cstdlib> does `using ::_Exit` */
+/* C99 _Exit — libstdc++ <cstdlib> does `using ::_Exit`.
+ * libsolcompat provides the implementation in src/stdlib.c.
+ *
+ * NOTE: quick_exit / at_quick_exit are deliberately NOT declared here.
+ * Solaris 7 libc lacks them and libsolcompat does not implement them.
+ * libstdc++'s cstdlib gates `using ::quick_exit` on
+ * _GLIBCXX_HAVE_QUICK_EXIT, so libstdc++'s own configure correctly
+ * skips it when they are missing; declaring them in the sysroot would
+ * create a link-time trap for downstream packages that discover them
+ * via stdlib.h and call them without checking _GLIBCXX_HAVE_*. */
 void _Exit(int status);
 
 /* C99 long long arithmetic — Solaris 7 stdlib.h hides these behind
