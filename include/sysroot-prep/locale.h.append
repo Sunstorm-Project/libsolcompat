@@ -1,0 +1,68 @@
+/*
+ * locale.h.append — POSIX 2008 per-thread locale API for Solaris 7
+ *
+ * Solaris 7's /usr/include/locale.h predates POSIX 2008 and has no
+ * locale_t, newlocale(), uselocale(), freelocale(), or duplocale().
+ * GCC libstdc++'s floating_from_chars.cc (and several other .cc
+ * translation units) unconditionally use these from the global
+ * namespace, so its compile fails the moment it pulls in <locale.h>
+ * from the sysroot.
+ *
+ * Same rationale as stdlib.h.append: during the canadian-cross gcc
+ * build, libstdc++ compiles against gcc's own include-fixed copy of
+ * <locale.h> (which fixincludes took from this sysroot header), and
+ * that path is searched BEFORE any caller-supplied -isystem override.
+ * So the declarations have to live in the sysroot header directly.
+ *
+ * libsolcompat provides the runtime implementations (src/xlocale.c)
+ * and the LIB_SPEC auto-append of -lsolcompat links them in.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_LOCALE_H_APPEND
+#define _SOLCOMPAT_LOCALE_H_APPEND
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* POSIX 2008 opaque per-thread locale handle. Implemented as a void*
+ * in libsolcompat; callers should treat it as an opaque pointer. */
+#ifndef _LOCALE_T_DEFINED
+#define _LOCALE_T_DEFINED
+typedef void *locale_t;
+#endif
+
+/* POSIX 2008 LC_*_MASK bits. Values must match libsolcompat's
+ * src/xlocale.c and solcompat/stubs.h. */
+#ifndef LC_CTYPE_MASK
+#define LC_CTYPE_MASK    (1 << 0)
+#define LC_NUMERIC_MASK  (1 << 1)
+#define LC_TIME_MASK     (1 << 2)
+#define LC_COLLATE_MASK  (1 << 3)
+#define LC_MONETARY_MASK (1 << 4)
+#define LC_MESSAGES_MASK (1 << 5)
+#define LC_ALL_MASK      (LC_CTYPE_MASK | LC_NUMERIC_MASK | LC_TIME_MASK | \
+                          LC_COLLATE_MASK | LC_MONETARY_MASK | LC_MESSAGES_MASK)
+#endif
+
+#ifndef LC_GLOBAL_LOCALE
+#define LC_GLOBAL_LOCALE ((locale_t)-1)
+#endif
+
+/* POSIX 2008 per-thread locale API.  Implementations in
+ * libsolcompat/src/xlocale.c; auto-linked via sol2.h LIB_SPEC patch. */
+extern locale_t newlocale(int category_mask, const char *locale_name, locale_t base);
+extern locale_t uselocale(locale_t new_locale);
+extern void     freelocale(locale_t loc);
+extern locale_t duplocale(locale_t loc);
+
+/* POSIX 2008 nl_langinfo_l — libsolcompat src/stubs.c implements it. */
+char *nl_langinfo_l(int item, locale_t loc);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _SOLCOMPAT_LOCALE_H_APPEND */
