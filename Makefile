@@ -97,9 +97,20 @@ check: libsolcompat.a
 	 LIB=libsolcompat.a \
 	 sh tests/check_headers.sh
 
-# Shared library — only built on request or when linking works
+# Shared library — only built on request or when linking works.
+#
+# -nodefaultlibs: suppress GCC's default LIB_SPEC so we don't try to
+# auto-link against -lsolcompat (which is the library we're currently
+# building — chicken-and-egg). We explicitly list every library we
+# actually need. This matters when sst-build-pipeline's patched
+# cross-gcc has LIB_SPEC configured to append -lsolcompat to every
+# normal link.
+#
+# Must add back -lgcc / -lgcc_s / -lc that -nodefaultlibs drops.
 $(SONAME): $(PIC_OBJS)
-	$(CC) -shared -Wl,-h,$(SONAME) -Wl,-z,notext -o $@ $(PIC_OBJS) $(LDFLAGS) -lrt -lsocket -lnsl -lresolv -lm -ldl
+	$(CC) -shared -Wl,-h,$(SONAME) -Wl,-z,notext -nodefaultlibs \
+	      -o $@ $(PIC_OBJS) $(LDFLAGS) \
+	      -lgcc_s -lgcc -lc -lrt -lsocket -lnsl -lresolv -lm -ldl
 
 # Compile rules
 .SUFFIXES: .c .o .lo
