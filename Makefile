@@ -82,7 +82,7 @@ RESIDUAL_OBJS = src/xpg.o src/hwcap.o
 # ====================================================================
 # Build targets
 # ====================================================================
-all: libsolcompat.a check
+all: libsolcompat.a
 
 # Full monolithic library (used for development and traditional installs)
 libsolcompat.a: $(OBJS)
@@ -97,9 +97,26 @@ check: libsolcompat.a
 	 LIB=libsolcompat.a \
 	 sh tests/check_headers.sh
 
-# Shared library — only built on request or when linking works
+# Shared library — only built on request or when linking works.
+#
+# -nodefaultlibs: suppress GCC's default LIB_SPEC so we don't try to
+# auto-link against -lsolcompat (which is the library we're currently
+# building — chicken-and-egg). We explicitly list every library we
+# actually need.
+#
+# -lgcc (static) only — NOT -lgcc_s. Some cross-toolchains are built
+# with --disable-shared for libgcc (bootstrap.sh Phase 6a does this),
+# which means libgcc_s.so.1 doesn't exist. libgcc.a has PIC objects
+# (gcc builds libgcc PIC by default for use in shared library links
+# even when --disable-shared is set), so we can link it statically
+# into the shared solcompat library.
+#
+# -lc must come after -lgcc because libc references some libgcc
+# runtime symbols indirectly.
 $(SONAME): $(PIC_OBJS)
-	$(CC) -shared -Wl,-h,$(SONAME) -Wl,-z,notext -o $@ $(PIC_OBJS) $(LDFLAGS) -lrt -lsocket -lnsl -lresolv -lm -ldl
+	$(CC) -shared -Wl,-h,$(SONAME) -Wl,-z,notext -nodefaultlibs \
+	      -o $@ $(PIC_OBJS) $(LDFLAGS) \
+	      -lgcc -lc -lgcc -lrt -lsocket -lnsl -lresolv -lm -ldl
 
 # Compile rules
 .SUFFIXES: .c .o .lo
@@ -156,7 +173,7 @@ SYSROOT     ?= /opt/sysroot-gcc11
 GCC_PREFIX  ?=
 COMPAT_BASE  = $(SYSROOT)/opt/sst/lib/solcompat
 
-install-toolchain: all
+install-toolchain: libsolcompat.a
 	@echo ""
 	@echo "=== libsolcompat scatter-install ==="
 	@echo "  SYSROOT:     $(SYSROOT)"

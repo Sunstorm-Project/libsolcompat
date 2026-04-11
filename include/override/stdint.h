@@ -36,13 +36,23 @@
 #  define __int8_t_defined
 #  define _INT8_T
   /*
-   * Always use plain 'char', never __INT8_TYPE__ (which GCC 11 defines
-   * as 'signed char' on SPARC).  GCC include-fixed sys/int_types.h
-   * unconditionally uses 'char'; 'char' and 'signed char' are distinct
-   * C types and a mismatch causes "conflicting types" regardless of
-   * include order.  On SPARC char is signed, so 'char' IS int8_t.
+   * Use 'signed char' to match the Solaris 7 sys/int_types.h that
+   * toolchain/patches.sh and common.sh prepare_sysroot() rewrite at
+   * install time (sed 'typedef char int8_t' → 'typedef signed char
+   * int8_t').  GCC's fixincludes copies that patched header into
+   * ${gcc}/include-fixed/sys/int_types.h as part of the canadian
+   * cross build, so by the time libstdc++ compiles cstdlib/cinttypes
+   * the prevailing int8_t is 'signed char'.  C11 allows redundant
+   * typedefs of the same type, so matching the sysroot avoids the
+   * "conflicting types" diagnostic that GCC emits when two distinct
+   * C types (plain 'char' vs 'signed char') are aliased to the same
+   * name, regardless of include order.
+   *
+   * Note: on SPARC the ABI makes char signed, so 'char' and 'signed
+   * char' are representationally identical — but they remain distinct
+   * types for typedef-compatibility purposes in ISO C.
    */
-typedef char int8_t;
+typedef signed char int8_t;
 #endif
 
 #if !defined(_INT16_T)

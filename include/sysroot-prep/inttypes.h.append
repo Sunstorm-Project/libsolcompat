@@ -1,0 +1,56 @@
+/*
+ * inttypes.h.append — Solaris 7 <inttypes.h> shim, appended to the sysroot
+ *
+ * Solaris 7's /usr/include/inttypes.h predates C99's intmax_t-family
+ * arithmetic: imaxdiv_t, imaxabs, imaxdiv, strtoimax, strtoumax all
+ * arrived in C99 and are missing.  libstdc++'s <cinttypes> does
+ * `using ::imaxdiv_t; using ::imaxabs; ...` and fails to compile when
+ * those names aren't declared in the global `::` namespace.
+ *
+ * During the canadian-cross gcc build, libstdc++ compiles its own
+ * headers (stdc++.h precompiled header, cinttypes itself) and
+ * `#include <inttypes.h>` is resolved against gcc's fixincludes copy
+ * (via -B) before any user -isystem path — so libsolcompat's own
+ * override/inttypes.h is unreachable at libstdc++ build time.  The
+ * toolchain path of last resort is to append the declarations to the
+ * source of truth so fixincludes picks them up.  See stdlib.h.append
+ * for the same mechanism and rationale.
+ *
+ * libsolcompat provides the implementations in src/c99_types.c and
+ * src/stdlib.c.  This file is declarations-only.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+/* libsolcompat: C99 intmax_t-family arithmetic for Solaris 7 */
+#ifndef _SOLCOMPAT_INTTYPES_H_APPEND
+#define _SOLCOMPAT_INTTYPES_H_APPEND
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* C99 imaxdiv_t — Solaris 7 has neither the type nor the functions.
+ * libsolcompat's include/solcompat/c99_types.h uses the same struct. */
+#ifndef _SOLCOMPAT_IMAXDIV_DEFINED
+#define _SOLCOMPAT_IMAXDIV_DEFINED
+typedef struct {
+    long long quot;
+    long long rem;
+} imaxdiv_t;
+#endif
+
+/* C99 imaxabs, imaxdiv */
+long long imaxabs(long long j);
+imaxdiv_t imaxdiv(long long numer, long long denom);
+
+/* C99 strtoimax / strtoumax — take intmax_t, which on SPARC32 ILP32
+ * Solaris 7 is long long.  Implementations live in libsolcompat. */
+long long            strtoimax(const char *nptr, char **endptr, int base);
+unsigned long long   strtoumax(const char *nptr, char **endptr, int base);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _SOLCOMPAT_INTTYPES_H_APPEND */
