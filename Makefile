@@ -102,15 +102,21 @@ check: libsolcompat.a
 # -nodefaultlibs: suppress GCC's default LIB_SPEC so we don't try to
 # auto-link against -lsolcompat (which is the library we're currently
 # building — chicken-and-egg). We explicitly list every library we
-# actually need. This matters when sst-build-pipeline's patched
-# cross-gcc has LIB_SPEC configured to append -lsolcompat to every
-# normal link.
+# actually need.
 #
-# Must add back -lgcc / -lgcc_s / -lc that -nodefaultlibs drops.
+# -lgcc (static) only — NOT -lgcc_s. Some cross-toolchains are built
+# with --disable-shared for libgcc (bootstrap.sh Phase 6a does this),
+# which means libgcc_s.so.1 doesn't exist. libgcc.a has PIC objects
+# (gcc builds libgcc PIC by default for use in shared library links
+# even when --disable-shared is set), so we can link it statically
+# into the shared solcompat library.
+#
+# -lc must come after -lgcc because libc references some libgcc
+# runtime symbols indirectly.
 $(SONAME): $(PIC_OBJS)
 	$(CC) -shared -Wl,-h,$(SONAME) -Wl,-z,notext -nodefaultlibs \
 	      -o $@ $(PIC_OBJS) $(LDFLAGS) \
-	      -lgcc_s -lgcc -lc -lrt -lsocket -lnsl -lresolv -lm -ldl
+	      -lgcc -lc -lgcc -lrt -lsocket -lnsl -lresolv -lm -ldl
 
 # Compile rules
 .SUFFIXES: .c .o .lo
