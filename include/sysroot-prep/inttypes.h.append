@@ -53,4 +53,14 @@ unsigned long long   strtoumax(const char *nptr, char **endptr, int base);
 }
 #endif
 
+/* glibc-internal printf-format prefix macros — gnulib/gettext use these
+ * to construct PRIdPTR etc.  On ILP32 SPARC Solaris 7, intptr_t is int,
+ * so no length modifier is needed (empty string). */
+#ifndef __PRI64_PREFIX
+#define __PRI64_PREFIX "ll"
+#endif
+#ifndef __PRIPTR_PREFIX
+#define __PRIPTR_PREFIX ""
+#endif
+
 #endif /* _SOLCOMPAT_INTTYPES_H_APPEND */
