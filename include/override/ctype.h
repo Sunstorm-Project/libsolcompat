@@ -20,7 +20,15 @@ extern "C" {
 extern int isblank(int c);
 #endif
 
-/* POSIX.1-2008 locale-aware character classification */
+/* POSIX.1-2008 locale-aware character classification.
+ *
+ * Only declared when building for Solaris.  Guarding with __sun keeps
+ * this header safe to #include via -isystem on non-Solaris hosts (the
+ * canadian-cross GCC build compiles some helper programs as x86_64
+ * Linux binaries that pick up this override path via the sysroot
+ * search — they must see the glibc locale_t typedef, not ours).
+ */
+#ifdef __sun
 typedef void *locale_t;  /* forward — real definition in stubs.h */
 extern int isalnum_l(int, locale_t);
 extern int isalpha_l(int, locale_t);
@@ -36,6 +44,7 @@ extern int isupper_l(int, locale_t);
 extern int isxdigit_l(int, locale_t);
 extern int tolower_l(int, locale_t);
 extern int toupper_l(int, locale_t);
+#endif /* __sun */
 
 #ifdef __cplusplus
 }

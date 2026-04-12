@@ -28,7 +28,16 @@ int pthread_setname_np(pthread_t thread, const char *name);
  * gnulib code that includes only <locale.h> fails with "unknown type name
  * 'locale_t'".  Defining the types unconditionally here — pulled in via
  * the override locale.h — fixes that.
+ *
+ * __sun guard: canadian-cross GCC's build stage compiles helper binaries
+ * (libcpp, libiberty, the generators) as x86_64-linux translation units.
+ * Those compiles may still pick up our override/ctype.h via -isystem if
+ * the canadian toolchain's include path is mis-ordered, and on glibc
+ * locale_t is a `struct __locale_struct *` — a conflicting typedef.
+ * Gating on __sun keeps the libsolcompat locale types confined to
+ * actual Solaris compiles where they belong.
  */
+#ifdef __sun
 #ifndef _SOLCOMPAT_LOCALE_T_DEFINED
 #define _SOLCOMPAT_LOCALE_T_DEFINED
 typedef void *locale_t;
@@ -54,6 +63,7 @@ locale_t newlocale(int category_mask, const char *locale, locale_t base);
 locale_t uselocale(locale_t newloc);
 void     freelocale(locale_t locobj);
 locale_t duplocale(locale_t locobj);
+#endif /* __sun */
 
 /* --- Additional POSIX.1-2024 stubs --- */
 
@@ -70,8 +80,10 @@ int posix_madvise(void *, size_t, int);
 #define POSIX_MADV_DONTNEED  4
 #endif
 
-/* nl_langinfo_l (POSIX.1-2008) */
+/* nl_langinfo_l (POSIX.1-2008) — only available on Solaris compiles */
+#ifdef __sun
 char *nl_langinfo_l(int, locale_t);
+#endif
 
 /* pthread_condattr_getclock/setclock (POSIX.1-2001) */
 int pthread_condattr_getclock(const pthread_condattr_t *, int *);
