@@ -19,8 +19,8 @@
  */
 
 /* libsolcompat: dl_iterate_phdr for Solaris 7 (provided by libsolcompat) */
-#ifndef _DL_ITERATE_PHDR_COMPAT
-#define _DL_ITERATE_PHDR_COMPAT
+#ifndef _SOLCOMPAT_SYS_LINK_H_APPEND
+#define _SOLCOMPAT_SYS_LINK_H_APPEND
 
 #include <sys/elf.h>
 
@@ -73,4 +73,4 @@ int dl_iterate_phdr(int (*callback)(struct dl_phdr_info *, size_t, void *),
 }
 #endif
 
-#endif /* _DL_ITERATE_PHDR_COMPAT */
+#endif /* _SOLCOMPAT_SYS_LINK_H_APPEND */
