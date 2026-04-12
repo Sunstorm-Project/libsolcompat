@@ -56,7 +56,8 @@ SRCS = src/snprintf.c \
        src/ctype_compat.c \
        src/atomic_ops.c \
        src/fenv.c \
-       src/cxa_atexit.c
+       src/cxa_atexit.c \
+       src/dl_iterate_phdr.c
 
 OBJS     = $(SRCS:.c=.o)
 PIC_OBJS = $(SRCS:.c=.lo)
