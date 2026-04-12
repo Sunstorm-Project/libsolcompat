@@ -1,12 +1,14 @@
 /*
  * override/wchar.h — Wide character extensions for Solaris 7
  *
- * Solaris 7's <wchar.h> lacks many C99/POSIX wide character functions
- * that GCC's <cwchar> expects: wmemchr, wmemcmp, wmemcpy, wmemmove,
- * wmemset, wprintf, wscanf, wcsstr, wcsrtombs, wcrtomb, wctob, etc.
+ * Solaris 7's <wchar.h> provides basic wide char support including
+ * mbsrtowcs, wcsrtombs, wcrtomb, fwprintf, fwscanf, etc. But it
+ * LACKS the C99 wmem* family, wcsstr, and wctob that GCC's <cwchar>
+ * needs.
  *
- * This wrapper includes the real header then declares the missing
- * functions (implemented in libsolcompat's wchar.c).
+ * Only declare the MISSING functions — do NOT redeclare functions
+ * that the system header already provides, as GCC's include-fixed
+ * copies them and redeclaration causes type conflicts.
  *
  * Part of libsolcompat
  */
@@ -18,48 +20,32 @@
 #ifdef __sun
 
 #include <stddef.h>  /* size_t, wchar_t */
-#include <stdio.h>   /* FILE for fwprintf/fwscanf */
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* Wide memory operations (C99) */
-#ifndef _SOLCOMPAT_WMEM_DECLARED
-#define _SOLCOMPAT_WMEM_DECLARED
+/* Wide memory operations — NOT in Solaris 7's <wchar.h> */
 wchar_t *wmemchr(const wchar_t *s, wchar_t c, size_t n);
 int      wmemcmp(const wchar_t *s1, const wchar_t *s2, size_t n);
 wchar_t *wmemcpy(wchar_t *dest, const wchar_t *src, size_t n);
 wchar_t *wmemmove(wchar_t *dest, const wchar_t *src, size_t n);
 wchar_t *wmemset(wchar_t *s, wchar_t c, size_t n);
-#endif
 
-/* Wide string search (C99) */
-#ifndef _SOLCOMPAT_WCSSTR_DECLARED
-#define _SOLCOMPAT_WCSSTR_DECLARED
+/* Wide string search — NOT in Solaris 7's <wchar.h> */
 wchar_t *wcsstr(const wchar_t *haystack, const wchar_t *needle);
-#endif
 
-/* Wide character ↔ multibyte conversion (C99) */
-#ifndef _SOLCOMPAT_WCRTOMB_DECLARED
-#define _SOLCOMPAT_WCRTOMB_DECLARED
-size_t  wcrtomb(char *s, wchar_t wc, mbstate_t *ps);
-size_t  wcsrtombs(char *dest, const wchar_t **src, size_t len, mbstate_t *ps);
-int     wctob(wint_t c);
-size_t  mbsrtowcs(wchar_t *dest, const char **src, size_t len, mbstate_t *ps);
-#endif
+/* wctob — NOT in Solaris 7's <wchar.h> */
+int wctob(wint_t c);
 
-/* Wide I/O (C99) — stub declarations for compilation only.
- * The Canadian-cross GCC compiles cc1 with these in scope but the
- * SPARC binary will use Solaris 7's own wprintf at runtime. */
+/* wprintf/wscanf family — NOT in Solaris 7's <wchar.h>.
+ * Note: fwprintf/fwscanf ARE in the system header, don't redeclare. */
 #ifndef _SOLCOMPAT_WPRINTF_DECLARED
 #define _SOLCOMPAT_WPRINTF_DECLARED
 int wprintf(const wchar_t *fmt, ...);
 int wscanf(const wchar_t *fmt, ...);
 int swprintf(wchar_t *s, size_t n, const wchar_t *fmt, ...);
 int swscanf(const wchar_t *s, const wchar_t *fmt, ...);
-int fwprintf(FILE *stream, const wchar_t *fmt, ...);
-int fwscanf(FILE *stream, const wchar_t *fmt, ...);
 #endif
 
 #ifdef __cplusplus

@@ -76,77 +76,8 @@ wcsstr(const wchar_t *haystack, const wchar_t *needle)
     return NULL;
 }
 
-/* ================================================================
- * Wide character ↔ multibyte conversion
- * Minimal implementations assuming Solaris 7's default C locale
- * where wchar_t values < 256 map directly to bytes.
- * ================================================================ */
-
-size_t
-wcrtomb(char *s, wchar_t wc, mbstate_t *ps)
-{
-    (void)ps;
-    if (s == NULL)
-        return 1;
-    if (wc < 256) {
-        *s = (char)wc;
-        return 1;
-    }
-    return (size_t)-1;
-}
-
-size_t
-wcsrtombs(char *dest, const wchar_t **src, size_t len, mbstate_t *ps)
-{
-    size_t count = 0;
-    const wchar_t *s = *src;
-    (void)ps;
-
-    while (len > 0) {
-        if (*s == L'\0') {
-            if (dest)
-                *dest = '\0';
-            *src = NULL;
-            return count;
-        }
-        if (*s >= 256) {
-            return (size_t)-1;
-        }
-        if (dest) {
-            *dest++ = (char)*s;
-        }
-        s++;
-        count++;
-        len--;
-    }
-    *src = s;
-    return count;
-}
-
-size_t
-mbsrtowcs(wchar_t *dest, const char **src, size_t len, mbstate_t *ps)
-{
-    size_t count = 0;
-    const char *s = *src;
-    (void)ps;
-
-    while (len > 0) {
-        if (*s == '\0') {
-            if (dest)
-                *dest = L'\0';
-            *src = NULL;
-            return count;
-        }
-        if (dest) {
-            *dest++ = (wchar_t)(unsigned char)*s;
-        }
-        s++;
-        count++;
-        len--;
-    }
-    *src = s;
-    return count;
-}
+/* wcrtomb, wcsrtombs, mbsrtowcs: provided by Solaris 7's libc.
+ * Do NOT reimplement — the system versions handle the locale correctly. */
 
 int
 wctob(wint_t c)
