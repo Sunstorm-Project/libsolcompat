@@ -110,10 +110,13 @@ long long int llround(double x);
 double nan(const char *tagp);
 double remquo(double x, double y, int *quo);
 double scalbln(double x, long int n);
-/* fma/fmaf/fmal declared in src/math.c only — GCC 15 treats any
- * declaration of these builtins as an implicit inline definition,
- * causing a redefinition error when the explicit implementation
- * appears later.  The C++ declarations live in override/cmath. */
+/* C99 fused multiply-add — declarations only, no implementation in
+ * libsolcompat (GCC __builtin_fma provides the implementation).
+ * These declarations are needed so GCC's <cmath> can do 'using ::fma;'
+ * and so fixincludes copies them into include-fixed/math.h. */
+double fma(double x, double y, double z);
+float fmaf(float x, float y, float z);
+long double fmal(long double x, long double y, long double z);
 
 /* ================================================================
  * C99 float-precision math functions (ALL missing from Solaris 7)
@@ -175,8 +178,6 @@ float scalblnf(float x, long int n);
 float ldexpf(float x, int e);
 float frexpf(float x, int *e);
 float modff(float x, float *iptr);
-
-/* fmaf: see comment at line 113 — declaration in math.c only */
 
 /* Rounding / integer conversion */
 long int lrintf(float x);
@@ -246,8 +247,6 @@ long double scalblnl(long double x, long int n);
 long double ldexpl(long double x, int e);
 long double frexpl(long double x, int *e);
 long double modfl(long double x, long double *iptr);
-
-/* fmal: see comment at line 113 — declaration in math.c only */
 
 /* Rounding / integer conversion */
 long int lrintl(long double x);
