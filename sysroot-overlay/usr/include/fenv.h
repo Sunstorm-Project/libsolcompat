@@ -1,0 +1,57 @@
+/*
+ * Part of libsolcompat sysroot — provides C99 <fenv.h> for Solaris 7
+ *
+ * Solaris 7 has no <fenv.h>.  This header provides the full C99
+ * floating-point environment interface, implemented via the SPARC FSR.
+ */
+#ifndef _SOLCOMPAT_SYSROOT_FENV_H
+#define _SOLCOMPAT_SYSROOT_FENV_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Exception flags (SPARC FSR accrued exception bit positions) */
+#define FE_INVALID    0x10
+#define FE_DIVBYZERO  0x02
+#define FE_OVERFLOW   0x08
+#define FE_UNDERFLOW  0x04
+#define FE_INEXACT    0x01
+#define FE_ALL_EXCEPT (FE_INVALID | FE_DIVBYZERO | FE_OVERFLOW | FE_UNDERFLOW | FE_INEXACT)
+
+/* Rounding directions (SPARC FSR rd field values) */
+#define FE_TONEAREST  0
+#define FE_TOWARDZERO 1
+#define FE_UPWARD     2
+#define FE_DOWNWARD   3
+
+/* Types */
+typedef unsigned int fenv_t;
+typedef unsigned int fexcept_t;
+
+/* Default environment */
+extern const fenv_t *_fe_dfl_env_p;
+#define FE_DFL_ENV (_fe_dfl_env_p)
+
+/* Exception handling */
+int feclearexcept(int);
+int feraiseexcept(int);
+int fetestexcept(int);
+int fegetexceptflag(fexcept_t *, int);
+int fesetexceptflag(const fexcept_t *, int);
+
+/* Rounding */
+int fegetround(void);
+int fesetround(int);
+
+/* Environment */
+int fegetenv(fenv_t *);
+int fesetenv(const fenv_t *);
+int feholdexcept(fenv_t *);
+int feupdateenv(const fenv_t *);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _SOLCOMPAT_SYSROOT_FENV_H */

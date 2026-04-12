@@ -1,0 +1,54 @@
+/*
+ * ctype.h.append — C99 isblank and POSIX 2008 locale-aware ctype for Solaris 7
+ *
+ * Solaris 7's <ctype.h> predates C99 and lacks isblank().  It also has
+ * no POSIX 2008 locale-aware character classification functions (*_l
+ * variants).  GCC's libstdc++ <cctype> does `using ::isblank` and
+ * modern software (gnulib, ICU, Python) uses the *_l variants.
+ * libsolcompat provides all implementations.
+ *
+ * locale_t is forward-declared here as an opaque pointer since Solaris 7
+ * has no <xlocale.h> or locale_t typedef.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_CTYPE_H_APPEND
+#define _SOLCOMPAT_CTYPE_H_APPEND
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* C99 isblank — true for space and horizontal tab */
+#ifndef isblank
+int isblank(int c);
+#endif
+
+/* locale_t forward declaration — opaque pointer, no real locale support */
+#ifndef _SOLCOMPAT_LOCALE_T
+#define _SOLCOMPAT_LOCALE_T
+typedef void *locale_t;
+#endif
+
+/* POSIX.1-2008 locale-aware character classification */
+int isalnum_l(int c, locale_t locale);
+int isalpha_l(int c, locale_t locale);
+int isblank_l(int c, locale_t locale);
+int iscntrl_l(int c, locale_t locale);
+int isdigit_l(int c, locale_t locale);
+int isgraph_l(int c, locale_t locale);
+int islower_l(int c, locale_t locale);
+int isprint_l(int c, locale_t locale);
+int ispunct_l(int c, locale_t locale);
+int isspace_l(int c, locale_t locale);
+int isupper_l(int c, locale_t locale);
+int isxdigit_l(int c, locale_t locale);
+int tolower_l(int c, locale_t locale);
+int toupper_l(int c, locale_t locale);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _SOLCOMPAT_CTYPE_H_APPEND */

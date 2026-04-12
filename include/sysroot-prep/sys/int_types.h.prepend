@@ -1,0 +1,19 @@
+/*
+ * sys/int_types.h.prepend — Fix Solaris 7 integer type definitions
+ *
+ * GCC's fixincludes copies sys/int_types.h into include-fixed/ and
+ * uses plain 'char' for int8_t, which conflicts with C99 stdint.h's
+ * 'signed char'. This prepend redirects sys/int_types.h to our
+ * sysroot stdint.h which has correct definitions.
+ *
+ * Applied by replacing the sysroot sys/int_types.h entirely.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+#ifndef _SYS_INT_TYPES_H
+#define _SYS_INT_TYPES_H
+
+/* All integer types provided by the sysroot stdint.h */
+#include <stdint.h>
+
+#endif /* _SYS_INT_TYPES_H */

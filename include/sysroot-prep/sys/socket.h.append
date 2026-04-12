@@ -1,0 +1,67 @@
+/*
+ * sys/socket.h.append — POSIX 2008 socket extensions for Solaris 7
+ *
+ * Solaris 7's <sys/socket.h> lacks struct sockaddr_storage, AF_INET6,
+ * CMSG_LEN, CMSG_SPACE, accept4, SOCK_CLOEXEC, and SOCK_NONBLOCK.
+ * Modern networking code (libuv, Python, Perl, GCC libcody, cmake,
+ * etc.) references these unconditionally.
+ *
+ * The accept4 implementation lives in libsolcompat src/network.c.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_SYS_SOCKET_H_APPEND
+#define _SOLCOMPAT_SYS_SOCKET_H_APPEND
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* --- AF_INET6 / PF_INET6 --- */
+#ifndef AF_INET6
+#define AF_INET6 26   /* Solaris AF_INET6 value */
+#endif
+#ifndef PF_INET6
+#define PF_INET6 AF_INET6
+#endif
+
+/* --- struct sockaddr_storage (RFC 3493) --- */
+#ifndef _SS_MAXSIZE
+#define _SS_MAXSIZE    128
+#define _SS_ALIGNSIZE  (sizeof(int64_t))
+#define _SS_PAD1SIZE   (_SS_ALIGNSIZE - sizeof(sa_family_t))
+#define _SS_PAD2SIZE   (_SS_MAXSIZE - sizeof(sa_family_t) - _SS_PAD1SIZE - _SS_ALIGNSIZE)
+
+struct sockaddr_storage {
+    sa_family_t  ss_family;
+    char         _ss_pad1[_SS_PAD1SIZE];
+    int64_t      _ss_align;
+    char         _ss_pad2[_SS_PAD2SIZE];
+};
+#endif
+
+/* --- CMSG_LEN / CMSG_SPACE --- */
+#ifndef CMSG_LEN
+#define CMSG_LEN(len)   (_CMSG_DATA_ALIGN(sizeof(struct cmsghdr)) + (len))
+#endif
+#ifndef CMSG_SPACE
+#define CMSG_SPACE(len)  (_CMSG_DATA_ALIGN(sizeof(struct cmsghdr)) + _CMSG_DATA_ALIGN(len))
+#endif
+
+/* --- SOCK_CLOEXEC / SOCK_NONBLOCK flags for accept4 --- */
+#ifndef SOCK_CLOEXEC
+#define SOCK_CLOEXEC  0x80000
+#endif
+#ifndef SOCK_NONBLOCK
+#define SOCK_NONBLOCK 0x800
+#endif
+
+/* --- accept4 (Linux 2.6.28+ / POSIX-ish extension) --- */
+int accept4(int sockfd, struct sockaddr *addr, socklen_t *addrlen, int flags);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _SOLCOMPAT_SYS_SOCKET_H_APPEND */

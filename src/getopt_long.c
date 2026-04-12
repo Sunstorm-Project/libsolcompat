@@ -12,8 +12,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Pull in the struct option definition */
-#include "override/getopt.h"
+/* Pull in the struct option definition — sysroot-overlay provides getopt.h */
+#include "getopt.h"
 
 /*
  * getopt_long — parse long and short options

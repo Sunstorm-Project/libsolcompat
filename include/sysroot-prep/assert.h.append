@@ -1,0 +1,28 @@
+/*
+ * assert.h.append — C11 static_assert for Solaris 7
+ *
+ * Solaris 7's <assert.h> predates C11 and does not define static_assert.
+ * C11 7.2 requires assert.h to provide static_assert as a macro
+ * expanding to _Static_assert.  Modern software (GCC, binutils, gnulib)
+ * uses static_assert in C mode.
+ *
+ * NOTE: Unlike the override version, this file DOES use an include guard
+ * because it is appended once to the sysroot header and the guard
+ * prevents the static_assert definition from being re-evaluated.  The
+ * real assert.h above handles its own re-inclusion for NDEBUG.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_ASSERT_H_APPEND
+#define _SOLCOMPAT_ASSERT_H_APPEND
+
+/* C11 7.2: static_assert expands to _Static_assert (C mode only;
+ * C++ has static_assert as a keyword since C++11) */
+#if !defined(__cplusplus) && !defined(static_assert)
+#  if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+#    define static_assert _Static_assert
+#  endif
+#endif
+
+#endif /* _SOLCOMPAT_ASSERT_H_APPEND */

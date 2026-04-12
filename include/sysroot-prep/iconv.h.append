@@ -1,0 +1,23 @@
+/*
+ * iconv.h.append — C++ non-const iconv overload for Solaris 7
+ *
+ * Solaris 7 declares iconv() with const char** for the input parameter.
+ * POSIX and glibc use char** (non-const).  Modern C++ code expects the
+ * non-const version.  This provides a C++ inline overload that accepts
+ * char** and delegates to the system's const char** signature.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_ICONV_H_APPEND
+#define _SOLCOMPAT_ICONV_H_APPEND
+
+#ifdef __cplusplus
+static inline size_t iconv(iconv_t cd, char **inbuf, size_t *inbytesleft,
+                           char **outbuf, size_t *outbytesleft) {
+    return iconv(cd, const_cast<const char **>(inbuf), inbytesleft,
+                 outbuf, outbytesleft);
+}
+#endif
+
+#endif /* _SOLCOMPAT_ICONV_H_APPEND */

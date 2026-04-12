@@ -19,20 +19,10 @@
 #include <sys/elf.h>
 #include <sys/link.h>
 #include <link.h>
-#include <dlfcn.h>
 #include <string.h>
 
-/*
- * struct dl_phdr_info — matches the Linux/Solaris 10+ ABI.
- * GCC's unwind code checks the size parameter to determine which
- * fields are available.
- */
-struct dl_phdr_info {
-    Elf32_Addr        dlpi_addr;    /* Base address of object */
-    const char       *dlpi_name;    /* Name of object */
-    const Elf32_Phdr *dlpi_phdr;    /* Pointer to array of program headers */
-    Elf32_Half        dlpi_phnum;   /* Number of program headers */
-};
+/* struct dl_phdr_info + prototype — shared via sysroot sys/link.h patch */
+#include "solcompat/dl_phdr_info.h"
 
 /* Access the runtime linker's debug structure via _DYNAMIC */
 extern Elf32_Dyn _DYNAMIC[];

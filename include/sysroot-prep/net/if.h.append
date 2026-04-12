@@ -1,0 +1,7 @@
+
+/* Part of libsolcompat sysroot — provides ifr_mtu alias for Solaris 7 */
+/* Solaris 7's net/if.h has ifr_metric but not ifr_mtu; many packages
+ * (iproute2, libuv, Python, etc.) use ifr_mtu unconditionally. */
+#ifndef ifr_mtu
+#define ifr_mtu ifr_metric
+#endif

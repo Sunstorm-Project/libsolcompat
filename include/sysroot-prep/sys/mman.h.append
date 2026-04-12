@@ -1,0 +1,25 @@
+/*
+ * sys/mman.h.append — MAP_ANONYMOUS for Solaris 7
+ *
+ * Solaris 7's <sys/mman.h> lacks MAP_ANONYMOUS (and its MAP_ANON
+ * alias).  Solaris 7 uses /dev/zero for anonymous mappings natively;
+ * libsolcompat provides mmap/mmap64 wrappers that open /dev/zero
+ * internally when MAP_ANONYMOUS is set.  This append only defines
+ * the flag constants so code compiles against the sysroot.
+ *
+ * The mmap wrapper implementations live in libsolcompat src/memory.c.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_SYS_MMAN_H_APPEND
+#define _SOLCOMPAT_SYS_MMAN_H_APPEND
+
+#ifndef MAP_ANONYMOUS
+#define MAP_ANONYMOUS  0x100
+#endif
+#ifndef MAP_ANON
+#define MAP_ANON MAP_ANONYMOUS
+#endif
+
+#endif /* _SOLCOMPAT_SYS_MMAN_H_APPEND */

@@ -1,0 +1,224 @@
+/*
+ * netinet/in.h.append — IPv6 types and constants for Solaris 7
+ *
+ * Solaris 7's <netinet/in.h> predates RFC 2553 and lacks struct in6_addr,
+ * struct sockaddr_in6, the IN6_IS_ADDR_* classification macros, and the
+ * IPPROTO_IPV6 / IPV6_* socket option constants.  Modern networking code
+ * (libuv, Python, Perl, GCC libcody, etc.) references these unconditionally.
+ *
+ * The implementations of in6addr_any / in6addr_loopback live in
+ * libsolcompat src/network.c.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_NETINET_IN_H_APPEND
+#define _SOLCOMPAT_NETINET_IN_H_APPEND
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* --- Address length constants --- */
+#ifndef INET_ADDRSTRLEN
+#define INET_ADDRSTRLEN  16
+#endif
+#ifndef INET6_ADDRSTRLEN
+#define INET6_ADDRSTRLEN 46
+#endif
+
+/* --- IPv6 protocol constant --- */
+#ifndef IPPROTO_IPV6
+#define IPPROTO_IPV6 41
+#endif
+
+/* --- struct in6_addr / sockaddr_in6 ---
+ * Guard on s6_addr — it is always a macro (required by POSIX/RFC 2553)
+ * when struct in6_addr exists. */
+#ifndef s6_addr
+struct in6_addr {
+    union {
+        unsigned char  _S6_u8[16];
+        unsigned short _S6_u16[8];
+        unsigned int   _S6_u32[4];
+    } _S6_un;
+};
+#define s6_addr   _S6_un._S6_u8
+#define s6_addr16 _S6_un._S6_u16
+#define s6_addr32 _S6_un._S6_u32
+
+#ifndef IN6ADDR_ANY_INIT
+#define IN6ADDR_ANY_INIT      { { { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 } } }
+#endif
+#ifndef IN6ADDR_LOOPBACK_INIT
+#define IN6ADDR_LOOPBACK_INIT { { { 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1 } } }
+#endif
+
+struct sockaddr_in6 {
+    sa_family_t     sin6_family;
+    unsigned short  sin6_port;
+    unsigned int    sin6_flowinfo;
+    struct in6_addr sin6_addr;
+    unsigned int    sin6_scope_id;
+};
+
+extern const struct in6_addr in6addr_any;
+extern const struct in6_addr in6addr_loopback;
+
+/* --- IN6_IS_ADDR_* classification macros (RFC 3513 / RFC 4291) --- */
+#ifndef IN6_IS_ADDR_UNSPECIFIED
+#define IN6_IS_ADDR_UNSPECIFIED(a) \
+    (((const unsigned int *)(a))[0] == 0 && \
+     ((const unsigned int *)(a))[1] == 0 && \
+     ((const unsigned int *)(a))[2] == 0 && \
+     ((const unsigned int *)(a))[3] == 0)
+#endif
+
+#ifndef IN6_IS_ADDR_LOOPBACK
+#define IN6_IS_ADDR_LOOPBACK(a) \
+    (((const unsigned int *)(a))[0] == 0 && \
+     ((const unsigned int *)(a))[1] == 0 && \
+     ((const unsigned int *)(a))[2] == 0 && \
+     ((const unsigned int *)(a))[3] == htonl(1))
+#endif
+
+#ifndef IN6_IS_ADDR_MULTICAST
+#define IN6_IS_ADDR_MULTICAST(a) \
+    (((const unsigned char *)(a))[0] == 0xff)
+#endif
+
+#ifndef IN6_IS_ADDR_LINKLOCAL
+#define IN6_IS_ADDR_LINKLOCAL(a) \
+    ((((const unsigned char *)(a))[0] == 0xfe) && \
+     (((const unsigned char *)(a))[1] & 0xc0) == 0x80)
+#endif
+
+#ifndef IN6_IS_ADDR_SITELOCAL
+#define IN6_IS_ADDR_SITELOCAL(a) \
+    ((((const unsigned char *)(a))[0] == 0xfe) && \
+     (((const unsigned char *)(a))[1] & 0xc0) == 0xc0)
+#endif
+
+#ifndef IN6_IS_ADDR_V4MAPPED
+#define IN6_IS_ADDR_V4MAPPED(a) \
+    (((const unsigned int *)(a))[0] == 0 && \
+     ((const unsigned int *)(a))[1] == 0 && \
+     ((const unsigned int *)(a))[2] == htonl(0x0000ffff))
+#endif
+
+#ifndef IN6_IS_ADDR_V4COMPAT
+#define IN6_IS_ADDR_V4COMPAT(a) \
+    (((const unsigned int *)(a))[0] == 0 && \
+     ((const unsigned int *)(a))[1] == 0 && \
+     ((const unsigned int *)(a))[2] == 0 && \
+     ((const unsigned int *)(a))[3] != 0 && \
+     ((const unsigned int *)(a))[3] != htonl(1))
+#endif
+
+#ifndef IN6_IS_ADDR_MC_NODELOCAL
+#define IN6_IS_ADDR_MC_NODELOCAL(a) \
+    (IN6_IS_ADDR_MULTICAST(a) && \
+     (((const unsigned char *)(a))[1] & 0x0f) == 0x01)
+#endif
+
+#ifndef IN6_IS_ADDR_MC_LINKLOCAL
+#define IN6_IS_ADDR_MC_LINKLOCAL(a) \
+    (IN6_IS_ADDR_MULTICAST(a) && \
+     (((const unsigned char *)(a))[1] & 0x0f) == 0x02)
+#endif
+
+#ifndef IN6_IS_ADDR_MC_SITELOCAL
+#define IN6_IS_ADDR_MC_SITELOCAL(a) \
+    (IN6_IS_ADDR_MULTICAST(a) && \
+     (((const unsigned char *)(a))[1] & 0x0f) == 0x05)
+#endif
+
+#ifndef IN6_IS_ADDR_MC_ORGLOCAL
+#define IN6_IS_ADDR_MC_ORGLOCAL(a) \
+    (IN6_IS_ADDR_MULTICAST(a) && \
+     (((const unsigned char *)(a))[1] & 0x0f) == 0x08)
+#endif
+
+#ifndef IN6_IS_ADDR_MC_GLOBAL
+#define IN6_IS_ADDR_MC_GLOBAL(a) \
+    (IN6_IS_ADDR_MULTICAST(a) && \
+     (((const unsigned char *)(a))[1] & 0x0f) == 0x0e)
+#endif
+
+#ifndef IN6_ARE_ADDR_EQUAL
+#define IN6_ARE_ADDR_EQUAL(a, b) \
+    (__builtin_memcmp((a), (b), sizeof(struct in6_addr)) == 0)
+#endif
+
+#endif /* !s6_addr */
+
+/* --- IPv6 socket options (IPPROTO_IPV6 level) --- */
+#ifndef IPV6_UNICAST_HOPS
+#define IPV6_UNICAST_HOPS    7
+#endif
+#ifndef IPV6_MULTICAST_IF
+#define IPV6_MULTICAST_IF    8
+#endif
+#ifndef IPV6_MULTICAST_HOPS
+#define IPV6_MULTICAST_HOPS  9
+#endif
+#ifndef IPV6_MULTICAST_LOOP
+#define IPV6_MULTICAST_LOOP  10
+#endif
+#ifndef IPV6_JOIN_GROUP
+#define IPV6_JOIN_GROUP      11
+#endif
+#ifndef IPV6_LEAVE_GROUP
+#define IPV6_LEAVE_GROUP     12
+#endif
+#ifndef IPV6_ADD_MEMBERSHIP
+#define IPV6_ADD_MEMBERSHIP  IPV6_JOIN_GROUP
+#endif
+#ifndef IPV6_DROP_MEMBERSHIP
+#define IPV6_DROP_MEMBERSHIP IPV6_LEAVE_GROUP
+#endif
+#ifndef IPV6_V6ONLY
+#define IPV6_V6ONLY          39
+#endif
+#ifndef IPV6_PKTINFO
+#define IPV6_PKTINFO         11
+#endif
+#ifndef IPV6_RECVPKTINFO
+#define IPV6_RECVPKTINFO     18
+#endif
+#ifndef IPV6_HOPLIMIT
+#define IPV6_HOPLIMIT        12
+#endif
+#ifndef IPV6_RECVHOPLIMIT
+#define IPV6_RECVHOPLIMIT    19
+#endif
+#ifndef IPV6_RECVTCLASS
+#define IPV6_RECVTCLASS      25
+#endif
+#ifndef IPV6_TCLASS
+#define IPV6_TCLASS          26
+#endif
+
+/* --- struct in6_pktinfo (IPV6_PKTINFO ancillary data) --- */
+#ifndef _SOLCOMPAT_IN6_PKTINFO
+#define _SOLCOMPAT_IN6_PKTINFO
+struct in6_pktinfo {
+    struct in6_addr ipi6_addr;
+    unsigned int    ipi6_ifindex;
+};
+#endif
+
+/* --- struct ipv6_mreq (IPv6 multicast group request) --- */
+#ifndef _SOLCOMPAT_IPV6_MREQ
+#define _SOLCOMPAT_IPV6_MREQ
+struct ipv6_mreq {
+    struct in6_addr ipv6mr_multiaddr;
+    unsigned int    ipv6mr_interface;
+};
+#endif
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _SOLCOMPAT_NETINET_IN_H_APPEND */

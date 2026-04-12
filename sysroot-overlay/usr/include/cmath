@@ -1,0 +1,252 @@
+/*
+ * override/cmath — C99 math functions for Solaris 7 in C++ mode
+ *
+ * GCC 15 cross-compiled for Solaris 7 has _GLIBCXX_USE_C99_MATH_FUNCS and
+ * _GLIBCXX_HAVE_{SINF,COSF,...} undefined in c++config.h because Solaris 7
+ * native math.h lacks C99 functions.  libsolcompat now provides them all.
+ *
+ * We define _GLIBCXX_USE_C99_MATH_FUNCS to unlock the C++11 overloads
+ * (constexpr float hypot(float,float) etc.) and _GLIBCXX_HAVE_*F/*L to
+ * unlock the using::sinf etc. declarations in the C++98 section.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+#ifndef _SOLCOMPAT_OVERRIDE_CMATH
+#define _SOLCOMPAT_OVERRIDE_CMATH
+
+extern "C" {
+/* C99 float variants */
+float acosf(float);  float asinf(float);  float atanf(float);
+float atan2f(float, float);  float ceilf(float);  float cosf(float);
+float coshf(float);  float expf(float);  float fabsf(float);
+float floorf(float);  float fmodf(float, float);  float frexpf(float, int *);
+float ldexpf(float, int);  float logf(float);  float log10f(float);
+float modff(float, float *);  float powf(float, float);  float sinf(float);
+float sinhf(float);  float sqrtf(float);  float tanf(float);
+float tanhf(float);  float acoshf(float);  float asinhf(float);
+float atanhf(float);  float cbrtf(float);  float copysignf(float, float);
+float erff(float);  float erfcf(float);  float exp2f(float);
+float expm1f(float);  float fdimf(float, float);  float fmaf(float, float, float);
+float fmaxf(float, float);  float fminf(float, float);  float hypotf(float, float);
+int   ilogbf(float);  float lgammaf(float);
+long long llrintf(float);  long long llroundf(float);
+float log1pf(float);  float log2f(float);  float logbf(float);
+long  lrintf(float);  long  lroundf(float);
+float nanf(const char *);  float nearbyintf(float);
+float nextafterf(float, float);  float nexttowardf(float, long double);
+float remainderf(float, float);  float remquof(float, float, int *);
+float rintf(float);  float roundf(float);
+float scalblnf(float, long);  float scalbnf(float, int);
+float tgammaf(float);  float truncf(float);
+
+/* C99 long double variants */
+long double acosl(long double);  long double asinl(long double);
+long double atanl(long double);  long double atan2l(long double, long double);
+long double ceill(long double);  long double cosl(long double);
+long double coshl(long double);  long double expl(long double);
+long double fabsl(long double);  long double floorl(long double);
+long double fmodl(long double, long double);
+long double frexpl(long double, int *);  long double ldexpl(long double, int);
+long double logl(long double);  long double log10l(long double);
+long double modfl(long double, long double *);
+long double powl(long double, long double);  long double sinl(long double);
+long double sinhl(long double);  long double sqrtl(long double);
+long double tanl(long double);  long double tanhl(long double);
+long double acoshl(long double);  long double asinhl(long double);
+long double atanhl(long double);  long double cbrtl(long double);
+long double copysignl(long double, long double);
+long double erfl(long double);  long double erfcl(long double);
+long double exp2l(long double);  long double expm1l(long double);
+long double fdiml(long double, long double);
+long double fmal(long double, long double, long double);
+long double fmaxl(long double, long double);  long double fminl(long double, long double);
+long double hypotl(long double, long double);
+int   ilogbl(long double);  long double lgammal(long double);
+long long llrintl(long double);  long long llroundl(long double);
+long double log1pl(long double);  long double log2l(long double);
+long double logbl(long double);
+long  lrintl(long double);  long  lroundl(long double);
+long double nanl(const char *);  long double nearbyintl(long double);
+long double nextafterl(long double, long double);
+long double nexttowardl(long double, long double);
+long double remainderl(long double, long double);
+long double remquol(long double, long double, int *);
+long double rintl(long double);  long double roundl(long double);
+long double scalblnl(long double, long);  long double scalbnl(long double, int);
+long double tgammal(long double);  long double truncl(long double);
+
+/* C99 double functions missing from Solaris 7 */
+double round(double);  double trunc(double);
+double log2(double);  double exp2(double);
+double fdim(double, double);  double fmin(double, double);
+double fmax(double, double);  double tgamma(double);
+double nearbyint(double);
+long lrint(double);  long lround(double);
+long long llrint(double);  long long llround(double);
+double nan(const char *);
+double remquo(double, double, int *);
+double scalbln(double, long);
+double cbrt(double);  double copysign(double, double);
+double erf(double);  double erfc(double);
+double expm1(double);  double hypot(double, double);
+int ilogb(double);  double lgamma(double);
+double log1p(double);  double logb(double);
+double nextafter(double, double);
+double nexttoward(double, long double);
+double remainder(double, double);
+double rint(double);
+double scalbn(double, int);
+double fma(double, double, double);
+}
+
+/*
+ * Tell GCC cmath that C99 math functions exist.
+ * libsolcompat provides them all.  The corresponding entries in c++config.h
+ * are commented-out undef lines, so defining them here is safe.
+ */
+
+/* Master gate for C++11 math overloads */
+#ifndef _GLIBCXX_USE_C99_MATH_FUNCS
+#define _GLIBCXX_USE_C99_MATH_FUNCS 1
+#endif
+
+/* C89 float variants */
+#ifndef _GLIBCXX_HAVE_ACOSF
+#define _GLIBCXX_HAVE_ACOSF 1
+#endif
+#ifndef _GLIBCXX_HAVE_ASINF
+#define _GLIBCXX_HAVE_ASINF 1
+#endif
+#ifndef _GLIBCXX_HAVE_ATANF
+#define _GLIBCXX_HAVE_ATANF 1
+#endif
+#ifndef _GLIBCXX_HAVE_ATAN2F
+#define _GLIBCXX_HAVE_ATAN2F 1
+#endif
+#ifndef _GLIBCXX_HAVE_CEILF
+#define _GLIBCXX_HAVE_CEILF 1
+#endif
+#ifndef _GLIBCXX_HAVE_COSF
+#define _GLIBCXX_HAVE_COSF 1
+#endif
+#ifndef _GLIBCXX_HAVE_COSHF
+#define _GLIBCXX_HAVE_COSHF 1
+#endif
+#ifndef _GLIBCXX_HAVE_EXPF
+#define _GLIBCXX_HAVE_EXPF 1
+#endif
+#ifndef _GLIBCXX_HAVE_FABSF
+#define _GLIBCXX_HAVE_FABSF 1
+#endif
+#ifndef _GLIBCXX_HAVE_FLOORF
+#define _GLIBCXX_HAVE_FLOORF 1
+#endif
+#ifndef _GLIBCXX_HAVE_FMODF
+#define _GLIBCXX_HAVE_FMODF 1
+#endif
+#ifndef _GLIBCXX_HAVE_FREXPF
+#define _GLIBCXX_HAVE_FREXPF 1
+#endif
+#ifndef _GLIBCXX_HAVE_LDEXPF
+#define _GLIBCXX_HAVE_LDEXPF 1
+#endif
+#ifndef _GLIBCXX_HAVE_LOGF
+#define _GLIBCXX_HAVE_LOGF 1
+#endif
+#ifndef _GLIBCXX_HAVE_LOG10F
+#define _GLIBCXX_HAVE_LOG10F 1
+#endif
+#ifndef _GLIBCXX_HAVE_MODFF
+#define _GLIBCXX_HAVE_MODFF 1
+#endif
+#ifndef _GLIBCXX_HAVE_POWF
+#define _GLIBCXX_HAVE_POWF 1
+#endif
+#ifndef _GLIBCXX_HAVE_SINF
+#define _GLIBCXX_HAVE_SINF 1
+#endif
+#ifndef _GLIBCXX_HAVE_SINHF
+#define _GLIBCXX_HAVE_SINHF 1
+#endif
+#ifndef _GLIBCXX_HAVE_SQRTF
+#define _GLIBCXX_HAVE_SQRTF 1
+#endif
+#ifndef _GLIBCXX_HAVE_TANF
+#define _GLIBCXX_HAVE_TANF 1
+#endif
+#ifndef _GLIBCXX_HAVE_TANHF
+#define _GLIBCXX_HAVE_TANHF 1
+#endif
+
+/* C89 long double variants */
+#ifndef _GLIBCXX_HAVE_ACOSL
+#define _GLIBCXX_HAVE_ACOSL 1
+#endif
+#ifndef _GLIBCXX_HAVE_ASINL
+#define _GLIBCXX_HAVE_ASINL 1
+#endif
+#ifndef _GLIBCXX_HAVE_ATANL
+#define _GLIBCXX_HAVE_ATANL 1
+#endif
+#ifndef _GLIBCXX_HAVE_ATAN2L
+#define _GLIBCXX_HAVE_ATAN2L 1
+#endif
+#ifndef _GLIBCXX_HAVE_CEILL
+#define _GLIBCXX_HAVE_CEILL 1
+#endif
+#ifndef _GLIBCXX_HAVE_COSL
+#define _GLIBCXX_HAVE_COSL 1
+#endif
+#ifndef _GLIBCXX_HAVE_COSHL
+#define _GLIBCXX_HAVE_COSHL 1
+#endif
+#ifndef _GLIBCXX_HAVE_EXPL
+#define _GLIBCXX_HAVE_EXPL 1
+#endif
+#ifndef _GLIBCXX_HAVE_FABSL
+#define _GLIBCXX_HAVE_FABSL 1
+#endif
+#ifndef _GLIBCXX_HAVE_FLOORL
+#define _GLIBCXX_HAVE_FLOORL 1
+#endif
+#ifndef _GLIBCXX_HAVE_FMODL
+#define _GLIBCXX_HAVE_FMODL 1
+#endif
+#ifndef _GLIBCXX_HAVE_FREXPL
+#define _GLIBCXX_HAVE_FREXPL 1
+#endif
+#ifndef _GLIBCXX_HAVE_LDEXPL
+#define _GLIBCXX_HAVE_LDEXPL 1
+#endif
+#ifndef _GLIBCXX_HAVE_LOGL
+#define _GLIBCXX_HAVE_LOGL 1
+#endif
+#ifndef _GLIBCXX_HAVE_LOG10L
+#define _GLIBCXX_HAVE_LOG10L 1
+#endif
+#ifndef _GLIBCXX_HAVE_MODFL
+#define _GLIBCXX_HAVE_MODFL 1
+#endif
+#ifndef _GLIBCXX_HAVE_POWL
+#define _GLIBCXX_HAVE_POWL 1
+#endif
+#ifndef _GLIBCXX_HAVE_SINL
+#define _GLIBCXX_HAVE_SINL 1
+#endif
+#ifndef _GLIBCXX_HAVE_SINHL
+#define _GLIBCXX_HAVE_SINHL 1
+#endif
+#ifndef _GLIBCXX_HAVE_SQRTL
+#define _GLIBCXX_HAVE_SQRTL 1
+#endif
+#ifndef _GLIBCXX_HAVE_TANL
+#define _GLIBCXX_HAVE_TANL 1
+#endif
+#ifndef _GLIBCXX_HAVE_TANHL
+#define _GLIBCXX_HAVE_TANHL 1
+#endif
+
+/* Now let GCC's <cmath> pull everything into std:: */
+#include_next <cmath>
+
+#endif /* _SOLCOMPAT_OVERRIDE_CMATH */

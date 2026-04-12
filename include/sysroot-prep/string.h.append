@@ -1,0 +1,62 @@
+/*
+ * string.h.append — POSIX 2008 / BSD string functions for Solaris 7
+ *
+ * Solaris 7's <string.h> predates POSIX 2008 and BSD extensions, so it
+ * lacks strndup, strnlen, strlcpy, strlcat, strcasestr, memmem,
+ * strsep, stpcpy, stpncpy, strchrnul, memrchr, strsignal, and
+ * strerror_r.  Modern software (GCC, binutils, gnulib, coreutils)
+ * expects these in <string.h>.  libsolcompat provides the
+ * implementations; this file exposes the declarations in the sysroot
+ * so fixincludes propagates them into include-fixed/.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_STRING_H_APPEND
+#define _SOLCOMPAT_STRING_H_APPEND
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* POSIX.1-2008 strndup — allocates a copy of at most n bytes */
+char *strndup(const char *s, size_t n);
+
+/* POSIX.1-2008 strnlen — bounded strlen */
+size_t strnlen(const char *s, size_t maxlen);
+
+/* BSD strlcpy / strlcat — safe string copy/concatenation */
+size_t strlcpy(char *dst, const char *src, size_t size);
+size_t strlcat(char *dst, const char *src, size_t size);
+
+/* GNU strcasestr — case-insensitive substring search */
+char *strcasestr(const char *haystack, const char *needle);
+
+/* GNU memmem — binary substring search */
+void *memmem(const void *haystack, size_t haystacklen,
+             const void *needle, size_t needlelen);
+
+/* BSD strsep — destructive token extraction */
+char *strsep(char **stringp, const char *delim);
+
+/* POSIX.1-2008 stpcpy / stpncpy — copy returning pointer to end */
+char *stpcpy(char *dst, const char *src);
+char *stpncpy(char *dst, const char *src, size_t n);
+
+/* GNU strchrnul — like strchr but returns pointer to NUL on miss */
+char *strchrnul(const char *s, int c);
+
+/* GNU memrchr — reverse memchr */
+void *memrchr(const void *s, int c, size_t n);
+
+/* POSIX.1-2008 strsignal — string description of a signal */
+char *strsignal(int signum);
+
+/* GNU strerror_r — thread-safe strerror (GNU variant returns char*) */
+char *strerror_r(int errnum, char *buf, size_t buflen);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _SOLCOMPAT_STRING_H_APPEND */

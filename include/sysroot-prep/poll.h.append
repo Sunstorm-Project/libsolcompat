@@ -1,0 +1,35 @@
+/*
+ * poll.h.append — POSIX 2008 ppoll and pselect for Solaris 7
+ *
+ * Solaris 7's <poll.h> provides poll() but lacks the signal-safe ppoll()
+ * added in POSIX 2008.  pselect() (signal-safe select) is also missing.
+ * Modern software (GCC, Python, gnulib) expects both.  libsolcompat
+ * implements ppoll via poll+sigprocmask and pselect via select+sigprocmask.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_POLL_H_APPEND
+#define _SOLCOMPAT_POLL_H_APPEND
+
+#include <signal.h>
+#include <sys/select.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* POSIX.1-2008 ppoll — signal-safe poll with timespec timeout */
+int ppoll(struct pollfd *fds, nfds_t nfds,
+          const struct timespec *tmo_p, const sigset_t *sigmask);
+
+/* POSIX.1-2001 pselect — signal-safe select with timespec timeout */
+int pselect(int nfds, fd_set *readfds, fd_set *writefds,
+            fd_set *exceptfds, const struct timespec *timeout,
+            const sigset_t *sigmask);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _SOLCOMPAT_POLL_H_APPEND */

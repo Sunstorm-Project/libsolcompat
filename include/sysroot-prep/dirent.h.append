@@ -1,0 +1,34 @@
+/*
+ * dirent.h.append — POSIX 2008 directory functions for Solaris 7
+ *
+ * Solaris 7's <dirent.h> lacks dirfd, fdopendir, scandir, and
+ * alphasort.  Modern software (coreutils, findutils, cmake, Python,
+ * etc.) expects these in <dirent.h>.
+ *
+ * The implementations live in libsolcompat src/filesystem.c.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_DIRENT_H_APPEND
+#define _SOLCOMPAT_DIRENT_H_APPEND
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+int dirfd(DIR *dir_stream);
+
+DIR *fdopendir(int fd);
+
+int scandir(const char *dirp, struct dirent ***namelist,
+            int (*filter)(const struct dirent *),
+            int (*compar)(const struct dirent **, const struct dirent **));
+
+int alphasort(const struct dirent **a, const struct dirent **b);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _SOLCOMPAT_DIRENT_H_APPEND */

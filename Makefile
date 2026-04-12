@@ -57,7 +57,9 @@ SRCS = src/snprintf.c \
        src/atomic_ops.c \
        src/fenv.c \
        src/cxa_atexit.c \
-       src/dl_iterate_phdr.c
+       src/dl_iterate_phdr.c \
+       src/complex_math.c \
+       src/ssp.c
 
 OBJS     = $(SRCS:.c=.o)
 PIC_OBJS = $(SRCS:.c=.lo)
@@ -66,7 +68,7 @@ PIC_OBJS = $(SRCS:.c=.lo)
 # Object classification for scatter-install
 # ====================================================================
 # Objects merged into system libm.a (math functions)
-LIBM_OBJS = src/math.o
+LIBM_OBJS = src/math.o src/complex_math.o src/fenv.o
 
 # Objects merged into system libsocket.a (network functions)
 LIBSOCKET_OBJS = src/network.o
@@ -76,7 +78,8 @@ LIBC_OBJS = src/snprintf.o src/string.o src/stdio.o src/memstream.o \
             src/stdlib.o src/c99_types.o src/memory.o src/filesystem.o \
             src/at_funcs.o src/process.o src/pty.o src/poll.o src/random.o \
             src/clock.o src/stubs.o src/getopt_long.o src/ctype_compat.o \
-            src/atomic_ops.o
+            src/atomic_ops.o src/wchar.o src/cxa_atexit.o \
+            src/dl_iterate_phdr.o src/ssp.o
 
 # Residual libsolcompat.a (doesn't belong in any system library)
 RESIDUAL_OBJS = src/xpg.o src/hwcap.o
@@ -150,34 +153,27 @@ install: all
 	cp LICENSE $(DESTDIR)$(DOCDIR)/ 2>/dev/null || true
 
 # ====================================================================
-# install-toolchain — Scatter-install for transparent ./configure use
+# install-toolchain — GNU-standard sysroot setup for transparent builds
 # ====================================================================
 #
-# This target sets up a sysroot (or native system) so that standard
-# build systems find everything automatically:
+# Makes the sysroot look like a standard GNU system. After this,
+# ./configure && make just works — no special flags or paths needed.
 #
-#   1. Override headers installed to SYSROOT/usr/local/include/
-#      (GCC searches $sysroot/usr/local/include/ before $sysroot/usr/include/)
-#   2. solcompat/ internal headers at SYSROOT/usr/local/include/solcompat/
-#   3. Math objects merged into a COPY of libm.a in the override lib dir
-#   4. Network objects merged into the override lib dir as libsocket additions
-#   5. General POSIX objects merged into override libc additions
-#   6. Residual libsolcompat.a for misc stubs (auto-linked via specs)
-#   7. values-xpg6.o extracted for GCC specs
-#   8. GCC specs file patched (if GCC_PREFIX given)
+#   1. sysroot-overlay: complete headers for APIs Solaris 7 lacks
+#      (stdint.h, fenv.h, spawn.h, etc.) → $SYSROOT/usr/include/
+#   2. sysroot-prep: declarations appended to existing system headers
+#      (C99 math, POSIX string, IPv6, etc.) → $SYSROOT/usr/include/*.h
+#   3. sys/int_types.h replaced with stdint.h redirect
+#   4. C++ headers (cmath, cstdlib) installed to sysroot
+#   5. Augmented system libraries (libm.a, libsocket.a, libc supplement)
+#   6. values-xpg6.o for GCC specs
+#   7. GCC specs file patched (if GCC_PREFIX given)
 #
-# After this, AC_CHECK_FUNC(fabsf) finds it in augmented libm.a,
-# AC_CHECK_HEADER(stdint.h) finds it via the sysroot search order, and
-# -lsolcompat is auto-linked into every binary.
+# The sysroot contains NO references to solcompat in any header path.
+# libsolcompat is a pure linking artifact — the sysroot IS the API.
 #
 # Usage:
 #   make install-toolchain SYSROOT=/opt/sysroot-gcc11 [GCC_PREFIX=/opt/sst/gcc11]
-#
-# For cross-compilation (sysroot only, no specs patching):
-#   make install-toolchain SYSROOT=/opt/sysroot-gcc11
-#
-# For native SPARC install (with specs patching):
-#   make install-toolchain SYSROOT="" GCC_PREFIX=/opt/sst/gcc11
 
 SYSROOT     ?= /opt/sysroot-gcc11
 GCC_PREFIX  ?=
@@ -185,38 +181,44 @@ COMPAT_BASE  = $(SYSROOT)/opt/sst/lib/solcompat
 
 install-toolchain: libsolcompat.a
 	@echo ""
-	@echo "=== libsolcompat scatter-install ==="
+	@echo "=== libsolcompat sysroot setup ==="
 	@echo "  SYSROOT:     $(SYSROOT)"
 	@echo "  COMPAT_BASE: $(COMPAT_BASE)"
 	@echo ""
-	@# --- Create directory structure ---
-	mkdir -p $(SYSROOT)/usr/local/include/sys
-	mkdir -p $(SYSROOT)/usr/local/include/arpa
-	mkdir -p $(SYSROOT)/usr/local/include/net
-	mkdir -p $(SYSROOT)/usr/local/include/netinet
-	mkdir -p $(SYSROOT)/usr/local/include/solcompat
-	mkdir -p $(COMPAT_BASE)/lib
-	@# --- Install override wrapper headers ---
-	@# GCC searches $sysroot/usr/local/include/ BEFORE $sysroot/usr/include/,
-	@# so #include_next in overrides chains correctly to the real Solaris headers.
-	@# No -isystem flags or specs patching needed.
-	@echo "Installing override headers to sysroot /usr/local/include/..."
-	cp include/override/*.h $(SYSROOT)/usr/local/include/
-	@# Also copy extensionless C++ headers (cstdlib, etc.)
-	@for f in include/override/*; do \
-		case "$$f" in *.h) ;; */sys|*/arpa|*/net|*/netinet) ;; *) \
-			[ -f "$$f" ] && cp "$$f" $(SYSROOT)/usr/local/include/; \
-		esac; \
+	@# --- Install sysroot-overlay (complete headers Solaris 7 lacks) ---
+	@if [ -d sysroot-overlay ]; then \
+		echo "Installing sysroot-overlay headers..."; \
+		cp -r sysroot-overlay/* "$(SYSROOT)/"; \
+		echo "  stdint.h, fenv.h, spawn.h, getopt.h, endian.h, etc."; \
+	fi
+	@# --- Replace sys/int_types.h with stdint.h redirect ---
+	@if [ -f include/sysroot-prep/sys/int_types.h.prepend ]; then \
+		cp include/sysroot-prep/sys/int_types.h.prepend \
+			"$(SYSROOT)/usr/include/sys/int_types.h"; \
+		echo "  sys/int_types.h → stdint.h redirect"; \
+	fi
+	@# --- Append declarations to existing sysroot headers ---
+	@echo "Patching sysroot headers with POSIX/C99 declarations..."
+	@for append_file in $$(find include/sysroot-prep -name '*.append' -type f); do \
+		rel="$${append_file#include/sysroot-prep/}"; \
+		hdr="$${rel%.append}"; \
+		target="$(SYSROOT)/usr/include/$${hdr}"; \
+		guard=$$(grep '^#ifndef _SOLCOMPAT_' "$$append_file" | head -1 | sed 's/#ifndef //'); \
+		if [ -f "$${target}" ]; then \
+			if [ -n "$$guard" ] && grep -q "$$guard" "$${target}" 2>/dev/null; then \
+				: ; \
+			else \
+				echo "" >> "$${target}"; \
+				cat "$$append_file" >> "$${target}"; \
+				echo "  Patched $${hdr}"; \
+			fi; \
+		else \
+			mkdir -p "$$(dirname "$${target}")"; \
+			cat "$$append_file" > "$${target}"; \
+			echo "  Created $${hdr}"; \
+		fi; \
 	done
-	cp include/override/sys/*.h $(SYSROOT)/usr/local/include/sys/
-	cp include/override/arpa/*.h $(SYSROOT)/usr/local/include/arpa/
-	cp include/override/net/*.h $(SYSROOT)/usr/local/include/net/
-	cp include/override/netinet/*.h $(SYSROOT)/usr/local/include/netinet/
-	@echo "  override headers: math.h, stdint.h, netdb.h, sys/socket.h, etc."
-	@# --- Install solcompat internal headers ---
-	@echo "Installing solcompat headers..."
-	cp include/solcompat/*.h $(SYSROOT)/usr/local/include/solcompat/
-	@echo "  solcompat/*.h ($(words $(wildcard include/solcompat/*.h)) headers)"
+	mkdir -p $(COMPAT_BASE)/lib
 	@# --- Merge math objects into augmented libm.a ---
 	@echo "Augmenting libm.a with C99 math functions..."
 	@if [ -f "$(SYSROOT)/usr/lib/libm.a" ]; then \
@@ -254,59 +256,17 @@ install-toolchain: libsolcompat.a
 		cp src/xpg.o "$(SYSROOT)/usr/lib/values-xpg6.o"; \
 		echo "  values-xpg6.o installed to sysroot"; \
 	fi
-	@# --- Also install stdint.h directly into sysroot for GCC's fixincludes ---
-	@if [ -d "$(SYSROOT)/usr/include" ] && [ ! -f "$(SYSROOT)/usr/include/stdint.h" ]; then \
-		cp include/override/stdint.h "$(SYSROOT)/usr/include/stdint.h"; \
-		echo "  stdint.h installed to $(SYSROOT)/usr/include/"; \
-	fi
-	@# --- Patch sysroot headers for fixincludes compatibility ---
-	@# GCC's fixincludes rewrites sysroot headers into include-fixed/
-	@# WITHOUT #include_next, completely shadowing our override directory.
-	@# So we also append #include <solcompat/xxx.h> to sysroot headers
-	@# and install solcompat headers into the sysroot's include path.
-	@if [ -d "$(SYSROOT)/usr/include" ]; then \
-		echo "Patching sysroot headers for fixincludes compatibility..."; \
-		mkdir -p "$(SYSROOT)/usr/include/solcompat"; \
-		cp include/solcompat/*.h "$(SYSROOT)/usr/include/solcompat/"; \
-		for pair in \
-			"math.h:solcompat/math_ext.h" \
-			"stdlib.h:solcompat/stdlib_ext.h" \
-			"string.h:solcompat/string_ext.h" \
-			"stdio.h:solcompat/stdio_ext.h" \
-			"inttypes.h:solcompat/c99_types.h" \
-		; do \
-			hdr="$${pair%%:*}"; ext="$${pair#*:}"; \
-			target="$(SYSROOT)/usr/include/$${hdr}"; \
-			if [ -f "$${target}" ] && ! grep -q "$${ext}" "$${target}"; then \
-				echo "" >> "$${target}"; \
-				echo "/* libsolcompat: extensions for Solaris 7 */" >> "$${target}"; \
-				echo "#include <$${ext}>" >> "$${target}"; \
-				echo "  Patched $${hdr} → $${ext}"; \
-			fi; \
-		done; \
-		echo "  Sysroot headers patched"; \
-	fi
 	@# --- Patch GCC specs if GCC_PREFIX is provided ---
-	@# NOTE: Specs patching for -isystem is no longer needed since override
-	@# headers are installed to $sysroot/usr/local/include/ which GCC
-	@# searches automatically.  The specs patch is only for -lsolcompat
-	@# auto-linking (LIB_SPEC in sol2.h handles this for the native compiler).
 	@if [ -n "$(GCC_PREFIX)" ]; then \
 		echo "Patching GCC specs (library paths only)..."; \
 		sh scripts/patch-specs.sh "$(GCC_PREFIX)" \
-			"$(SYSROOT)/usr/local/include" \
+			"" \
 			"$(COMPAT_BASE)/lib"; \
-	else \
-		echo ""; \
-		echo "GCC_PREFIX not set — skipping specs patching."; \
-		echo "Override headers are at $(SYSROOT)/usr/local/include/ (found automatically)."; \
-		echo "For library linking: -L$(COMPAT_BASE)/lib -lsolcompat -lsolcompat_c"; \
 	fi
 	@# --- Summary ---
 	@echo ""
-	@echo "=== Scatter-install complete ==="
-	@echo "  Override headers: $(SYSROOT)/usr/local/include/"
-	@echo "  Solcompat headers: $(SYSROOT)/usr/local/include/solcompat/"
+	@echo "=== Sysroot setup complete ==="
+	@echo "  Sysroot headers: $(SYSROOT)/usr/include/ (GNU-standard)"
 	@echo "  Augmented libm:  $(COMPAT_BASE)/lib/libm.a"
 	@echo "  Augmented libsocket: $(COMPAT_BASE)/lib/libsocket.a"
 	@echo "  libc supplement: $(COMPAT_BASE)/lib/libsolcompat_c.a"
@@ -317,85 +277,67 @@ install-toolchain: libsolcompat.a
 # ====================================================================
 # install-headers — compiler-free subset of install-toolchain
 # ====================================================================
-# Installs override headers, solcompat internal headers, and the
-# sysroot-overlay (stdint.h) WITHOUT requiring any of the .o files
-# built by `all`. Safe to run before a cross compiler exists,
-# e.g. during toolchain bootstrap Phase 4 (writable sysroot setup)
-# where there is nothing yet that can compile for the target.
+# Patches the sysroot to look like a GNU-standard system WITHOUT
+# requiring any .o files. Safe to run before a cross compiler exists
+# (e.g. during toolchain bootstrap Phase 4).
+#
+# This MUST run before GCC builds so that fixincludes copies the
+# already-patched headers into include-fixed/.
 #
 # Usage:
 #   make install-headers SYSROOT=/path/to/sysroot
-#
-# After the cross compiler is available, run `make install-toolchain`
-# for the full install (augmented libm/libsocket/libc + specs patches).
 install-headers:
 	@echo ""
 	@echo "=== libsolcompat install-headers ==="
 	@echo "  SYSROOT:     $(SYSROOT)"
 	@echo ""
-	@# --- Create directory structure ---
-	mkdir -p $(SYSROOT)/usr/local/include/sys
-	mkdir -p $(SYSROOT)/usr/local/include/arpa
-	mkdir -p $(SYSROOT)/usr/local/include/net
-	mkdir -p $(SYSROOT)/usr/local/include/netinet
-	mkdir -p $(SYSROOT)/usr/local/include/solcompat
-	@# --- Install override wrapper headers ---
-	@# GCC searches $sysroot/usr/local/include/ BEFORE $sysroot/usr/include/,
-	@# so #include_next chains correctly to the real Solaris headers.
-	@echo "Installing override headers to sysroot /usr/local/include/..."
-	cp include/override/*.h $(SYSROOT)/usr/local/include/
-	@# Also copy extensionless C++ headers (cstdlib, etc.)
-	@for f in include/override/*; do \
-		case "$$f" in *.h) ;; */sys|*/arpa|*/net|*/netinet) ;; *) \
-			[ -f "$$f" ] && cp "$$f" $(SYSROOT)/usr/local/include/; \
-		esac; \
-	done
-	cp include/override/sys/*.h $(SYSROOT)/usr/local/include/sys/
-	cp include/override/arpa/*.h $(SYSROOT)/usr/local/include/arpa/
-	cp include/override/net/*.h $(SYSROOT)/usr/local/include/net/
-	cp include/override/netinet/*.h $(SYSROOT)/usr/local/include/netinet/
-	@# --- Install solcompat internal headers ---
-	@echo "Installing solcompat headers..."
-	cp include/solcompat/*.h $(SYSROOT)/usr/local/include/solcompat/
-	@# --- Install stdint.h directly into sysroot for GCC's fixincludes ---
-	@if [ -d "$(SYSROOT)/usr/include" ] && [ ! -f "$(SYSROOT)/usr/include/stdint.h" ]; then \
-		cp include/override/stdint.h "$(SYSROOT)/usr/include/stdint.h"; \
-		echo "  stdint.h installed to $(SYSROOT)/usr/include/"; \
-	fi
-	@# --- Install sysroot-overlay (anything else that ships pre-built) ---
+	@# --- Install sysroot-overlay (complete headers Solaris 7 lacks) ---
 	@if [ -d sysroot-overlay ]; then \
+		echo "Installing sysroot-overlay headers..."; \
 		cp -r sysroot-overlay/* "$(SYSROOT)/"; \
-		echo "  sysroot-overlay installed"; \
+		echo "  stdint.h, fenv.h, spawn.h, getopt.h, endian.h, etc."; \
 	fi
-	@# --- Mirror solcompat headers into sysroot /usr/include/solcompat ---
-	@# Needed because fixincludes-patched copies in include-fixed/ use
-	@# #include <solcompat/xxx.h> which resolves via /usr/include/.
-	@if [ -d "$(SYSROOT)/usr/include" ]; then \
-		mkdir -p "$(SYSROOT)/usr/include/solcompat"; \
-		cp include/solcompat/*.h "$(SYSROOT)/usr/include/solcompat/"; \
-		echo "  solcompat/*.h mirrored into sysroot /usr/include"; \
+	@# --- Replace sys/int_types.h with stdint.h redirect ---
+	@if [ -f include/sysroot-prep/sys/int_types.h.prepend ]; then \
+		cp include/sysroot-prep/sys/int_types.h.prepend \
+			"$(SYSROOT)/usr/include/sys/int_types.h"; \
+		echo "  sys/int_types.h → stdint.h redirect"; \
 	fi
+	@# --- Append declarations to existing sysroot headers ---
+	@echo "Patching sysroot headers with POSIX/C99 declarations..."
+	@for append_file in $$(find include/sysroot-prep -name '*.append' -type f); do \
+		rel="$${append_file#include/sysroot-prep/}"; \
+		hdr="$${rel%.append}"; \
+		target="$(SYSROOT)/usr/include/$${hdr}"; \
+		guard=$$(grep '^#ifndef _SOLCOMPAT_' "$$append_file" | head -1 | sed 's/#ifndef //'); \
+		if [ -f "$${target}" ]; then \
+			if [ -n "$$guard" ] && grep -q "$$guard" "$${target}" 2>/dev/null; then \
+				: ; \
+			else \
+				echo "" >> "$${target}"; \
+				cat "$$append_file" >> "$${target}"; \
+				echo "  Patched $${hdr}"; \
+			fi; \
+		else \
+			mkdir -p "$$(dirname "$${target}")"; \
+			cat "$$append_file" > "$${target}"; \
+			echo "  Created $${hdr}"; \
+		fi; \
+	done
 	@echo ""
 	@echo "=== install-headers complete ==="
-	@echo "  Override headers: $(SYSROOT)/usr/local/include/"
-	@echo "  No -isystem flags needed — GCC finds them via the sysroot automatically."
-	@echo "  (Run install-toolchain after cross compiler is built for the full install)"
+	@echo "  Sysroot: $(SYSROOT)/usr/include/ (GNU-standard, no override paths)"
+	@echo "  Run install-toolchain after cross compiler is built for library setup."
 	@echo ""
 
 # ====================================================================
 # install-sysroot — Legacy: simple sysroot overlay install
 # ====================================================================
 install-sysroot: all
-	@echo "Installing sysroot overlay headers to $(SYSROOT)..."
-	@if [ -d sysroot-overlay ]; then \
-		cp -r sysroot-overlay/* $(SYSROOT)/; \
-		echo "  Sysroot overlay installed"; \
-	fi
 	@echo "Installing libsolcompat into sysroot..."
-	mkdir -p $(SYSROOT)/usr/lib $(SYSROOT)/usr/include/solcompat
+	mkdir -p $(SYSROOT)/usr/lib
 	cp libsolcompat.a $(SYSROOT)/usr/lib/
-	cp include/solcompat/*.h $(SYSROOT)/usr/include/solcompat/
-	@echo "  libsolcompat installed to $(SYSROOT)/usr/lib/"
+	@echo "  libsolcompat.a installed to $(SYSROOT)/usr/lib/"
 
 # ====================================================================
 # Tests (run on Solaris target or under QEMU)

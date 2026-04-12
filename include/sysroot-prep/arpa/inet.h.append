@@ -1,0 +1,27 @@
+/*
+ * arpa/inet.h.append — POSIX 2008 address conversion for Solaris 7
+ *
+ * Solaris 7's <arpa/inet.h> lacks inet_ntop and inet_pton (RFC 2553).
+ * Virtually all modern networking code uses these for protocol-
+ * independent address-to-string conversion.
+ *
+ * The implementations live in libsolcompat src/network.c.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_ARPA_INET_H_APPEND
+#define _SOLCOMPAT_ARPA_INET_H_APPEND
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+const char *inet_ntop(int af, const void *src, char *dst, socklen_t size);
+int inet_pton(int af, const char *src, void *dst);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _SOLCOMPAT_ARPA_INET_H_APPEND */

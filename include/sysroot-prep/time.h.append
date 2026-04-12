@@ -1,0 +1,64 @@
+/*
+ * time.h.append — Extended clock support for Solaris 7
+ *
+ * Solaris 7's <time.h> only defines CLOCK_REALTIME and provides a
+ * basic clock_gettime that handles it.  POSIX 2008 and modern software
+ * expect CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, and
+ * CLOCK_THREAD_CPUTIME_ID, plus clock_getres, clock_nanosleep, and
+ * TIMER_ABSTIME.  libsolcompat implements these via gethrtime(),
+ * getrusage(), and nanosleep().  timegm (inverse of gmtime) is a
+ * BSD/GNU extension also absent from Solaris 7.
+ *
+ * The replacement functions are named solcompat_clock_gettime and
+ * solcompat_clock_getres; macros alias them to the standard names.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_TIME_H_APPEND
+#define _SOLCOMPAT_TIME_H_APPEND
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Extended clock IDs — values match later Solaris releases */
+#ifndef CLOCK_MONOTONIC
+#define CLOCK_MONOTONIC          4
+#endif
+#ifndef CLOCK_PROCESS_CPUTIME_ID
+#define CLOCK_PROCESS_CPUTIME_ID 5
+#endif
+#ifndef CLOCK_THREAD_CPUTIME_ID
+#define CLOCK_THREAD_CPUTIME_ID  2
+#endif
+
+/* clock_gettime replacement — handles CLOCK_REALTIME (delegates to
+ * system), CLOCK_MONOTONIC (gethrtime), CLOCK_PROCESS_CPUTIME_ID
+ * (getrusage).  Named solcompat_clock_gettime to avoid symbol clash
+ * with Solaris 7's single-clock implementation. */
+int solcompat_clock_gettime(clockid_t clk_id, struct timespec *tp);
+#define clock_gettime solcompat_clock_gettime
+
+/* clock_getres replacement — returns resolution for extended clocks */
+int solcompat_clock_getres(clockid_t clk_id, struct timespec *res);
+#define clock_getres solcompat_clock_getres
+
+/* POSIX TIMER_ABSTIME flag for clock_nanosleep */
+#ifndef TIMER_ABSTIME
+#define TIMER_ABSTIME 0x1
+#endif
+
+/* POSIX clock_nanosleep — sleep with clock selection and abs time */
+int clock_nanosleep(clockid_t clk_id, int flags,
+                    const struct timespec *request,
+                    struct timespec *remain);
+
+/* BSD/GNU timegm — interpret struct tm as UTC, return time_t */
+time_t timegm(struct tm *tm);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _SOLCOMPAT_TIME_H_APPEND */

@@ -1,16 +1,81 @@
 /*
- * libsolcompat — override <spawn.h>
+ * Part of libsolcompat sysroot — provides POSIX spawn interface for Solaris 7
  *
- * Solaris 7 does not have <spawn.h>. This provides the POSIX spawn
- * interface backed by the fork/exec implementation in libsolcompat.
+ * Solaris 7 has no <spawn.h>.  This header provides the full POSIX spawn
+ * types, flags, and function declarations backed by libsolcompat's
+ * fork/exec implementation.
  */
-#ifndef _SOLCOMPAT_OVERRIDE_SPAWN_H
-#define _SOLCOMPAT_OVERRIDE_SPAWN_H
+#ifndef _SOLCOMPAT_SYSROOT_SPAWN_H
+#define _SOLCOMPAT_SYSROOT_SPAWN_H
 
 #include <sys/types.h>
 #include <signal.h>
-#include <sched.h>
 
-#include <solcompat/process.h>  /* posix_spawn, posix_spawnp, types */
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-#endif /* _SOLCOMPAT_OVERRIDE_SPAWN_H */
+/* posix_spawn attribute flags */
+#ifndef POSIX_SPAWN_RESETIDS
+#define POSIX_SPAWN_RESETIDS      0x01
+#define POSIX_SPAWN_SETPGROUP     0x02
+#define POSIX_SPAWN_SETSIGDEF     0x04
+#define POSIX_SPAWN_SETSIGMASK    0x08
+#define POSIX_SPAWN_SETSCHEDPARAM 0x10
+#define POSIX_SPAWN_SETSCHEDULER  0x20
+#endif
+
+/* posix_spawnattr_t — spawn attribute object */
+typedef struct {
+    short int __flags;
+    pid_t     __pgrp;
+    sigset_t  __sd;
+    sigset_t  __ss;
+    int       __sp;
+    int       __policy;
+    int       __pad[16];
+} posix_spawnattr_t;
+
+/* posix_spawn_file_actions_t — file action object */
+typedef struct {
+    int __allocated;
+    int __used;
+    void *__actions;
+} posix_spawn_file_actions_t;
+
+/* Spawn functions */
+int posix_spawn(pid_t *pid, const char *path,
+                const posix_spawn_file_actions_t *file_actions,
+                const posix_spawnattr_t *attrp,
+                char *const argv[], char *const envp[]);
+int posix_spawnp(pid_t *pid, const char *file,
+                 const posix_spawn_file_actions_t *file_actions,
+                 const posix_spawnattr_t *attrp,
+                 char *const argv[], char *const envp[]);
+
+/* Attribute functions */
+int posix_spawnattr_init(posix_spawnattr_t *attr);
+int posix_spawnattr_destroy(posix_spawnattr_t *attr);
+int posix_spawnattr_setflags(posix_spawnattr_t *attr, short flags);
+int posix_spawnattr_getflags(const posix_spawnattr_t *attr, short *flags);
+int posix_spawnattr_setsigdefault(posix_spawnattr_t *attr, const sigset_t *sigdefault);
+int posix_spawnattr_getsigdefault(const posix_spawnattr_t *attr, sigset_t *sigdefault);
+int posix_spawnattr_setsigmask(posix_spawnattr_t *attr, const sigset_t *sigmask);
+int posix_spawnattr_getsigmask(const posix_spawnattr_t *attr, sigset_t *sigmask);
+int posix_spawnattr_setpgroup(posix_spawnattr_t *attr, pid_t pgroup);
+int posix_spawnattr_getpgroup(const posix_spawnattr_t *attr, pid_t *pgroup);
+
+/* File action functions */
+int posix_spawn_file_actions_init(posix_spawn_file_actions_t *fact);
+int posix_spawn_file_actions_destroy(posix_spawn_file_actions_t *fact);
+int posix_spawn_file_actions_addopen(posix_spawn_file_actions_t *fact,
+    int fildes, const char *path, int oflag, mode_t mode);
+int posix_spawn_file_actions_addclose(posix_spawn_file_actions_t *fact, int fildes);
+int posix_spawn_file_actions_adddup2(posix_spawn_file_actions_t *fact,
+    int fildes, int newfildes);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _SOLCOMPAT_SYSROOT_SPAWN_H */

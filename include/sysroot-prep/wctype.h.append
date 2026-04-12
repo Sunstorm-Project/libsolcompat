@@ -1,0 +1,26 @@
+/*
+ * wctype.h.append — POSIX 2001 iswblank for Solaris 7
+ *
+ * Solaris 7's <wctype.h> ships only the C90 wide-char predicates
+ * (iswalpha, iswspace, ...).  POSIX 2001 added iswblank, which gnulib
+ * modules (wordwrap.c, regex.c, ...) reference.  libsolcompat provides
+ * the implementation.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_WCTYPE_H_APPEND
+#define _SOLCOMPAT_WCTYPE_H_APPEND
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* POSIX.1-2001 wide-char blank predicate (libsolcompat-provided) */
+int iswblank(wint_t wc);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _SOLCOMPAT_WCTYPE_H_APPEND */

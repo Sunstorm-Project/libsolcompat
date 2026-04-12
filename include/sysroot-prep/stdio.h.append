@@ -1,0 +1,64 @@
+/*
+ * stdio.h.append — POSIX 2008 / C99 stdio functions for Solaris 7
+ *
+ * Solaris 7's <stdio.h> lacks vasprintf, asprintf, dprintf, getline,
+ * getdelim, fmemopen, and open_memstream.  Additionally, its snprintf
+ * and vsnprintf return -1 on truncation instead of the C99-mandated
+ * count of characters that would have been written; libsolcompat
+ * provides corrected replacements.  preadv/pwritev (scatter/gather
+ * I/O at offset) are also missing from Solaris 7.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_STDIO_H_APPEND
+#define _SOLCOMPAT_STDIO_H_APPEND
+
+#include <stdarg.h>
+#include <sys/uio.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* GNU vasprintf / asprintf — allocating sprintf */
+int vasprintf(char **strp, const char *fmt, va_list ap);
+int asprintf(char **strp, const char *fmt, ...);
+
+/* POSIX.1-2008 dprintf — fprintf to a file descriptor */
+int dprintf(int fd, const char *fmt, ...);
+
+/* POSIX.1-2008 getline / getdelim — dynamic line reading */
+ssize_t getline(char **lineptr, size_t *n, FILE *stream);
+ssize_t getdelim(char **lineptr, size_t *n, int delim, FILE *stream);
+
+/* POSIX.1-2008 fmemopen / open_memstream — memory streams */
+FILE *fmemopen(void *buf, size_t size, const char *mode);
+FILE *open_memstream(char **ptr, size_t *sizeloc);
+
+/* C99-conformant snprintf / vsnprintf replacements.
+ * Solaris 7's versions return -1 on truncation; these return the count
+ * of characters that would have been written (excluding NUL), per C99.
+ * The real function names are solcompat_snprintf/solcompat_vsnprintf;
+ * macros redirect calls transparently.  In C++, real declarations are
+ * provided instead of macros so that std::snprintf works correctly. */
+int solcompat_snprintf(char *str, size_t size, const char *fmt, ...);
+int solcompat_vsnprintf(char *str, size_t size, const char *fmt, va_list ap);
+
+#ifdef __cplusplus
+int snprintf(char *str, size_t size, const char *fmt, ...);
+int vsnprintf(char *str, size_t size, const char *fmt, va_list ap);
+#else
+#define snprintf  solcompat_snprintf
+#define vsnprintf solcompat_vsnprintf
+#endif
+
+/* POSIX.1-2008 preadv / pwritev — scatter/gather I/O at offset */
+ssize_t preadv(int fd, const struct iovec *iov, int iovcnt, off_t offset);
+ssize_t pwritev(int fd, const struct iovec *iov, int iovcnt, off_t offset);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _SOLCOMPAT_STDIO_H_APPEND */

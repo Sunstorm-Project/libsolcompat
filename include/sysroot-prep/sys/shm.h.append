@@ -1,0 +1,21 @@
+/*
+ * sys/shm.h.append — C++ shmdt(const void*) overload for Solaris 7
+ *
+ * Solaris 7 declares shmdt(char*) instead of POSIX shmdt(const void*).
+ * C++ code passing void* or const void* to shmdt() fails with a type
+ * mismatch.  This provides a C++ inline overload that accepts
+ * const void* and delegates to the system's char* signature.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_SYS_SHM_H_APPEND
+#define _SOLCOMPAT_SYS_SHM_H_APPEND
+
+#ifdef __cplusplus
+static inline int shmdt(const void *addr) {
+    return shmdt(const_cast<char *>(static_cast<const char *>(addr)));
+}
+#endif
+
+#endif /* _SOLCOMPAT_SYS_SHM_H_APPEND */

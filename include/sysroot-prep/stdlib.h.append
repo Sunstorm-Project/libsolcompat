@@ -83,6 +83,12 @@ void qsort_r(void *base, size_t element_count, size_t element_size,
              int (*compare_fn)(const void *, const void *, void *),
              void *context_arg);
 
+/* C++ ABI: __cxa_atexit / __cxa_finalize — Solaris 7 libc lacks them;
+ * GCC's C++ runtime requires __cxa_atexit for proper static destructor
+ * ordering. libsolcompat provides the implementation. */
+int __cxa_atexit(void (*)(void *), void *, void *);
+void __cxa_finalize(void *);
+
 #ifdef __cplusplus
 }
 #endif
