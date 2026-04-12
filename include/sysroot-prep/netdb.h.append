@@ -92,10 +92,12 @@ extern "C" {
 #define NI_DGRAM       0x0010
 #endif
 
-/* --- struct addrinfo (RFC 3493) --- */
+/* --- struct addrinfo (RFC 3493) ---
+ * Always define the struct (previously gated on GNULIB_defined_struct_addrinfo
+ * which blocked it for gnulib-using packages that set the macro without
+ * actually defining the struct in the same translation unit). */
 #ifndef _SOLCOMPAT_STRUCT_ADDRINFO_DEFINED
 #define _SOLCOMPAT_STRUCT_ADDRINFO_DEFINED
-#if !defined(GNULIB_defined_struct_addrinfo)
 struct addrinfo {
     int              ai_flags;
     int              ai_family;
@@ -106,6 +108,7 @@ struct addrinfo {
     struct sockaddr *ai_addr;
     struct addrinfo *ai_next;
 };
+#ifndef GNULIB_defined_struct_addrinfo
 #define GNULIB_defined_struct_addrinfo 1
 #endif
 #endif /* _SOLCOMPAT_STRUCT_ADDRINFO_DEFINED */
