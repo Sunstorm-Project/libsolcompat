@@ -1,19 +1,65 @@
 /*
- * sys/int_types.h.prepend — Fix Solaris 7 integer type definitions
+ * sys/int_types.h.prepend — Fixed integer typedefs for Solaris 7
  *
- * GCC's fixincludes copies sys/int_types.h into include-fixed/ and
- * uses plain 'char' for int8_t, which conflicts with C99 stdint.h's
- * 'signed char'. This prepend redirects sys/int_types.h to our
- * sysroot stdint.h which has correct definitions.
+ * Replaces the Solaris 7 sys/int_types.h entirely. Two reasons:
+ *   1. Solaris 7 typedefs int8_t as plain 'char', which conflicts with
+ *      C99 stdint.h (signed char). In C++ this causes template
+ *      specialization mismatches.
+ *   2. Solaris 7 guards int64_t/uint64_t behind __STRICT_ANSI__
+ *      checks that exclude -std=c99/-std=c11 compiles.
  *
- * Applied by replacing the sysroot sys/int_types.h entirely.
+ * By replacing the file with a clean set of unconditional typedefs,
+ * GCC's fixincludes copies a consistent version into include-fixed/
+ * and <stdint.h> gets the correct types.
  *
  * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
  */
 #ifndef _SYS_INT_TYPES_H
 #define _SYS_INT_TYPES_H
 
-/* All integer types provided by the sysroot stdint.h */
-#include <stdint.h>
+#include <sys/isa_defs.h>
+#include <sys/feature_tests.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* Exact-width integer types — signed char (not plain char) for int8_t */
+typedef signed char         int8_t;
+typedef short               int16_t;
+typedef int                 int32_t;
+typedef long long           int64_t;
+
+typedef unsigned char       uint8_t;
+typedef unsigned short      uint16_t;
+typedef unsigned int        uint32_t;
+typedef unsigned long long  uint64_t;
+
+/* Maximum-width integer types */
+typedef long long           intmax_t;
+typedef unsigned long long  uintmax_t;
+
+/* Pointer-width integer types (ILP32 on Solaris 7 SPARC) */
+typedef int                 intptr_t;
+typedef unsigned int        uintptr_t;
+
+/* Also define guard macros that other Solaris headers check, so
+ * subsequent includes don't redefine these types. */
+#define _INT8_T
+#define _INT16_T
+#define _INT32_T
+#define _INT64_T
+#define _UINT8_T
+#define _UINT16_T
+#define _UINT32_T
+#define _UINT64_T
+#define _INTPTR_T
+#define _UINTPTR_T
+#define __int8_t_defined
+#define __uint32_t_defined
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _SYS_INT_TYPES_H */
