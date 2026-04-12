@@ -79,6 +79,26 @@ extern "C" {
 /* Now let GCC's real <cstdlib> run (always, even on re-include). */
 #include_next <cstdlib>
 
+/*
+ * Pull C99/POSIX functions into namespace std.  GCC's <cstdlib> guards
+ * its own "using ::strtoull;" behind _GLIBCXX_USE_C99_STDLIB, which is 0
+ * on Solaris 7 because GCC's configure detects missing libc symbols.
+ * Without this, std::stoull (which calls std::strtoull internally) fails.
+ *
+ * Must come AFTER #include_next <cstdlib> so the namespace is open.
+ */
+#if defined(__sun) && defined(__cplusplus)
+namespace std {
+    using ::atoll;
+    using ::strtoll;
+    using ::strtoull;
+    using ::strtof;
+    using ::strtold;
+    using ::_Exit;
+    using ::llabs;
+}
+#endif /* __sun && __cplusplus */
+
 /* Restore __STRICT_ANSI__ if we removed it */
 #ifdef _SOLCOMPAT_RESTORE_STRICT_ANSI
 #define __STRICT_ANSI__
