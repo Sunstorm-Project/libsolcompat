@@ -110,6 +110,7 @@ long long int llround(double x);
 double nan(const char *tagp);
 double remquo(double x, double y, int *quo);
 double scalbln(double x, long int n);
+double fma(double x, double y, double z);
 
 /* ================================================================
  * C99 float-precision math functions (ALL missing from Solaris 7)
@@ -165,6 +166,7 @@ float fminf(float x, float y);
 float fmaxf(float x, float y);
 float scalbnf(float x, int n);
 float scalblnf(float x, long int n);
+float fmaf(float x, float y, float z);
 
 /* Special float */
 float ldexpf(float x, int e);
@@ -236,6 +238,7 @@ long double fminl(long double x, long double y);
 long double fmaxl(long double x, long double y);
 long double scalbnl(long double x, int n);
 long double scalblnl(long double x, long int n);
+long double fmal(long double x, long double y, long double z);
 
 /* Special long double */
 long double ldexpl(long double x, int e);

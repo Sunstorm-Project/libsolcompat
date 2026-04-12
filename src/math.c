@@ -178,6 +178,12 @@ scalbln(double x, long int n)
     return scalbn(x, (int)n);
 }
 
+double
+fma(double x, double y, double z)
+{
+    return (x * y) + z;
+}
+
 /* ================================================================
  * Float wrappers — cast through double
  * ================================================================ */
@@ -231,6 +237,7 @@ float fminf(float x, float y)       { return (float)fmin((double)x, (double)y); 
 float fmaxf(float x, float y)       { return (float)fmax((double)x, (double)y); }
 float scalbnf(float x, int n)       { return (float)scalbn((double)x, n); }
 float scalblnf(float x, long int n) { return (float)scalbln((double)x, n); }
+float fmaf(float x, float y, float z) { return (float)fma((double)x, (double)y, (double)z); }
 
 /* Special float */
 float ldexpf(float x, int e)     { return (float)ldexp((double)x, e); }
@@ -309,6 +316,7 @@ long double fminl(long double x, long double y)      { return (long double)fmin(
 long double fmaxl(long double x, long double y)      { return (long double)fmax((double)x, (double)y); }
 long double scalbnl(long double x, int n)            { return (long double)scalbn((double)x, n); }
 long double scalblnl(long double x, long int n)      { return (long double)scalbln((double)x, n); }
+long double fmal(long double x, long double y, long double z) { return (long double)fma((double)x, (double)y, (double)z); }
 
 /* Special long double */
 long double ldexpl(long double x, int e)    { return (long double)ldexp((double)x, e); }
