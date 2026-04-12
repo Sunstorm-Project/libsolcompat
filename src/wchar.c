@@ -83,7 +83,7 @@ wcsstr(const wchar_t *haystack, const wchar_t *needle)
  * ================================================================ */
 
 size_t
-wcrtomb(char *s, wchar_t wc, void *ps)
+wcrtomb(char *s, wchar_t wc, mbstate_t *ps)
 {
     (void)ps;
     if (s == NULL)
@@ -96,7 +96,7 @@ wcrtomb(char *s, wchar_t wc, void *ps)
 }
 
 size_t
-wcsrtombs(char *dest, const wchar_t **src, size_t len, void *ps)
+wcsrtombs(char *dest, const wchar_t **src, size_t len, mbstate_t *ps)
 {
     size_t count = 0;
     const wchar_t *s = *src;
@@ -124,7 +124,7 @@ wcsrtombs(char *dest, const wchar_t **src, size_t len, void *ps)
 }
 
 size_t
-mbsrtowcs(wchar_t *dest, const char **src, size_t len, void *ps)
+mbsrtowcs(wchar_t *dest, const char **src, size_t len, mbstate_t *ps)
 {
     size_t count = 0;
     const char *s = *src;
