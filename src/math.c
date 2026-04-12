@@ -232,6 +232,7 @@ float atan2f(float x, float y)      { return (float)atan2((double)x, (double)y);
 float copysignf(float x, float y)   { return (float)copysign((double)x, (double)y); }
 float nextafterf(float x, float y)  { return (float)nextafter((double)x, (double)y); }
 float remainderf(float x, float y)  { return (float)remainder((double)x, (double)y); }
+float remquof(float x, float y, int *quo) { return (float)remquo((double)x, (double)y, quo); }
 float hypotf(float x, float y)      { return (float)hypot((double)x, (double)y); }
 float fdimf(float x, float y)       { return (float)fdim((double)x, (double)y); }
 float fminf(float x, float y)       { return (float)fmin((double)x, (double)y); }
@@ -311,6 +312,7 @@ long double atan2l(long double x, long double y)     { return (long double)atan2
 long double copysignl(long double x, long double y)  { return (long double)copysign((double)x, (double)y); }
 long double nextafterl(long double x, long double y) { return (long double)nextafter((double)x, (double)y); }
 long double remainderl(long double x, long double y) { return (long double)remainder((double)x, (double)y); }
+long double remquol(long double x, long double y, int *quo) { return (long double)remquo((double)x, (double)y, quo); }
 long double hypotl(long double x, long double y)     { return (long double)hypot((double)x, (double)y); }
 long double fdiml(long double x, long double y)      { return (long double)fdim((double)x, (double)y); }
 long double fminl(long double x, long double y)      { return (long double)fmin((double)x, (double)y); }
