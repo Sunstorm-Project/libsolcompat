@@ -48,18 +48,12 @@ extern "C" {
 #ifndef AT_NOTELF
 #define AT_NOTELF    10
 #endif
-#ifndef AT_UID
-#define AT_UID       11
-#endif
-#ifndef AT_EUID
-#define AT_EUID      12
-#endif
-#ifndef AT_GID
-#define AT_GID       13
-#endif
-#ifndef AT_EGID
-#define AT_EGID      14
-#endif
+/* AT_UID / AT_EUID / AT_GID / AT_EGID intentionally omitted.
+ * Solaris 7's <sys/vnode.h> uses these names as file-attribute bit
+ * masks (0x0004, 0x0008, etc.).  Kernel-adjacent code that pulls
+ * <sys/vnode.h> would collide with our auxv-vector definitions.
+ * getauxval() callers almost exclusively use AT_HWCAP, AT_PLATFORM,
+ * AT_PAGESZ, AT_RANDOM — not the user/group IDs. */
 #ifndef AT_PLATFORM
 #define AT_PLATFORM  15
 #endif
