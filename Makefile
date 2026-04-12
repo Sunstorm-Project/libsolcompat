@@ -127,6 +127,14 @@ $(SONAME): $(PIC_OBJS)
 .c.lo:
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(PICFLAGS) -c -o $@ $<
 
+# math.o needs -fno-builtin-fma* because GCC 15 treats the builtin
+# declarations as implicit inline definitions, conflicting with our
+# explicit implementations of fma/fmaf/fmal.
+src/math.o: src/math.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -fno-builtin-fma -fno-builtin-fmaf -fno-builtin-fmal -c -o $@ $<
+src/math.lo: src/math.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(PICFLAGS) -fno-builtin-fma -fno-builtin-fmaf -fno-builtin-fmal -c -o $@ $<
+
 # ====================================================================
 # install — traditional PREFIX-based install (libsolcompat.a + headers)
 # ====================================================================
