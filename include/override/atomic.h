@@ -11,6 +11,15 @@
 #ifndef _SOLCOMPAT_OVERRIDE_ATOMIC_H
 #define _SOLCOMPAT_OVERRIDE_ATOMIC_H
 
+/*
+ * __sun guard: <sys/atomic.h> and uint_t are Solaris-specific.  On
+ * glibc hosts (canadian-cross build-side x86 compiles), this override
+ * path may leak via -isystem.  Make it a no-op elsewhere so a stray
+ * -isystem search hit doesn't fail trying to find a Solaris header
+ * that isn't there.
+ */
+#ifdef __sun
+
 #include <sys/atomic.h>
 
 /*
@@ -31,5 +40,7 @@ extern uint_t atomic_or_uint(volatile uint_t *, uint_t);
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_ATOMIC_H */

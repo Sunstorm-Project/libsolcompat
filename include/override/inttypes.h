@@ -291,7 +291,14 @@
 
 /* ================================================================
  * imaxabs / imaxdiv — C99 intmax_t arithmetic
+ *
+ * __sun guard: our imaxdiv_t typedef and imaxabs signature assume
+ * intmax_t is long long (Solaris 7 sparc ABI).  On glibc x86_64
+ * intmax_t is 'long', so redefining imaxdiv_t here would conflict
+ * with the one glibc's <inttypes.h> just provided via #include_next.
+ * Confine these shims to Solaris compiles.
  * ================================================================ */
+#ifdef __sun
 #ifndef _SOLCOMPAT_IMAXDIV_DEFINED
 #define _SOLCOMPAT_IMAXDIV_DEFINED
 typedef struct {
@@ -312,5 +319,6 @@ uintmax_t strtoumax(const char *nptr, char **endptr, int base);
 #ifdef __cplusplus
 }
 #endif
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_INTTYPES_H */
