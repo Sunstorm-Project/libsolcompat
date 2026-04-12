@@ -178,8 +178,11 @@ scalbln(double x, long int n)
     return scalbn(x, (int)n);
 }
 
-/* Use volatile to prevent GCC from recognizing the pattern as __builtin_fma
-   and optimizing it into a recursive call to fma() itself. */
+/* C99 fused multiply-add.  Declarations are here (not in math_ext.h)
+   because GCC 15 treats any global declaration of fma/fmaf/fmal as an
+   implicit inline definition of the builtin, even with -fno-builtin-fma.
+   Keeping them file-local avoids the redefinition error.
+   The C++ declarations live in override/cmath (extern "C" block). */
 double
 fma(double x, double y, double z)
 {
