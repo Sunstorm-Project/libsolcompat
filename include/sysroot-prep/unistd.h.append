@@ -41,9 +41,9 @@ int faccessat(int dirfd, const char *pathname, int mode, int flags);
 
 /* --- Randomness (OpenBSD / POSIX-ish) --- */
 int getentropy(void *buffer, size_t length);
-uint32_t arc4random(void);
+unsigned int arc4random(void);
 void arc4random_buf(void *buf, size_t nbytes);
-uint32_t arc4random_uniform(uint32_t upper_bound);
+unsigned int arc4random_uniform(unsigned int upper_bound);
 
 /* --- _SC_SYMLOOP_MAX sysconf constant --- */
 #ifndef _SC_SYMLOOP_MAX
