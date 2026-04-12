@@ -1,0 +1,22 @@
+/*
+ * stdio.h.prepend — Define __gnuc_va_list before Solaris 7 stdio.h uses it
+ *
+ * Solaris 7's stdio.h (and GCC's include-fixed copy) declare vfprintf,
+ * vsnprintf, vsprintf using __gnuc_va_list — a GCC-internal typedef
+ * normally provided by <stdarg.h>. If <stdio.h> is included without
+ * <stdarg.h> first, the prototypes fail to parse.
+ *
+ * This prepend ensures __gnuc_va_list is always defined when stdio.h
+ * is processed, regardless of whether the caller included <stdarg.h>.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+#ifndef _SOLCOMPAT_STDIO_H_PREPEND
+#define _SOLCOMPAT_STDIO_H_PREPEND
+
+#if defined(__GNUC__) && !defined(__gnuc_va_list_defined)
+typedef __builtin_va_list __gnuc_va_list;
+#define __gnuc_va_list_defined 1
+#endif
+
+#endif /* _SOLCOMPAT_STDIO_H_PREPEND */

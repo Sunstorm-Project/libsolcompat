@@ -191,12 +191,34 @@ install-toolchain: libsolcompat.a
 		cp -r sysroot-overlay/* "$(SYSROOT)/"; \
 		echo "  stdint.h, fenv.h, spawn.h, getopt.h, endian.h, etc."; \
 	fi
-	@# --- Replace sys/int_types.h with stdint.h redirect ---
+	@# --- Replace sys/int_types.h entirely (fix broken 'char int8_t') ---
 	@if [ -f include/sysroot-prep/sys/int_types.h.prepend ]; then \
 		cp include/sysroot-prep/sys/int_types.h.prepend \
 			"$(SYSROOT)/usr/include/sys/int_types.h"; \
-		echo "  sys/int_types.h → stdint.h redirect"; \
+		echo "  sys/int_types.h replaced with fixed typedefs"; \
 	fi
+	@# --- Prepend content to existing headers (between guard and body) ---
+	@# For .prepend files (other than sys/int_types.h), insert content
+	@# right after the first `#define _XXX_H` guard so declarations are
+	@# visible before the original header's prototypes.
+	@for prepend_file in $$(find include/sysroot-prep -name '*.prepend' -type f 2>/dev/null); do \
+		rel="$${prepend_file#include/sysroot-prep/}"; \
+		hdr="$${rel%.prepend}"; \
+		if [ "$${hdr}" = "sys/int_types.h" ]; then continue; fi; \
+		target="$(SYSROOT)/usr/include/$${hdr}"; \
+		guard=$$(grep '^#ifndef _SOLCOMPAT_' "$$prepend_file" | head -1 | sed 's/#ifndef //' || true); \
+		if [ -f "$${target}" ]; then \
+			if [ -n "$$guard" ] && grep -q "$$guard" "$${target}" 2>/dev/null; then \
+				: ; \
+			else \
+				awk -v content="$$(cat $$prepend_file)" ' \
+					/^#define [_A-Za-z0-9]+_H/ && !inserted { print; print ""; print content; inserted=1; next } \
+					{ print } \
+				' "$${target}" > "$${target}.tmp" && mv "$${target}.tmp" "$${target}"; \
+				echo "  Prepended $${hdr}"; \
+			fi; \
+		fi; \
+	done
 	@# --- Append declarations to existing sysroot headers ---
 	@echo "Patching sysroot headers with POSIX/C99 declarations..."
 	@for append_file in $$(find include/sysroot-prep -name '*.append' -type f); do \
@@ -297,12 +319,34 @@ install-headers:
 		cp -r sysroot-overlay/* "$(SYSROOT)/"; \
 		echo "  stdint.h, fenv.h, spawn.h, getopt.h, endian.h, etc."; \
 	fi
-	@# --- Replace sys/int_types.h with stdint.h redirect ---
+	@# --- Replace sys/int_types.h entirely (fix broken 'char int8_t') ---
 	@if [ -f include/sysroot-prep/sys/int_types.h.prepend ]; then \
 		cp include/sysroot-prep/sys/int_types.h.prepend \
 			"$(SYSROOT)/usr/include/sys/int_types.h"; \
-		echo "  sys/int_types.h → stdint.h redirect"; \
+		echo "  sys/int_types.h replaced with fixed typedefs"; \
 	fi
+	@# --- Prepend content to existing headers (between guard and body) ---
+	@# For .prepend files (other than sys/int_types.h), insert content
+	@# right after the first `#define _XXX_H` guard so declarations are
+	@# visible before the original header's prototypes.
+	@for prepend_file in $$(find include/sysroot-prep -name '*.prepend' -type f 2>/dev/null); do \
+		rel="$${prepend_file#include/sysroot-prep/}"; \
+		hdr="$${rel%.prepend}"; \
+		if [ "$${hdr}" = "sys/int_types.h" ]; then continue; fi; \
+		target="$(SYSROOT)/usr/include/$${hdr}"; \
+		guard=$$(grep '^#ifndef _SOLCOMPAT_' "$$prepend_file" | head -1 | sed 's/#ifndef //' || true); \
+		if [ -f "$${target}" ]; then \
+			if [ -n "$$guard" ] && grep -q "$$guard" "$${target}" 2>/dev/null; then \
+				: ; \
+			else \
+				awk -v content="$$(cat $$prepend_file)" ' \
+					/^#define [_A-Za-z0-9]+_H/ && !inserted { print; print ""; print content; inserted=1; next } \
+					{ print } \
+				' "$${target}" > "$${target}.tmp" && mv "$${target}.tmp" "$${target}"; \
+				echo "  Prepended $${hdr}"; \
+			fi; \
+		fi; \
+	done
 	@# --- Append declarations to existing sysroot headers ---
 	@echo "Patching sysroot headers with POSIX/C99 declarations..."
 	@for append_file in $$(find include/sysroot-prep -name '*.append' -type f); do \
