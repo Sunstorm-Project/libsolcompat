@@ -26,6 +26,7 @@
  *   link with -ldl.
  */
 
+#include <stdarg.h>   /* __gnuc_va_list used by Solaris 7 stdio.h prototypes */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

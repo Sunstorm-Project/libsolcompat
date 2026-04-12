@@ -9,6 +9,7 @@
  * has experimental IPv6 but we don't rely on it).
  */
 
+#include <stdarg.h>   /* __gnuc_va_list used by Solaris 7 stdio.h prototypes */
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
