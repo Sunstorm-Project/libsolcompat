@@ -31,7 +31,18 @@
  * Declare C99/POSIX functions that Solaris 7's stdlib.h lacks.
  * These must be in the global namespace BEFORE GCC's <cstdlib>
  * tries "using ::_Exit;" etc.
+ *
+ * __sun guard: on glibc hosts (canadian-cross build-side x86 compiles
+ * that may pick up this override via -isystem), the return types
+ * conflict with glibc's <cstdlib>.  glibc's aligned_alloc takes
+ * 'size_t' which is 'unsigned long' on x86_64, not 'unsigned int';
+ * strtoll returns 'long long' (matches) but llabs returns 'long long'
+ * in both — still, the whole block is Solaris-specific because
+ * glibc's <cstdlib> already has all these functions and our
+ * "using ::strtof;" needs them in the global namespace only there.
  */
+#ifdef __sun
+
 /* Need size_t for aligned_alloc */
 typedef unsigned int __solcompat_size_t;
 
@@ -60,6 +71,8 @@ extern "C" {
      * cstdlib with both chains in scope at once.
      */
 }
+
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_CSTDLIB */
 
