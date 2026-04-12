@@ -48,6 +48,7 @@ SRCS = src/snprintf.c \
        src/process.c \
        src/poll.c \
        src/random.c \
+       src/wchar.c \
        src/stubs.c \
        src/hwcap.c \
        src/xpg.c \
