@@ -28,8 +28,8 @@ int dup3(int oldfd, int newfd, int flags);
 /* --- execvpe (GNU extension, widely expected) --- */
 int execvpe(const char *filename, char *const argv[], char *const envp[]);
 
-/* --- *at() directory-relative functions (POSIX 2008) --- */
-int openat(int dirfd, const char *pathname, int flags, ...);
+/* --- *at() directory-relative functions (POSIX 2008) ---
+ *     openat is declared in <fcntl.h> per POSIX — see fcntl.h.append. */
 int unlinkat(int dirfd, const char *pathname, int flags);
 int renameat(int olddirfd, const char *oldpath,
              int newdirfd, const char *newpath);
