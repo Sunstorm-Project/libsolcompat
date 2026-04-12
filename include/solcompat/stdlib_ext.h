@@ -12,6 +12,15 @@
 extern "C" {
 #endif
 
+/*
+ * __sun guard: the declarations below are Solaris 7 shims — on glibc
+ * hosts (canadian-cross x86 build-side compiles) strtoimax/strtoumax
+ * clash with glibc's <inttypes.h> which returns intmax_t/uintmax_t
+ * (typedef 'long' on x86_64), not libsolcompat's 'long long'.  Keep
+ * the shims confined to actual Solaris compiles.
+ */
+#ifdef __sun
+
 int setenv(const char *name, const char *value, int overwrite);
 int unsetenv(const char *name);
 char *mkdtemp(char *tmpl);
@@ -51,6 +60,8 @@ long double strtold(const char *nptr, char **endptr);
 void qsort_r(void *base, size_t element_count, size_t element_size,
              int (*compare_fn)(const void *, const void *, void *),
              void *context_arg);
+
+#endif /* __sun */
 
 #ifdef __cplusplus
 }
