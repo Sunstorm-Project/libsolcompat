@@ -240,3 +240,14 @@ strsignal(int signum)
                        "Unknown signal %d", signum);
     return unknown_buf;
 }
+
+/*
+ * strerror_l — locale-aware strerror (POSIX 2008).
+ * Solaris 7 has no per-thread locales, so we just delegate to strerror.
+ */
+char *
+strerror_l(int errnum, void *locale)
+{
+    (void)locale;
+    return strerror(errnum);
+}

@@ -55,6 +55,16 @@ char *strsignal(int signum);
 /* GNU strerror_r — thread-safe strerror (GNU variant returns char*) */
 char *strerror_r(int errnum, char *buf, size_t buflen);
 
+/* BSD explicit_bzero — guaranteed-not-optimized-away zeroing */
+void explicit_bzero(void *s, size_t n);
+
+/* POSIX.1-2008 strerror_l — locale-aware strerror */
+#ifndef _SOLCOMPAT_LOCALE_T
+#define _SOLCOMPAT_LOCALE_T
+typedef void *locale_t;
+#endif
+char *strerror_l(int errnum, locale_t loc);
+
 #ifdef __cplusplus
 }
 #endif

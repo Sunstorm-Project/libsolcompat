@@ -335,3 +335,19 @@ strtold(const char *nptr, char **endptr)
 {
     return (long double)strtod(nptr, endptr);
 }
+
+/*
+ * secure_getenv — GNU extension.
+ * Returns NULL if the program is running setuid/setgid.
+ * Solaris 7 has no AT_SECURE auxiliary vector entry, so we just
+ * check issetugid() if available, otherwise delegate to getenv().
+ */
+char *
+secure_getenv(const char *name)
+{
+    /* Solaris 7 doesn't have issetugid() either, but getuid/geteuid
+     * are always available. */
+    if (getuid() != geteuid() || getgid() != getegid())
+        return NULL;
+    return getenv(name);
+}

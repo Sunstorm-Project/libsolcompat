@@ -60,6 +60,18 @@ struct sockaddr_storage {
 /* --- accept4 (Linux 2.6.28+ / POSIX-ish extension) --- */
 int accept4(int sockfd, struct sockaddr *addr, socklen_t *addrlen, int flags);
 
+/* --- MSG_NOSIGNAL --- */
+/* Solaris 7 has no SIGPIPE suppression flag; callers must use
+ * signal(SIGPIPE, SIG_IGN) or SO_NOSIGPIPE */
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
+
+/* --- CMSG_ALIGN --- */
+#ifndef CMSG_ALIGN
+#define CMSG_ALIGN(len) (((len) + sizeof(long) - 1) & ~(sizeof(long) - 1))
+#endif
+
 #ifdef __cplusplus
 }
 #endif

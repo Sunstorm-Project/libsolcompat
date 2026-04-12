@@ -89,6 +89,13 @@ void qsort_r(void *base, size_t element_count, size_t element_size,
 int __cxa_atexit(void (*)(void *), void *, void *);
 void __cxa_finalize(void *);
 
+/* POSIX mkostemp — mkstemp with O_CLOEXEC/O_APPEND flags */
+int mkostemp(char *template_path, int flags);
+
+/* GNU secure_getenv — getenv that returns NULL if running setuid/setgid.
+ * On Solaris 7 we simply delegate to getenv (no AT_SECURE). */
+char *secure_getenv(const char *name);
+
 #ifdef __cplusplus
 }
 #endif

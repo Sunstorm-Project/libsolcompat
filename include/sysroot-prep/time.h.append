@@ -57,6 +57,14 @@ int clock_nanosleep(clockid_t clk_id, int flags,
 /* BSD/GNU timegm — interpret struct tm as UTC, return time_t */
 time_t timegm(struct tm *tm);
 
+/* C11 TIME_UTC base for timespec_get */
+#ifndef TIME_UTC
+#define TIME_UTC 1
+#endif
+
+/* C11 timespec_get — retrieve calendar time in struct timespec */
+int timespec_get(struct timespec *ts, int base);
+
 #ifdef __cplusplus
 }
 #endif

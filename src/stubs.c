@@ -25,6 +25,16 @@ pthread_setname_np(pthread_t thread, const char *name)
 }
 #endif
 
+int
+pthread_getname_np(pthread_t thread, char *name, size_t len)
+{
+    /* Solaris 7 has no thread naming API — return empty string */
+    (void)thread;
+    if (len > 0)
+        name[0] = '\0';
+    return 0;
+}
+
 /*
  * Per-thread locale stubs.
  * These are not real per-thread locales — they just call setlocale()

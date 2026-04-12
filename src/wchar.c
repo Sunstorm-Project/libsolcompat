@@ -86,3 +86,28 @@ wctob(wint_t c)
         return (int)c;
     return -1;  /* EOF */
 }
+
+/*
+ * wcsdup — duplicate a wide string (POSIX 2008).
+ */
+wchar_t *
+wcsdup(const wchar_t *s)
+{
+    size_t byte_count = (wcslen(s) + 1) * sizeof(wchar_t);
+    wchar_t *copy = (wchar_t *)malloc(byte_count);
+    if (copy != NULL)
+        memcpy(copy, s, byte_count);
+    return copy;
+}
+
+/*
+ * wcsnlen — bounded wide string length (POSIX 2008).
+ */
+size_t
+wcsnlen(const wchar_t *s, size_t maxlen)
+{
+    size_t count = 0;
+    while (count < maxlen && s[count] != L'\0')
+        count++;
+    return count;
+}

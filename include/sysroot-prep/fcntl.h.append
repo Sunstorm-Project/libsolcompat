@@ -40,4 +40,21 @@
 #define AT_EACCESS 0x0010
 #endif
 
+/* O_CLOEXEC — close-on-exec flag for open/pipe2/dup3/accept4.
+ * Solaris 7 lacks it; libsolcompat's pipe2/dup3/mkostemp implement
+ * the semantics via fcntl(F_SETFD, FD_CLOEXEC). */
+#ifndef O_CLOEXEC
+#define O_CLOEXEC 0x800000
+#endif
+
+/* O_DIRECTORY — fail if not a directory (POSIX 2008) */
+#ifndef O_DIRECTORY
+#define O_DIRECTORY 0x1000000
+#endif
+
+/* O_NOFOLLOW — fail if path is a symlink (POSIX 2008) */
+#ifndef O_NOFOLLOW
+#define O_NOFOLLOW 0x20000
+#endif
+
 #endif /* _SOLCOMPAT_FCNTL_H_APPEND */

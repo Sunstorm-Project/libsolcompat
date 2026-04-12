@@ -1,0 +1,36 @@
+/*
+ * pthread.h.append — POSIX 2008 pthread extensions for Solaris 7
+ *
+ * Solaris 7's <pthread.h> predates POSIX 2008 and lacks thread naming,
+ * condattr clock selection, and other modern threading primitives that
+ * packages like cmake, Python, GLib, and Qt expect unconditionally.
+ * libsolcompat provides the implementations; this file exposes the
+ * declarations in the sysroot so fixincludes propagates them into
+ * include-fixed/.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_PTHREAD_H_APPEND
+#define _SOLCOMPAT_PTHREAD_H_APPEND
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* GNU/POSIX pthread_setname_np / pthread_getname_np — thread naming */
+int pthread_setname_np(pthread_t thread, const char *name);
+int pthread_getname_np(pthread_t thread, char *name, size_t len);
+
+/* POSIX.1-2008 pthread_condattr_setclock / getclock — condition variable
+ * clock selection.  Solaris 7 condition variables always use
+ * CLOCK_REALTIME; libsolcompat stubs these so code compiles and
+ * CLOCK_REALTIME requests succeed. */
+int pthread_condattr_setclock(pthread_condattr_t *attr, clockid_t clock_id);
+int pthread_condattr_getclock(const pthread_condattr_t *attr, clockid_t *clock_id);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _SOLCOMPAT_PTHREAD_H_APPEND */

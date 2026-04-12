@@ -72,6 +72,12 @@ int vwprintf(const wchar_t *fmt, va_list ap);
 int vswprintf(wchar_t *s, size_t n, const wchar_t *fmt, va_list ap);
 #endif
 
+/* POSIX wcsdup — allocate a copy of a wide string */
+wchar_t *wcsdup(const wchar_t *s);
+
+/* POSIX.1-2008 wcsnlen — bounded wide string length */
+size_t wcsnlen(const wchar_t *s, size_t maxlen);
+
 #ifdef __cplusplus
 }
 #endif

@@ -184,3 +184,18 @@ timegm(struct tm *tm)
 
     return result;
 }
+
+/*
+ * timespec_get — C11 §7.27.2.5 high-resolution clock.
+ * Returns the base on success, 0 on failure.
+ * Only TIME_UTC (base=1) is required by C11.
+ */
+int
+timespec_get(struct timespec *ts, int base)
+{
+    if (base != 1)  /* TIME_UTC = 1 */
+        return 0;
+    if (solcompat_clock_gettime(0 /* CLOCK_REALTIME */, ts) != 0)
+        return 0;
+    return base;
+}
