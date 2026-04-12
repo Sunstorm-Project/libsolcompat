@@ -9,6 +9,21 @@
 #ifndef _SOLCOMPAT_OVERRIDE_FENV_H
 #define _SOLCOMPAT_OVERRIDE_FENV_H
 
+/*
+ * __sun guard: the FE_* exception flag values and fenv_t/fexcept_t
+ * typedefs are SPARC FSR-specific.  glibc on x86_64 defines these
+ * with different values and types (typedef unsigned long fenv_t);
+ * redefining them here when the override path leaks into x86 compiles
+ * produces warnings or errors depending on GCC's diagnostic level.
+ *
+ * Solaris 7 has no <fenv.h> at all, so #include_next would fail there
+ * (which is why there isn't one).  On any host that DOES have a
+ * <fenv.h> (glibc, musl, macOS), using that system's definitions is
+ * the right answer — this override only meaningfully applies on
+ * Solaris.
+ */
+#ifdef __sun
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -54,6 +69,10 @@ int feupdateenv(const fenv_t *);
 
 #ifdef __cplusplus
 }
+#endif
+
+#else /* !__sun — pass through to host's real fenv.h */
+#include_next <fenv.h>
 #endif
 
 #endif /* _SOLCOMPAT_OVERRIDE_FENV_H */
