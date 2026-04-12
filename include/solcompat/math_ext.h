@@ -175,8 +175,7 @@ float ldexpf(float x, int e);
 float frexpf(float x, int *e);
 float modff(float x, float *iptr);
 
-/* Ternary float */
-float fmaf(float x, float y, float z);
+/* fmaf: see comment at line 113 — declaration in math.c only */
 
 /* Rounding / integer conversion */
 long int lrintf(float x);
@@ -246,8 +245,7 @@ long double ldexpl(long double x, int e);
 long double frexpl(long double x, int *e);
 long double modfl(long double x, long double *iptr);
 
-/* Ternary long double */
-long double fmal(long double x, long double y, long double z);
+/* fmal: see comment at line 113 — declaration in math.c only */
 
 /* Rounding / integer conversion */
 long int lrintl(long double x);
