@@ -16,6 +16,12 @@
 #ifndef _SOLCOMPAT_NETDB_H_APPEND
 #define _SOLCOMPAT_NETDB_H_APPEND
 
+/* Pull in sys/socket.h for socklen_t and struct sockaddr.
+ * Solaris 7's netdb.h doesn't do this, so callers who only include
+ * <netdb.h> see our getnameinfo/addrinfo declarations with
+ * undefined types. */
+#include <sys/socket.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif

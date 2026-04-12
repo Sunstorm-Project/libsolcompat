@@ -57,6 +57,16 @@ int vsnprintf(char *str, size_t size, const char *fmt, va_list ap);
 ssize_t preadv(int fd, const struct iovec *iov, int iovcnt, off_t offset);
 ssize_t pwritev(int fd, const struct iovec *iov, int iovcnt, off_t offset);
 
+/* C99 variadic scanf family — libstdc++'s <cstdio> does `using ::vscanf`
+ * etc. when _GLIBCXX_USE_C99_STDIO is enabled.  Solaris 7 libc does not
+ * export these symbols (vfscanf is used internally by fscanf but is not
+ * part of the public ABI).  libsolcompat provides implementations in
+ * src/stdio.c via Solaris's internal _doscan() entry point.
+ * va_list is defined by <stdarg.h> which is #include'd above. */
+int vscanf(const char *format, va_list ap);
+int vfscanf(FILE *stream, const char *format, va_list ap);
+int vsscanf(const char *str, const char *format, va_list ap);
+
 #ifdef __cplusplus
 }
 #endif

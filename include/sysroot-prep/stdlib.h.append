@@ -96,6 +96,15 @@ int mkostemp(char *template_path, int flags);
  * On Solaris 7 we simply delegate to getenv (no AT_SECURE). */
 char *secure_getenv(const char *name);
 
+/* C99 string to float conversions — libstdc++'s <cstdlib> does
+ * `using ::strtof` and `using ::strtold`.  Solaris 7 libc has strtod()
+ * but not strtof() or strtold(); libsolcompat provides implementations
+ * in src/stdlib.c.  strtof_l / strtold_l are GNU extensions that some
+ * packages reference; they are not declared here because libsolcompat
+ * does not implement locale-sensitive variants. */
+float       strtof(const char *nptr, char **endptr);
+long double strtold(const char *nptr, char **endptr);
+
 #ifdef __cplusplus
 }
 #endif
