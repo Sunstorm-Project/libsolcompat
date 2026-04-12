@@ -9,6 +9,8 @@
 #ifndef _SOLCOMPAT_GETOPT_H
 #define _SOLCOMPAT_GETOPT_H
 
+#ifdef __sun
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -44,5 +46,9 @@ extern int getopt_long_only(int argc, char *const argv[],
 #ifdef __cplusplus
 }
 #endif
+
+#else /* !__sun */
+#include_next <getopt.h>
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_GETOPT_H */

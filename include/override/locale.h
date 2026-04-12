@@ -12,7 +12,8 @@
 /* Pull in the real Solaris 7 /usr/include/locale.h */
 #include_next <locale.h>
 
-/* Add POSIX 2008 per-thread locale stubs */
+#ifdef __sun
 #include <solcompat/stubs.h>
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_LOCALE_H */

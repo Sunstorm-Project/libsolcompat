@@ -14,6 +14,7 @@
 
 #include_next <elf.h>
 
+#ifdef __sun
 /* ---- ELF identification indices ---- */
 #ifndef EI_OSABI
 #define EI_OSABI        7
@@ -124,5 +125,6 @@
 #ifndef PT_GNU_PROPERTY
 #define PT_GNU_PROPERTY 0x6474e553
 #endif
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_ELF_H */

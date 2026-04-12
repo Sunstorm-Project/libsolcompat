@@ -12,9 +12,9 @@
 #ifndef _SOLCOMPAT_OVERRIDE_NETINET_IN6_H
 #define _SOLCOMPAT_OVERRIDE_NETINET_IN6_H
 
+#ifdef __sun
 /* Pull in netinet/in.h (which chains through our override to add IPv6) */
 #include <netinet/in.h>
-
-/* Everything else comes from solcompat/network.h via the in.h override */
+#endif /* __sun — glibc has no separate in6.h; IPv6 types live in netinet/in.h */
 
 #endif /* _SOLCOMPAT_OVERRIDE_NETINET_IN6_H */

@@ -15,7 +15,7 @@
 /* Include the real system <time.h> */
 #include_next <time.h>
 
-/* Pull in CLOCK_MONOTONIC and related definitions */
+#ifdef __sun
 #include <solcompat/clock.h>
 
 /*
@@ -38,5 +38,6 @@ extern struct tm *localtime_r(const time_t *, struct tm *);
 }
 #endif
 #endif /* !_REENTRANT */
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_TIME_H */

@@ -16,9 +16,11 @@
 #ifndef _SYS_INT_TYPES_H
 #define _SYS_INT_TYPES_H
 
+#ifdef __sun
 /* All integer types are provided by override/stdint.h.
  * Include it to ensure types are available even if <stdint.h>
  * hasn't been included yet. */
 #include <stdint.h>
+#endif /* __sun — glibc has no sys/int_types.h; this is a no-op */
 
 #endif /* _SYS_INT_TYPES_H */

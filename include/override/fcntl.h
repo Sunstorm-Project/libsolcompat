@@ -8,6 +8,7 @@
 
 #include_next <fcntl.h>
 
+#ifdef __sun
 #include <solcompat/filesystem.h>   /* POSIX_FADV_*, posix_fadvise */
 #include <solcompat/at_funcs.h>     /* AT_FDCWD, AT_SYMLINK_NOFOLLOW, fstatat etc */
 
@@ -29,5 +30,6 @@
 #ifndef O_DIRECTORY
 #define O_DIRECTORY 0x40000
 #endif
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_FCNTL_H */

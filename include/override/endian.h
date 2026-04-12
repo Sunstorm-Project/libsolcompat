@@ -13,6 +13,9 @@
 #ifndef _SOLCOMPAT_OVERRIDE_ENDIAN_H
 #define _SOLCOMPAT_OVERRIDE_ENDIAN_H
 
+#ifdef __sun
+/* Solaris 7 has no <endian.h> — provide glibc-style byte-order macros. */
+
 /* Standard byte-order constants (matching glibc values) */
 #define __BIG_ENDIAN    4321
 #define __LITTLE_ENDIAN 1234
@@ -70,5 +73,9 @@
     #define le32toh(x) ((uint32_t)(x))
     #define le64toh(x) ((uint64_t)(x))
 #endif
+
+#else /* !__sun — use the real system <endian.h> */
+#include_next <endian.h>
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_ENDIAN_H */

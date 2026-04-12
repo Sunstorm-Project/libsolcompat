@@ -12,7 +12,8 @@
 /* Pull in the real Solaris 7 /usr/include/netdb.h */
 #include_next <netdb.h>
 
-/* Add getaddrinfo, freeaddrinfo, gai_strerror, getnameinfo, IPv6 types */
+#ifdef __sun
 #include <solcompat/network.h>
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_NETDB_H */

@@ -13,9 +13,11 @@
 /* Pull in the real Solaris 7 assert.h (redefines assert each time) */
 #include_next <assert.h>
 
+#ifdef __sun
 /* C11 7.2: static_assert expands to _Static_assert */
 #if !defined(__cplusplus) && !defined(static_assert)
 #  if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
 #    define static_assert _Static_assert
 #  endif
 #endif
+#endif /* __sun */

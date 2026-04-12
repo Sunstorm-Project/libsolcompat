@@ -12,7 +12,8 @@
 /* Pull in the real Solaris 7 /usr/include/poll.h */
 #include_next <poll.h>
 
-/* Add ppoll() and any other poll extensions */
+#ifdef __sun
 #include <solcompat/poll_ext.h>
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_POLL_H */

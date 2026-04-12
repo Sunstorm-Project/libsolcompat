@@ -11,10 +11,12 @@
 
 #include_next <sys/shm.h>
 
+#ifdef __sun
 #ifdef __cplusplus
 static inline int shmdt(const void *addr) {
     return shmdt(const_cast<char *>(static_cast<const char *>(addr)));
 }
 #endif
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_SYS_SHM_H */

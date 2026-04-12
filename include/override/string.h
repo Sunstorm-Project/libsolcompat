@@ -11,7 +11,8 @@
 /* Pull in the real Solaris 7 /usr/include/string.h */
 #include_next <string.h>
 
-/* Add missing string extensions */
+#ifdef __sun
 #include <solcompat/string_ext.h>
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_STRING_H */

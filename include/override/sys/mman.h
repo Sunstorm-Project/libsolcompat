@@ -12,7 +12,7 @@
 /* Pull in the real Solaris 7 /usr/include/sys/mman.h */
 #include_next <sys/mman.h>
 
-/* Add MAP_ANONYMOUS compatibility */
+#ifdef __sun
 #include <solcompat/memory.h>
 
 /*
@@ -25,5 +25,6 @@ static inline int munmap(void *addr, size_t len) {
     return munmap(static_cast<caddr_t>(addr), len);
 }
 #endif
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_SYS_MMAN_H */

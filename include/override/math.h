@@ -16,7 +16,8 @@
 /* Pull in the real Solaris 7 /usr/include/math.h */
 #include_next <math.h>
 
-/* Add all C99 extensions */
+#ifdef __sun
 #include <solcompat/math_ext.h>
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_MATH_H */

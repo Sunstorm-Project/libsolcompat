@@ -13,6 +13,7 @@
 /* Pull in the real Solaris 7 /usr/include/unistd.h */
 #include_next <unistd.h>
 
+#ifdef __sun
 /* Add execvpe() and related process helpers */
 #include <solcompat/process.h>
 
@@ -25,5 +26,6 @@
 #ifndef _SC_SYMLOOP_MAX
 #define _SC_SYMLOOP_MAX 0x200  /* arbitrary unused sysconf name */
 #endif
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_UNISTD_H */

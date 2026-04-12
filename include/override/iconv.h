@@ -12,6 +12,7 @@
 
 #include_next <iconv.h>
 
+#ifdef __sun
 #ifdef __cplusplus
 #include <cstddef>
 static inline size_t iconv(iconv_t cd, char **inbuf, size_t *inbytesleft,
@@ -20,5 +21,6 @@ static inline size_t iconv(iconv_t cd, char **inbuf, size_t *inbytesleft,
                  outbuf, outbytesleft);
 }
 #endif
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_ICONV_H */

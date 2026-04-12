@@ -12,7 +12,7 @@
 /* Pull in the real Solaris 7 /usr/include/stdlib.h */
 #include_next <stdlib.h>
 
-/* Add missing stdlib extensions */
+#ifdef __sun
 #include <solcompat/stdlib_ext.h>
 
 /* Memory allocation extensions from solcompat/memory.h.
@@ -44,5 +44,6 @@ extern char **environ;
 #ifdef __cplusplus
 }
 #endif
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_STDLIB_H */
