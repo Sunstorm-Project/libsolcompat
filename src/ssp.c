@@ -10,6 +10,7 @@
  * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
  */
 #include <stdlib.h>
+#include <stdarg.h>   /* before stdio.h: defines __gnuc_va_list */
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>

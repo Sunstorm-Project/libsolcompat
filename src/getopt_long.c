@@ -8,6 +8,7 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <stdarg.h>   /* before stdio.h: defines __gnuc_va_list */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

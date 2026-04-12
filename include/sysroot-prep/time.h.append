@@ -33,29 +33,17 @@ extern "C" {
 #define CLOCK_THREAD_CPUTIME_ID  2
 #endif
 
-/* clock_gettime replacement — handles CLOCK_REALTIME (delegates to
- * system), CLOCK_MONOTONIC (gethrtime), CLOCK_PROCESS_CPUTIME_ID
- * (getrusage).  Named solcompat_clock_gettime to avoid symbol clash
- * with Solaris 7's single-clock implementation. */
-int solcompat_clock_gettime(clockid_t clk_id, struct timespec *tp);
-#define clock_gettime solcompat_clock_gettime
-
-/* clock_getres replacement — returns resolution for extended clocks */
-int solcompat_clock_getres(clockid_t clk_id, struct timespec *res);
-#define clock_getres solcompat_clock_getres
-
 /* POSIX TIMER_ABSTIME flag for clock_nanosleep */
 #ifndef TIMER_ABSTIME
 #define TIMER_ABSTIME 0x1
 #endif
 
-/* POSIX clock_nanosleep — sleep with clock selection and abs time */
-int clock_nanosleep(clockid_t clk_id, int flags,
-                    const struct timespec *request,
-                    struct timespec *remain);
-
-/* BSD/GNU timegm — interpret struct tm as UTC, return time_t */
-time_t timegm(struct tm *tm);
+/* clock_gettime, clock_getres, clock_nanosleep, and timegm are
+ * provided by libsolcompat at link time. Their declarations come from
+ * Solaris 7's own time.h (clock_gettime/clock_getres) or are implicit
+ * via GCC builtins.  We do not redeclare them here — prior attempts
+ * caused 'conflicting types' errors due to clockid_t typedef timing
+ * in the sysroot header parse. */
 
 /* C11 TIME_UTC base for timespec_get.
  * NOTE: timespec_get itself is declared by GCC 15's include-fixed/time.h
