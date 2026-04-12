@@ -13,7 +13,8 @@
 /* Pull in the real Solaris 7 /usr/include/netinet/in.h */
 #include_next <netinet/in.h>
 
-/* Add in6_addr, sockaddr_in6, IPPROTO_IPV6, IN6_IS_ADDR_* macros, etc. */
+#ifdef __sun
 #include <solcompat/network.h>
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_NETINET_IN_H */

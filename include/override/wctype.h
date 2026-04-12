@@ -12,6 +12,7 @@
 /* Pull in the real Solaris 7 <wctype.h> first */
 #include_next <wctype.h>
 
+#ifdef __sun
 #ifndef _SOLCOMPAT_OVERRIDE_WCTYPE_H_DECLS
 #define _SOLCOMPAT_OVERRIDE_WCTYPE_H_DECLS
 
@@ -27,3 +28,4 @@ int iswblank(wint_t wc);
 #endif
 
 #endif /* _SOLCOMPAT_OVERRIDE_WCTYPE_H_DECLS */
+#endif /* __sun */

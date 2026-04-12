@@ -11,7 +11,7 @@
 /* Pull in the real Solaris 7 /usr/include/stdio.h */
 #include_next <stdio.h>
 
-/* Add missing stdio extensions (snprintf, etc.) */
+#ifdef __sun
 #include <solcompat/snprintf.h>
 #include <solcompat/stdio_ext.h>
 
@@ -30,5 +30,6 @@ extern int vsscanf(const char *, const char *, va_list);
 #ifdef __cplusplus
 }
 #endif
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_STDIO_H */

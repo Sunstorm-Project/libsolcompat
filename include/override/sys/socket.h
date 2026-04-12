@@ -14,21 +14,23 @@
 #ifndef _SOLCOMPAT_OVERRIDE_SYS_SOCKET_H
 #define _SOLCOMPAT_OVERRIDE_SYS_SOCKET_H
 
+#ifdef __sun
 /* Enable POSIX msghdr with msg_control/msg_controllen */
 #ifndef _XPG4_2
 #define _XPG4_2
 #define _SOLCOMPAT_DEFINED_XPG4_2
 #endif
+#endif /* __sun */
 
-/* Pull in the real Solaris 7 /usr/include/sys/socket.h */
+/* Pull in the real system header */
 #include_next <sys/socket.h>
 
+#ifdef __sun
 #ifdef _SOLCOMPAT_DEFINED_XPG4_2
 #undef _XPG4_2
 #undef _SOLCOMPAT_DEFINED_XPG4_2
 #endif
 
-/* Add AF_INET6, sockaddr_storage, and related IPv6 types */
 #include <solcompat/network.h>
 
 /*
@@ -44,5 +46,6 @@
 #define CMSG_SPACE(data_length) \
     (_CMSG_HDR_ALIGN(sizeof(struct cmsghdr) + (data_length)))
 #endif
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_SYS_SOCKET_H */

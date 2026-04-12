@@ -13,6 +13,10 @@
 #ifndef _SOLCOMPAT_OVERRIDE_IFADDRS_H
 #define _SOLCOMPAT_OVERRIDE_IFADDRS_H
 
+#ifdef __sun
 #include <solcompat/network.h>
+#else
+#include_next <ifaddrs.h>
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_IFADDRS_H */

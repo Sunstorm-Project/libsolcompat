@@ -22,6 +22,8 @@
 #ifndef _SOLCOMPAT_OVERRIDE_SYS_AUXV_H
 #define _SOLCOMPAT_OVERRIDE_SYS_AUXV_H
 
+#ifdef __sun
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -117,5 +119,9 @@ extern unsigned long getauxval(unsigned long type);
 #ifdef __cplusplus
 }
 #endif
+
+#else /* !__sun */
+#include_next <sys/auxv.h>
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_SYS_AUXV_H */

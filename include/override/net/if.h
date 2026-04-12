@@ -11,8 +11,10 @@
 
 #include_next <net/if.h>
 
+#ifdef __sun
 #ifndef ifr_mtu
 #define ifr_mtu ifr_metric
 #endif
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_NET_IF_H */

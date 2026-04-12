@@ -13,7 +13,8 @@
 /* Pull in the real Solaris 7 /usr/include/dirent.h */
 #include_next <dirent.h>
 
-/* Add dirfd() and fdopendir() */
+#ifdef __sun
 #include <solcompat/filesystem.h>
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_DIRENT_H */

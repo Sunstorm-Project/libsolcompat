@@ -18,7 +18,10 @@
 #ifndef _SOLCOMPAT_OVERRIDE_STDINT_H
 #define _SOLCOMPAT_OVERRIDE_STDINT_H
 
+#ifdef __sun
 /*
+ * Solaris 7 has no native <stdint.h>.  Provide all C99 integer types.
+ *
  * Prevent sys/int_types.h from being included after us.  That header
  * redefines intmax_t as int32_t under __STRICT_ANSI__ (i.e. -std=c99),
  * conflicting with our correct C99 long long definition.  Since we
@@ -417,5 +420,9 @@ __extension__ typedef unsigned long long uint_fast64_t;
 #define INTMAX_C(x)  (x ## LL)
 #define UINTMAX_C(x) (x ## ULL)
 #endif
+
+#else /* !__sun — use the real system <stdint.h> */
+#include_next <stdint.h>
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_STDINT_H */

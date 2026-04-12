@@ -13,7 +13,10 @@
 /* Pull in the real Solaris 7 /usr/include/arpa/inet.h */
 #include_next <arpa/inet.h>
 
-/* Add inet_ntop declaration and IPv6 types it depends on */
+/* Solaris-specific additions — guarded so canadian-cross x86 builds
+   that pick up this path via -isystem see only the real system header. */
+#ifdef __sun
 #include <solcompat/network.h>
+#endif /* __sun */
 
 #endif /* _SOLCOMPAT_OVERRIDE_ARPA_INET_H */
