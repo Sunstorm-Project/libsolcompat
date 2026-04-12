@@ -4,6 +4,7 @@
  * daemon, err/warn family, pipe2, dup3, mkostemp, posix_spawn
  */
 
+#include <stdarg.h>   /* __gnuc_va_list used by Solaris 7 stdio.h prototypes */
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -12,7 +13,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdarg.h>
 #include <errno.h>
 #include <signal.h>
 #include <limits.h>
