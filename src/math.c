@@ -178,17 +178,12 @@ scalbln(double x, long int n)
     return scalbn(x, (int)n);
 }
 
-/* C99 fused multiply-add.  Declarations are here (not in math_ext.h)
-   because GCC 15 treats any global declaration of fma/fmaf/fmal as an
-   implicit inline definition of the builtin, even with -fno-builtin-fma.
-   Keeping them file-local avoids the redefinition error.
-   The C++ declarations live in override/cmath (extern "C" block). */
-double
-fma(double x, double y, double z)
-{
-    volatile double product = x * y;
-    return product + z;
-}
+/* fma/fmaf/fmal: NOT implemented here.  GCC's include-fixed/math.h
+   already declares them (copied from our override/math.h chain during
+   fixincludes), and GCC 15 treats those declarations as implicit
+   inline definitions — any explicit definition causes a "redefinition"
+   error.  GCC's __builtin_fma provides the implementation.
+   C++ code gets declarations via override/cmath's extern "C" block. */
 
 /* ================================================================
  * Float wrappers — cast through double
@@ -243,7 +238,7 @@ float fminf(float x, float y)       { return (float)fmin((double)x, (double)y); 
 float fmaxf(float x, float y)       { return (float)fmax((double)x, (double)y); }
 float scalbnf(float x, int n)       { return (float)scalbn((double)x, n); }
 float scalblnf(float x, long int n) { return (float)scalbln((double)x, n); }
-float fmaf(float x, float y, float z) { volatile double r = fma((double)x, (double)y, (double)z); return (float)r; }
+/* fmaf: provided by GCC builtin — see comment above fma */
 
 /* Special float */
 float ldexpf(float x, int e)     { return (float)ldexp((double)x, e); }
@@ -322,7 +317,7 @@ long double fminl(long double x, long double y)      { return (long double)fmin(
 long double fmaxl(long double x, long double y)      { return (long double)fmax((double)x, (double)y); }
 long double scalbnl(long double x, int n)            { return (long double)scalbn((double)x, n); }
 long double scalblnl(long double x, long int n)      { return (long double)scalbln((double)x, n); }
-long double fmal(long double x, long double y, long double z) { volatile double r = fma((double)x, (double)y, (double)z); return (long double)r; }
+/* fmal: provided by GCC builtin — see comment above fma */
 
 /* Special long double */
 long double ldexpl(long double x, int e)    { return (long double)ldexp((double)x, e); }
