@@ -55,13 +55,13 @@ unsigned int arc4random_uniform(unsigned int upper_bound);
  * src/process.c compares real vs effective uid/gid. */
 int issetugid(void);
 
-/* copy_file_range — Linux 4.5 syscall. Solaris 7 lacks it; libsolcompat
- * ships a stub returning -1/ENOSYS so gnulib's copy-file-range.c
- * fallback path is taken. Declaration here prevents configure probe
- * compile failures. */
-long long copy_file_range(int fd_in, long long *off_in,
-                          int fd_out, long long *off_out,
-                          unsigned long long len, unsigned int flags);
+/* copy_file_range — Linux 4.5 syscall. Solaris 7 lacks it;
+ * libsolcompat ships an ENOSYS stub so gnulib's copy-file-range.c
+ * fallback path is taken. Signature matches Linux's declaration. */
+#include <sys/types.h>   /* off_t, size_t, ssize_t */
+ssize_t copy_file_range(int fd_in, off_t *off_in,
+                        int fd_out, off_t *off_out,
+                        size_t len, unsigned int flags);
 
 #ifdef __cplusplus
 }

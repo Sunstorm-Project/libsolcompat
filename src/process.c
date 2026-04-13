@@ -645,10 +645,10 @@ pthread_mutex_consistent(pthread_mutex_t *mutex)
  * using read()/write(). Our stub ensures configure probes compile.
  * ================================================================== */
 
-long long
-copy_file_range(int fd_in, long long *off_in,
-                int fd_out, long long *off_out,
-                unsigned long long len, unsigned int flags)
+ssize_t
+copy_file_range(int fd_in, off_t *off_in,
+                int fd_out, off_t *off_out,
+                size_t len, unsigned int flags)
 {
     (void)fd_in; (void)off_in; (void)fd_out; (void)off_out;
     (void)len; (void)flags;
@@ -685,7 +685,7 @@ posix_spawn_file_actions_addfchdir(posix_spawn_file_actions_t *fact, int fildes)
  * ================================================================== */
 
 int
-fallocate(int fd, int mode, long long offset, long long len)
+fallocate(int fd, int mode, off_t offset, off_t len)
 {
     (void)fd; (void)mode; (void)offset; (void)len;
     errno = ENOSYS;

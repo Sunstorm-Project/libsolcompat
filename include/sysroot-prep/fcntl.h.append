@@ -58,20 +58,23 @@
 #endif
 
 /* POSIX 2008 file-control APIs declared in <fcntl.h> that Solaris 7
- * lacks. libsolcompat provides runtime implementations. */
+ * lacks. libsolcompat provides runtime implementations. Signatures
+ * use off_t to match the src/filesystem.c implementations exactly;
+ * off_t comes from <sys/types.h> which fcntl.h includes. */
+#include <sys/types.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
 int openat(int dirfd, const char *pathname, int flags, ...);
 
-/* posix_fallocate — GCC 15.2's gcc/cp/module.cc requires this. Uses
- * off_t; we declare it with long long to avoid pulling stdint here
- * (fixincludes may process fcntl.h before stdint.h is available). */
-int posix_fallocate(int fd, long long offset, long long len);
+/* posix_fallocate — POSIX 2008. GCC 15.2's gcc/cp/module.cc calls it
+ * unconditionally. Solaris 7 lacks it; libsolcompat implements via
+ * ftruncate + write-extension. */
+int posix_fallocate(int fd, off_t offset, off_t len);
 
-/* posix_fadvise hints — xz / file_io.c uses POSIX_FADV_RANDOM.
- * Values mirror Linux <fcntl.h>; libsolcompat's posix_fadvise is a
- * no-op (compliant when advice isn't acted upon). */
+/* posix_fadvise hints — POSIX 2008. Solaris 7 lacks them. xz
+ * references POSIX_FADV_RANDOM; values mirror Linux. libsolcompat's
+ * implementation is a compliant no-op. */
 #ifndef POSIX_FADV_NORMAL
 #define POSIX_FADV_NORMAL     0
 #define POSIX_FADV_RANDOM     1
@@ -81,12 +84,11 @@ int posix_fallocate(int fd, long long offset, long long len);
 #define POSIX_FADV_NOREUSE    5
 #endif
 
-int posix_fadvise(int fd, long long offset, long long len, int advice);
+int posix_fadvise(int fd, off_t offset, off_t len, int advice);
 
-/* fallocate — Linux syscall. Solaris 7 lacks it; libsolcompat ships a
- * stub returning -1/ENOSYS so gnulib/rsync/sqlite fallback paths
- * (posix_fallocate or ftruncate) activate. FALLOC_FL_* constants
- * mirror Linux values — rsync's hole-punching path references them. */
+/* fallocate — Linux syscall. Solaris 7 lacks it; libsolcompat ships
+ * an ENOSYS stub so gnulib/rsync/sqlite fallback paths activate.
+ * FALLOC_FL_* macros mirror Linux values. */
 #ifndef FALLOC_FL_KEEP_SIZE
 #define FALLOC_FL_KEEP_SIZE      0x01
 #define FALLOC_FL_PUNCH_HOLE     0x02
@@ -94,7 +96,7 @@ int posix_fadvise(int fd, long long offset, long long len, int advice);
 #define FALLOC_FL_ZERO_RANGE     0x10
 #define FALLOC_FL_INSERT_RANGE   0x20
 #endif
-int fallocate(int fd, int mode, long long offset, long long len);
+int fallocate(int fd, int mode, off_t offset, off_t len);
 #ifdef __cplusplus
 }
 #endif
