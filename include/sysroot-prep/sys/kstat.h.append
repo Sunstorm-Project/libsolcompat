@@ -1,0 +1,38 @@
+/*
+ * sys/kstat.h.append — Solaris 8+ kstat additions for Solaris 7
+ *
+ * Solaris 8 added KSTAT_DATA_STRING (data_type tag for variable-length
+ * strings in kstat_named_t) and the KSTAT_NAMED_STR_PTR macro to
+ * extract them. Solaris 7 has data types 0..8 but no STRING type.
+ *
+ * gcc's gcc/config/sparc/driver-sparc.cc uses both unconditionally when
+ * walking CPU brand-string kstats. With these defined to a non-matching
+ * sentinel value (9) and a syntactically-valid extractor macro, the
+ * runtime check `data_type == KSTAT_DATA_STRING` simply never fires on
+ * Solaris 7 — which is the correct behavior since no kstat entry
+ * actually carries a STRING-typed value here.
+ *
+ * Was previously handled by toolchain/patches.sh Patch 12 (an #ifdef
+ * wrap around the KSTAT_DATA_STRING usage). Superseded by these
+ * declarations.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_SYS_KSTAT_H_APPEND
+#define _SOLCOMPAT_SYS_KSTAT_H_APPEND
+
+#ifndef KSTAT_DATA_STRING
+#define KSTAT_DATA_STRING 9
+#endif
+
+/* Extract char* from a kstat_named_t whose data_type is
+ * KSTAT_DATA_STRING. On Solaris 8+ this is value.str.addr.ptr; on
+ * Solaris 7 the union has a char[16] member at value.c, which is
+ * the closest valid lvalue. Dead at runtime since KSTAT_DATA_STRING
+ * is never matched on Solaris 7. */
+#ifndef KSTAT_NAMED_STR_PTR
+#define KSTAT_NAMED_STR_PTR(knptr) ((knptr)->value.c)
+#endif
+
+#endif /* _SOLCOMPAT_SYS_KSTAT_H_APPEND */
