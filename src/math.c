@@ -343,6 +343,28 @@ long long int llrintl(long double x) { return llrint((double)x); }
 long long int llroundl(long double x){ return llround((double)x); }
 
 /* ================================================================
+ * nexttoward family — Solaris 7 lacks these
+ * On SPARC ILP32 long double == double, so they reduce to nextafter.
+ * ================================================================ */
+double      nexttoward (double x,      long double y) { return nextafter(x, (double)y); }
+float       nexttowardf(float x,       long double y) { return nextafterf(x, (float)y); }
+long double nexttowardl(long double x, long double y) { return nextafterl(x, y); }
+
+/* ================================================================
+ * nan(const char *) — C99. Solaris 7 has nanf/nanl but not the
+ * double-returning nan(). Tag string is ignored; return a quiet NaN.
+ * ================================================================ */
+double
+nan(const char *tagp)
+{
+    (void)tagp;
+    static const unsigned long long nan_bits = 0x7ff8000000000000ULL;
+    double v;
+    memcpy(&v, &nan_bits, sizeof v);
+    return v;
+}
+
+/* ================================================================
  * C99 complex math
  * Solaris 7 has no complex math support in libm.
  * ================================================================ */
