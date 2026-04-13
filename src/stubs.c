@@ -223,7 +223,7 @@ posix_madvise(void *address, size_t length, int advice)
  * POSIX.1-2008. Solaris 7 has nl_langinfo() but no per-thread variant.
  */
 char *
-nl_langinfo_l(int item, void *locale)
+nl_langinfo_l(int item, locale_t locale)
 {
     (void)locale;
     return nl_langinfo(item);

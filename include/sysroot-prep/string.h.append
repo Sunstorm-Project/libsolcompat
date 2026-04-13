@@ -61,7 +61,7 @@ void explicit_bzero(void *s, size_t n);
 /* POSIX.1-2008 strerror_l — locale-aware strerror */
 #ifndef _SOLCOMPAT_LOCALE_T
 #define _SOLCOMPAT_LOCALE_T
-typedef void *locale_t;
+typedef struct _sol_locale_s *locale_t;
 #endif
 char *strerror_l(int errnum, locale_t loc);
 

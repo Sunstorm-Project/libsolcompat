@@ -246,7 +246,7 @@ strsignal(int signum)
  * Solaris 7 has no per-thread locales, so we just delegate to strerror.
  */
 char *
-strerror_l(int errnum, void *locale)
+strerror_l(int errnum, locale_t locale)
 {
     (void)locale;
     return strerror(errnum);

@@ -38,9 +38,9 @@ int pthread_setname_np(pthread_t thread, const char *name);
  * actual Solaris compiles where they belong.
  */
 #ifdef __sun
-#ifndef _SOLCOMPAT_LOCALE_T_DEFINED
-#define _SOLCOMPAT_LOCALE_T_DEFINED
-typedef void *locale_t;
+#ifndef _SOLCOMPAT_LOCALE_T
+#define _SOLCOMPAT_LOCALE_T
+typedef struct _sol_locale_s *locale_t;
 #endif
 
 #ifndef LC_GLOBAL_LOCALE

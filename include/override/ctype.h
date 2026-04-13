@@ -29,7 +29,10 @@ extern int isblank(int c);
  * search — they must see the glibc locale_t typedef, not ours).
  */
 #ifdef __sun
-typedef void *locale_t;  /* forward — real definition in stubs.h */
+#ifndef _SOLCOMPAT_LOCALE_T
+#define _SOLCOMPAT_LOCALE_T
+typedef struct _sol_locale_s *locale_t;
+#endif
 extern int isalnum_l(int, locale_t);
 extern int isalpha_l(int, locale_t);
 extern int isblank_l(int, locale_t);

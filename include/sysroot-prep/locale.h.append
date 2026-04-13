@@ -29,9 +29,9 @@ extern "C" {
 
 /* POSIX 2008 opaque per-thread locale handle. Implemented as a void*
  * in libsolcompat; callers should treat it as an opaque pointer. */
-#ifndef _LOCALE_T_DEFINED
-#define _LOCALE_T_DEFINED
-typedef void *locale_t;
+#ifndef _SOLCOMPAT_LOCALE_T
+#define _SOLCOMPAT_LOCALE_T
+typedef struct _sol_locale_s *locale_t;
 #endif
 
 /* POSIX 2008 LC_*_MASK bits. Values must match libsolcompat's
