@@ -191,7 +191,7 @@ timegm(struct tm *tm)
  * Only TIME_UTC (base=1) is required by C11.
  */
 int
-timespec_get(struct timespec *ts, int base)
+_solcompat_timespec_get(struct timespec *ts, int base)
 {
     if (base != 1)  /* TIME_UTC = 1 */
         return 0;

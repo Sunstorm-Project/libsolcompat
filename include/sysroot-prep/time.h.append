@@ -45,12 +45,24 @@ extern "C" {
  * caused 'conflicting types' errors due to clockid_t typedef timing
  * in the sysroot header parse. */
 
-/* C11 TIME_UTC base for timespec_get.
- * NOTE: timespec_get itself is declared by GCC 15's include-fixed/time.h
- * automatically for C11 compliance — do not redeclare here. */
+/* C11 timespec_get + TIME_UTC base. Solaris 7's time.h has neither.
+ * libstdc++'s ctime needs `::timespec_get` visible. Inline forwarder
+ * pattern (calls _solcompat_timespec_get from libsolcompat src/clock.c)
+ * sidesteps the fixincludes-attribute mismatch that broke a plain
+ * extern. struct timespec must be fully defined before our forwarder —
+ * sys/types.h alone doesn't pull in the full struct on Solaris 7
+ * (it's in sys/time_impl.h), so include it explicitly. Without this
+ * include the parameter type is parsed as a forward-declared
+ * struct timespec, conflicting with the real type at clock.c's
+ * definition site. */
+#include <sys/time_impl.h>
 #ifndef TIME_UTC
 #define TIME_UTC 1
 #endif
+extern int _solcompat_timespec_get(struct timespec *ts, int base);
+static __inline__ int timespec_get(struct timespec *ts, int base) {
+    return _solcompat_timespec_get(ts, base);
+}
 
 #ifdef __cplusplus
 }
