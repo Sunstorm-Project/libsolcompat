@@ -1,0 +1,41 @@
+/*
+ * sys/types.h.append — modernize caddr_t for Solaris 7
+ *
+ * Solaris 7 declares `typedef char *caddr_t;` and uses caddr_t in the
+ * mmap/munmap signatures in <sys/mman.h>. Modern POSIX uses `void *`
+ * for these APIs, and modern C/C++ code (gcc itself, at minimum)
+ * passes void* values into munmap, hitting a void*→char* mismatch
+ * that's an error in C++ even with -fpermissive.
+ *
+ * Macro-redefine caddr_t as `void *` so the entire downstream parse
+ * sees the modern type. The Solaris kernel ABI for caddr_t is "an
+ * opaque address" — char* vs void* makes no calling-convention or
+ * struct-layout difference on SPARC ILP32, so this is safe at the
+ * binary boundary.
+ *
+ * Risk: any code that does pointer arithmetic on a caddr_t variable
+ * (e.g. `caddr_t buf; buf++;` or `caddr_t b; b[i]`) breaks because
+ * void* arithmetic isn't standard C. A 2026-04-13 grep across the
+ * SPARC sources/ tree found zero such usages in our package set,
+ * and zero in our in-tree drivers (sparc-fb / sparc-audio /
+ * sparc-midi / tcx-thc). If a future package fails on this, restore
+ * the brute-force cast Patch 11 in toolchain/patches.sh — it's been
+ * removed in the same change that introduced this define, with
+ * the rationale captured in the patch removal commit.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_SYS_TYPES_H_APPEND
+#define _SOLCOMPAT_SYS_TYPES_H_APPEND
+
+#ifdef __sun
+/* The Solaris 7 typedef has already been processed by the time this
+ * append is included. The macro redefinition shadows it in all
+ * downstream source — preprocessor identifier substitution rewrites
+ * `caddr_t` tokens to `void *` before the parser sees them, so the
+ * earlier typedef becomes unreachable. */
+#define caddr_t void *
+#endif /* __sun */
+
+#endif /* _SOLCOMPAT_SYS_TYPES_H_APPEND */
