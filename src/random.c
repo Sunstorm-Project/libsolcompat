@@ -121,6 +121,28 @@ getentropy(void *buffer, size_t length)
 }
 
 /*
+ * getrandom — Linux 3.17 syscall interface. Solaris 7 has no equivalent.
+ * We delegate to get_random_bytes() (which reads /dev/urandom) and
+ * ignore the flags — all three (GRND_NONBLOCK, GRND_RANDOM,
+ * GRND_INSECURE) are approximately satisfied because /dev/urandom is
+ * non-blocking and pseudo-random on every modern Unix. Returns the
+ * number of bytes written, or -1 on error.
+ *
+ * gnulib's getrandom.c and many packages (bash, coreutils, Python,
+ * git, openssl, openssh, gettext, sudo, wget) include <sys/random.h>
+ * unconditionally and call this.
+ */
+ssize_t
+getrandom(void *buf, size_t buflen, unsigned int flags)
+{
+    (void)flags;
+    if (get_random_bytes(buf, buflen) == 0)
+        return (ssize_t)buflen;
+    fallback_random_bytes(buf, buflen);
+    return (ssize_t)buflen;
+}
+
+/*
  * arc4random family
  *
  * Uses ChaCha20 when backed by real entropy,

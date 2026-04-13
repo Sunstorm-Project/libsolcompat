@@ -516,3 +516,194 @@ getgrouplist(const char *user, gid_t group, gid_t *groups, int *ngroups)
     *ngroups = group_count;
     return result;
 }
+
+/*
+ * issetugid — BSD/POSIX extension. Return 1 if the current process is
+ * running with elevated privileges (real/effective uid or gid differ).
+ * Solaris 7 has no equivalent; gnulib and many packages call this
+ * unguarded. The check mirrors what glibc's issetugid does on systems
+ * without AT_SECURE: compare real vs effective uids/gids.
+ */
+int
+issetugid(void)
+{
+    return (getuid() != geteuid()) || (getgid() != getegid());
+}
+
+/* ==================================================================
+ * pthread_spinlock emulation — maps spin to mutex. Correct under
+ * POSIX semantics; trades the perf characteristic of a true spin
+ * for portability. All 5 functions return pthread_mutex_* return
+ * codes directly.
+ * ================================================================== */
+
+#include <pthread.h>
+
+int
+pthread_spin_init(pthread_spinlock_t *lock, int pshared)
+{
+    pthread_mutexattr_t attr;
+    int rv;
+    (void)pshared;  /* libsolcompat always uses process-private */
+    if ((rv = pthread_mutexattr_init(&attr)) != 0)
+        return rv;
+    rv = pthread_mutex_init(&lock->_m, &attr);
+    pthread_mutexattr_destroy(&attr);
+    return rv;
+}
+
+int pthread_spin_destroy(pthread_spinlock_t *lock) { return pthread_mutex_destroy(&lock->_m); }
+int pthread_spin_lock(pthread_spinlock_t *lock)    { return pthread_mutex_lock(&lock->_m); }
+int pthread_spin_trylock(pthread_spinlock_t *lock) { return pthread_mutex_trylock(&lock->_m); }
+int pthread_spin_unlock(pthread_spinlock_t *lock)  { return pthread_mutex_unlock(&lock->_m); }
+
+/* ==================================================================
+ * pthread_rwlock_timed{rd,wr}lock — POSIX 2008 timed rwlock variants.
+ * Solaris 7 has pthread_rwlock_{rd,wr}lock (blocking) and _try* (non-
+ * blocking). We emulate the timed versions via a try-then-sleep loop
+ * with 10ms polling granularity until the abs_timeout is reached.
+ * ================================================================== */
+
+static int
+rwlock_timed_common(pthread_rwlock_t *rwlock,
+                    const struct timespec *abs_timeout,
+                    int (*try_lock)(pthread_rwlock_t *))
+{
+    int rv;
+    struct timespec now;
+    const long poll_ns = 10L * 1000 * 1000;  /* 10ms */
+
+    if (abs_timeout == NULL)
+        return EINVAL;
+
+    for (;;) {
+        rv = try_lock(rwlock);
+        if (rv != EBUSY)
+            return rv;
+        if (clock_gettime(CLOCK_REALTIME, &now) != 0)
+            return errno;
+        if (now.tv_sec > abs_timeout->tv_sec ||
+            (now.tv_sec == abs_timeout->tv_sec && now.tv_nsec >= abs_timeout->tv_nsec))
+            return ETIMEDOUT;
+        {
+            struct timespec ts = { 0, poll_ns };
+            nanosleep(&ts, NULL);
+        }
+    }
+}
+
+int
+pthread_rwlock_timedrdlock(pthread_rwlock_t *rwlock, const struct timespec *abs_timeout)
+{
+    return rwlock_timed_common(rwlock, abs_timeout, pthread_rwlock_tryrdlock);
+}
+
+int
+pthread_rwlock_timedwrlock(pthread_rwlock_t *rwlock, const struct timespec *abs_timeout)
+{
+    return rwlock_timed_common(rwlock, abs_timeout, pthread_rwlock_trywrlock);
+}
+
+/* ==================================================================
+ * Robust-mutex stubs — libsolcompat has no real robust mutex support.
+ * We accept attr-level configuration but silently map to stalled
+ * (default) behavior. Matches gnulib's fallback expectation.
+ * ================================================================== */
+
+int
+pthread_mutexattr_setrobust(pthread_mutexattr_t *attr, int robustness)
+{
+    (void)attr;
+    if (robustness != PTHREAD_MUTEX_STALLED && robustness != PTHREAD_MUTEX_ROBUST)
+        return EINVAL;
+    return 0;
+}
+
+int
+pthread_mutexattr_getrobust(const pthread_mutexattr_t *attr, int *robustness)
+{
+    (void)attr;
+    if (robustness == NULL)
+        return EINVAL;
+    *robustness = PTHREAD_MUTEX_STALLED;
+    return 0;
+}
+
+int
+pthread_mutex_consistent(pthread_mutex_t *mutex)
+{
+    (void)mutex;
+    /* Stalled mutexes can't go inconsistent; return EINVAL per POSIX
+     * "The mutex object referenced by mutex is not protecting a
+     * consistent state". gnulib treats EINVAL as "no-op OK". */
+    return EINVAL;
+}
+
+/* ==================================================================
+ * copy_file_range — Linux 4.5 syscall stub returning -1/ENOSYS.
+ * gnulib's copy-file-range.c module, when linked, provides a fallback
+ * using read()/write(). Our stub ensures configure probes compile.
+ * ================================================================== */
+
+long long
+copy_file_range(int fd_in, long long *off_in,
+                int fd_out, long long *off_out,
+                unsigned long long len, unsigned int flags)
+{
+    (void)fd_in; (void)off_in; (void)fd_out; (void)off_out;
+    (void)len; (void)flags;
+    errno = ENOSYS;
+    return -1;
+}
+
+/* ==================================================================
+ * posix_spawn_file_actions_addchdir / _addfchdir — POSIX 2018. Stubs
+ * returning ENOSYS; gnulib's execute.c and other callers fall back to
+ * fork+chdir+exec when unavailable. A real implementation would need
+ * to extend the __actions list format with a chdir op; defer until a
+ * consumer actually breaks on the fallback.
+ * ================================================================== */
+
+int
+posix_spawn_file_actions_addchdir(posix_spawn_file_actions_t *fact, const char *path)
+{
+    (void)fact; (void)path;
+    return ENOSYS;
+}
+
+int
+posix_spawn_file_actions_addfchdir(posix_spawn_file_actions_t *fact, int fildes)
+{
+    (void)fact; (void)fildes;
+    return ENOSYS;
+}
+
+/* ==================================================================
+ * fallocate — Linux syscall stub. Packages that use it are expected
+ * to fall back to posix_fallocate (which libsolcompat does implement
+ * in filesystem.c).
+ * ================================================================== */
+
+int
+fallocate(int fd, int mode, long long offset, long long len)
+{
+    (void)fd; (void)mode; (void)offset; (void)len;
+    errno = ENOSYS;
+    return -1;
+}
+
+/* ==================================================================
+ * prlimit — Linux per-pid resource limit syscall. Solaris 7 has
+ * getrlimit/setrlimit (current process only). Stub returns ENOSYS;
+ * Python/glib/sudo callers are guarded by HAVE_PRLIMIT.
+ * ================================================================== */
+
+struct rlimit;  /* forward-declared; sys/resource.h provides definition */
+
+int
+prlimit(pid_t pid, int resource, const struct rlimit *new_limit, struct rlimit *old_limit)
+{
+    (void)pid; (void)resource; (void)new_limit; (void)old_limit;
+    errno = ENOSYS;
+    return -1;
+}

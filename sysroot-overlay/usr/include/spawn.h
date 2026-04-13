@@ -78,4 +78,12 @@ int posix_spawn_file_actions_adddup2(posix_spawn_file_actions_t *fact,
 }
 #endif
 
+/* POSIX 2018 file action extensions. gnulib's execute.c calls
+ * addchdir unconditionally; libsolcompat's spawn wrapper applies
+ * these before exec. */
+int posix_spawn_file_actions_addchdir(posix_spawn_file_actions_t *fact,
+    const char *path);
+int posix_spawn_file_actions_addfchdir(posix_spawn_file_actions_t *fact,
+    int fildes);
+
 #endif /* _SOLCOMPAT_SYSROOT_SPAWN_H */

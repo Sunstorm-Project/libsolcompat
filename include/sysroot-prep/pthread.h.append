@@ -29,6 +29,39 @@ int pthread_getname_np(pthread_t thread, char *name, size_t len);
 int pthread_condattr_setclock(pthread_condattr_t *attr, clockid_t clock_id);
 int pthread_condattr_getclock(const pthread_condattr_t *attr, clockid_t *clock_id);
 
+/* pthread_spinlock — POSIX 2001. Absent from Solaris 7 libpthread.
+ * libsolcompat maps spin_* to mutex_* for correctness; callers get
+ * standards-compliant behavior even if they pay mutex cost. */
+typedef struct { pthread_mutex_t _m; } pthread_spinlock_t;
+int pthread_spin_init(pthread_spinlock_t *lock, int pshared);
+int pthread_spin_destroy(pthread_spinlock_t *lock);
+int pthread_spin_lock(pthread_spinlock_t *lock);
+int pthread_spin_trylock(pthread_spinlock_t *lock);
+int pthread_spin_unlock(pthread_spinlock_t *lock);
+#ifndef PTHREAD_PROCESS_PRIVATE
+#define PTHREAD_PROCESS_PRIVATE 0
+#define PTHREAD_PROCESS_SHARED  1
+#endif
+
+/* pthread_rwlock_timed{rd,wr}lock — POSIX 2008. Absent from Solaris 7.
+ * libsolcompat emulates with pthread_rwlock_{rd,wr}lock + timed retry. */
+int pthread_rwlock_timedrdlock(pthread_rwlock_t *rwlock,
+                               const struct timespec *abs_timeout);
+int pthread_rwlock_timedwrlock(pthread_rwlock_t *rwlock,
+                               const struct timespec *abs_timeout);
+
+/* pthread_mutexattr_setrobust / pthread_mutex_consistent — POSIX 2008
+ * robust-mutex API. Solaris 7 has no robust mutexes. libsolcompat
+ * provides succeed-but-lie stubs (matching gnulib's fallback) so
+ * configure probes compile; actual robust behavior is a no-op. */
+#ifndef PTHREAD_MUTEX_STALLED
+#define PTHREAD_MUTEX_STALLED 0
+#define PTHREAD_MUTEX_ROBUST  1
+#endif
+int pthread_mutexattr_setrobust(pthread_mutexattr_t *attr, int robustness);
+int pthread_mutexattr_getrobust(const pthread_mutexattr_t *attr, int *robustness);
+int pthread_mutex_consistent(pthread_mutex_t *mutex);
+
 #ifdef __cplusplus
 }
 #endif

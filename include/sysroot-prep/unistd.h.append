@@ -50,6 +50,19 @@ unsigned int arc4random_uniform(unsigned int upper_bound);
 #define _SC_SYMLOOP_MAX 152
 #endif
 
+/* issetugid — BSD extension used by gnulib secure_getenv and sudo/
+ * openssl/openssh privilege guards. libsolcompat implementation in
+ * src/process.c compares real vs effective uid/gid. */
+int issetugid(void);
+
+/* copy_file_range — Linux 4.5 syscall. Solaris 7 lacks it; libsolcompat
+ * ships a stub returning -1/ENOSYS so gnulib's copy-file-range.c
+ * fallback path is taken. Declaration here prevents configure probe
+ * compile failures. */
+long long copy_file_range(int fd_in, long long *off_in,
+                          int fd_out, long long *off_out,
+                          unsigned long long len, unsigned int flags);
+
 #ifdef __cplusplus
 }
 #endif

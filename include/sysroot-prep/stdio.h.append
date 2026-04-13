@@ -67,6 +67,16 @@ int vscanf(const char *format, va_list ap);
 int vfscanf(FILE *stream, const char *format, va_list ap);
 int vsscanf(const char *str, const char *format, va_list ap);
 
+/* fseeko / ftello — POSIX 2008 large-file I/O. Solaris 7 EXPORTS both
+ * from libc (SUNW_1.1 weak symbols) but its stdio.h hides the
+ * declarations behind `#if defined(_LARGEFILE_SOURCE) || defined(_XPG5)`.
+ * Many gnulib-using packages (coreutils, git, curl, vim, gettext,
+ * rsync, xz, ncurses, sudo, wget, Python, ...) call these without
+ * setting _LARGEFILE_SOURCE first. Declaring them here makes the
+ * declaration unconditional — link step finds the Solaris symbols. */
+int fseeko(FILE *stream, long long offset, int whence);
+long long ftello(FILE *stream);
+
 #ifdef __cplusplus
 }
 #endif
