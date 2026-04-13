@@ -43,8 +43,9 @@ pthread_getname_np(pthread_t thread, char *name, size_t len)
  * patterns, which is the most common use case.
  */
 
-/* Our locale_t is just a pointer to a malloc'd locale name string */
-typedef void *solcompat_locale_t;
+/* locale_t is an opaque 'struct _sol_locale_s *' in our headers. We
+   actually stash a malloc'd locale-name string behind it and cast at
+   the boundary — struct _sol_locale_s is never defined anywhere. */
 
 #ifndef HAVE_USELOCALE
 
@@ -62,14 +63,14 @@ mask_to_category(int mask)
     return LC_ALL;
 }
 
-void *
-newlocale(int category_mask, const char *locale, void *base)
+locale_t
+newlocale(int category_mask, const char *locale, locale_t base)
 {
     char *loc;
     (void)category_mask;
 
     if (base) {
-        free(base);
+        free((void *)base);
     }
 
     loc = strdup(locale ? locale : "C");
@@ -78,18 +79,18 @@ newlocale(int category_mask, const char *locale, void *base)
         return NULL;
     }
 
-    return (void *)loc;
+    return (locale_t)loc;
 }
 
-void *
-uselocale(void *newloc)
+locale_t
+uselocale(locale_t newloc)
 {
-    static void *current = NULL;
-    void *old = current;
+    static locale_t current = NULL;
+    locale_t old = current;
 
-    if (newloc == (void *)-1 /* LC_GLOBAL_LOCALE */) {
+    if (newloc == (locale_t)-1 /* LC_GLOBAL_LOCALE */) {
         /* Query only */
-        return old ? old : (void *)-1;
+        return old ? old : (locale_t)-1;
     }
 
     if (newloc) {
@@ -98,20 +99,20 @@ uselocale(void *newloc)
         current = newloc;
     }
 
-    return old ? old : (void *)-1;
+    return old ? old : (locale_t)-1;
 }
 
 void
-freelocale(void *locobj)
+freelocale(locale_t locobj)
 {
-    if (locobj && locobj != (void *)-1)
-        free(locobj);
+    if (locobj && locobj != (locale_t)-1)
+        free((void *)locobj);
 }
 
-void *
-duplocale(void *locobj)
+locale_t
+duplocale(locale_t locobj)
 {
-    if (!locobj || locobj == (void *)-1)
+    if (!locobj || locobj == (locale_t)-1)
         return newlocale(0, "C", NULL);
 
     return newlocale(0, (const char *)locobj, NULL);
