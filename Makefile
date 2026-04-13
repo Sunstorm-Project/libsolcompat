@@ -62,6 +62,7 @@ SRCS = src/snprintf.c \
        src/atomic_ops.c \
        src/fenv.c \
        src/cxa_atexit.c \
+       src/error.c \
        src/dl_iterate_phdr.c \
        src/complex_math.c \
        src/ssp.c

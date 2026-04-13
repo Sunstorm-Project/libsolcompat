@@ -21,7 +21,10 @@
 extern "C" {
 #endif
 
+#ifndef _SOLCOMPAT_LOCALE_T
+#define _SOLCOMPAT_LOCALE_T
 typedef struct _sol_locale_s *locale_t;
+#endif
 
 #ifndef LC_GLOBAL_LOCALE
 #define LC_GLOBAL_LOCALE ((locale_t)-1)

@@ -25,10 +25,11 @@ extern "C" {
 int isblank(int c);
 #endif
 
-/* locale_t forward declaration — opaque pointer, no real locale support */
+/* locale_t forward declaration — must match xlocale.h's typedef exactly,
+   guarded so including both headers doesn't double-declare. */
 #ifndef _SOLCOMPAT_LOCALE_T
 #define _SOLCOMPAT_LOCALE_T
-typedef void *locale_t;
+typedef struct _sol_locale_s *locale_t;
 #endif
 
 /* POSIX.1-2008 locale-aware character classification */

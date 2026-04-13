@@ -13,6 +13,11 @@
 #ifndef _SOLCOMPAT_ARPA_INET_H_APPEND
 #define _SOLCOMPAT_ARPA_INET_H_APPEND
 
+/* socklen_t lives in <sys/socket.h> on Solaris 7 and the system
+   <arpa/inet.h> does not transitively pull it in (pre-POSIX-2001).
+   Include explicitly so our inet_ntop prototype parses. */
+#include <sys/socket.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif

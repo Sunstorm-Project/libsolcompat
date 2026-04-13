@@ -22,6 +22,15 @@
 
 #ifdef __sun
 #define caddr_t void *
+
+/* Solaris 7 puts lwpid_t in <sys/lwp.h>, not sys/types.h. Modern code
+   (unixtop, htop, libuv) expects it visible from sys/types.h per
+   POSIX 2008. Guard against double-typedef if sys/lwp.h is also
+   included. */
+#ifndef _SOLCOMPAT_LWPID_T
+#define _SOLCOMPAT_LWPID_T
+typedef int lwpid_t;
+#endif
 #endif
 
 #endif /* _SOLCOMPAT_SYS_TYPES_H_APPEND */
