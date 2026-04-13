@@ -149,9 +149,9 @@ _Bool __atomic_is_lock_free(unsigned int size, const volatile void *ptr)
  * On single-CPU SPARC, simple load/store is sufficient.
  * ================================================================ */
 
-int
+_Bool
 __atomic_compare_exchange_1(volatile void *ptr, void *expected,
-    unsigned char desired, int weak, int success_memorder,
+    unsigned char desired, _Bool weak, int success_memorder,
     int failure_memorder)
 {
 	volatile unsigned char *p = (volatile unsigned char *)ptr;
@@ -229,9 +229,9 @@ __atomic_fetch_xor_1(volatile void *ptr, unsigned char val, int memorder)
  * On single-CPU SPARC, simple load/store is sufficient.
  * ================================================================ */
 
-int
+_Bool
 __atomic_compare_exchange_2(volatile void *ptr, void *expected,
-    unsigned short desired, int weak, int success_memorder,
+    unsigned short desired, _Bool weak, int success_memorder,
     int failure_memorder)
 {
 	volatile unsigned short *target_ptr = (volatile unsigned short *)ptr;
@@ -369,9 +369,9 @@ __atomic_exchange_4(volatile void *ptr, uint32_t val, int memorder)
 	return old;
 }
 
-int
+_Bool
 __atomic_compare_exchange_4(volatile void *ptr, void *expected,
-    uint32_t desired, int weak, int success_memorder, int failure_memorder)
+    uint32_t desired, _Bool weak, int success_memorder, int failure_memorder)
 {
 	uint32_t exp = *(uint32_t *)expected;
 	uint32_t old = cas32((uint32_t *)ptr, exp, desired);
@@ -445,9 +445,9 @@ __atomic_exchange_8(volatile void *ptr, uint64_t val, int memorder)
 	return old;
 }
 
-int
+_Bool
 __atomic_compare_exchange_8(volatile void *ptr, void *expected,
-    uint64_t desired, int weak, int success_memorder, int failure_memorder)
+    uint64_t desired, _Bool weak, int success_memorder, int failure_memorder)
 {
 	uint64_t exp = *(uint64_t *)expected;
 	uint64_t old = cas64((uint64_t *)ptr, exp, desired);
