@@ -38,23 +38,11 @@ extern "C" {
 #define TIMER_ABSTIME 0x1
 #endif
 
-/* clock_gettime, clock_getres, clock_nanosleep, and timegm are
- * provided by libsolcompat at link time. Their declarations come from
- * Solaris 7's own time.h (clock_gettime/clock_getres) or are implicit
- * via GCC builtins.  We do not redeclare them here — prior attempts
- * caused 'conflicting types' errors due to clockid_t typedef timing
- * in the sysroot header parse. */
-
-/* C11 timespec_get + TIME_UTC base. Solaris 7's time.h has neither.
- * libstdc++'s ctime needs `::timespec_get` visible. Inline forwarder
- * pattern (calls _solcompat_timespec_get from libsolcompat src/clock.c)
- * sidesteps the fixincludes-attribute mismatch that broke a plain
- * extern. struct timespec must be fully defined before our forwarder —
- * sys/types.h alone doesn't pull in the full struct on Solaris 7
- * (it's in sys/time_impl.h), so include it explicitly. Without this
- * include the parameter type is parsed as a forward-declared
- * struct timespec, conflicting with the real type at clock.c's
- * definition site. */
+/* C11 timespec_get is exposed as an inline forwarder to
+ * _solcompat_timespec_get (libsolcompat src/clock.c). A plain extern
+ * collides with attributes fixincludes adds. struct timespec needs
+ * sys/time_impl.h on Solaris 7 — sys/types.h carries only a forward
+ * declaration. */
 #include <sys/time_impl.h>
 #ifndef TIME_UTC
 #define TIME_UTC 1

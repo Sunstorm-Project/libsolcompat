@@ -89,11 +89,7 @@ extern unsigned long getauxval(unsigned long type);
 
 /* getisax — Solaris 9+ ISA extension query. Solaris 7 lacks it.
  * libsolcompat's src/hwcap.c provides a stub returning 0 (no
- * extensions), matching what microSPARC-II actually supports.
- * libgcc's libgcc/config/sparc/sol2-unwind.h calls this directly;
- * without the declaration the libgcc compile fails with implicit
- * declaration. Was previously handled by toolchain/patches.sh
- * Patch 7a — superseded by this declaration. */
+ * extensions), matching what microSPARC-II actually supports. */
 #include <stdint.h>
 extern int getisax(uint32_t *array, int n);
 

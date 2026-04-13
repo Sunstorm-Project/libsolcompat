@@ -83,7 +83,6 @@ double fmax(double, double);  double tgamma(double);
 double nearbyint(double);
 long lrint(double);  long lround(double);
 long long llrint(double);  long long llround(double);
-double nan(const char *);
 double remquo(double, double, int *);
 double scalbln(double, long);
 double cbrt(double);  double copysign(double, double);

@@ -12,10 +12,6 @@
  * Solaris 7 — which is the correct behavior since no kstat entry
  * actually carries a STRING-typed value here.
  *
- * Was previously handled by toolchain/patches.sh Patch 12 (an #ifdef
- * wrap around the KSTAT_DATA_STRING usage). Superseded by these
- * declarations.
- *
  * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
  */
 

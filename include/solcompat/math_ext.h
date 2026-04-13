@@ -107,7 +107,6 @@ long int lrint(double x);
 long int lround(double x);
 long long int llrint(double x);
 long long int llround(double x);
-double nan(const char *tagp);
 double remquo(double x, double y, int *quo);
 double scalbln(double x, long int n);
 /* C99 fused multiply-add — declarations only, no implementation in

@@ -58,18 +58,9 @@ extern "C" {
     char *mkdtemp(char *);
     long long llabs(long long);
     void *aligned_alloc(__solcompat_size_t, __solcompat_size_t);
-    /*
-     * quick_exit / at_quick_exit deliberately omitted — libsolcompat
-     * does not implement them and Solaris 7 libc lacks them.  libstdc++'s
-     * cstdlib gates `using ::quick_exit` on _GLIBCXX_HAVE_QUICK_EXIT, so
-     * libstdc++'s own configure correctly skips the using-declaration
-     * when the functions are missing.  Declaring them here — and in
-     * particular the earlier `void at_quick_exit(void (*)(void))` with
-     * the wrong return type (the C11 signature is int, not void) — only
-     * created a link-time trap and a per-package `conflicting declaration`
-     * diagnostic against the sysroot's stdlib.h when gnuchess compiled
-     * cstdlib with both chains in scope at once.
-     */
+    /* quick_exit / at_quick_exit omitted — Solaris 7 libc lacks them
+     * and libstdc++'s cstdlib gates the using-declaration on
+     * _GLIBCXX_HAVE_QUICK_EXIT, so configure correctly skips it. */
 }
 
 #endif /* __sun */

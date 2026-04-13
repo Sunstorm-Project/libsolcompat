@@ -350,14 +350,6 @@ double      nexttoward (double x,      long double y) { return nextafter(x, (dou
 float       nexttowardf(float x,       long double y) { return nextafterf(x, (float)y); }
 long double nexttowardl(long double x, long double y) { return nextafterl(x, y); }
 
-/* nan(const char *) — not defined here. GCC 15 treats `nan` as a
- * builtin (__builtin_nan) and rejects a user definition as conflicting
- * with the builtin's "definition". Compile-time uses resolve through
- * the builtin; the math.h.append prototype keeps source-level
- * compatibility. If a runtime symbol is ever genuinely needed, we'll
- * mark the definition with __attribute__((noinline)) and compile with
- * -fno-builtin-nan. */
-
 /* ================================================================
  * C99 complex math
  * Solaris 7 has no complex math support in libm.
