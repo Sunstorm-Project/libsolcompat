@@ -14,6 +14,30 @@
 #ifndef _SOLCOMPAT_SYS_SOCKET_H_APPEND
 #define _SOLCOMPAT_SYS_SOCKET_H_APPEND
 
+/* Alias POSIX msghdr field names onto Solaris 7's BSD-legacy struct.
+   Even with _XPG4_2 / __EXTENSIONS__, Solaris 7's <sys/socket.h>
+   predates POSIX 2001 ancillary data: struct msghdr has msg_accrights /
+   msg_accrightslen, not msg_control / msg_controllen. Modern code
+   (screen, bash, gawk, hunspell, openssl, curl, openssh, …) writes
+   the POSIX names and fails to compile otherwise.
+
+   Runtime: msg_accrights takes a flat array of file descriptors,
+   NOT a cmsghdr list. Callers using SCM_RIGHTS/cmsghdr will compile
+   but their ancillary data won't be interpreted correctly by the
+   Solaris 7 kernel. Most of our failing packages only touch these
+   fields to zero them out, so the compile fix is enough; true
+   ancillary-data correctness would need sendmsg/recvmsg wrappers
+   in libsolcompat src/network.c.
+
+   msg_flags has no Solaris 7 equivalent — callers that need it must
+   be patched per-package. */
+#ifndef msg_control
+#define msg_control    msg_accrights
+#endif
+#ifndef msg_controllen
+#define msg_controllen msg_accrightslen
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
