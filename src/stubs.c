@@ -316,7 +316,13 @@ if_freenameindex(struct if_nameindex *name_index_list)
 /*
  * mq_timedreceive / mq_timedsend — timed message queue operations.
  * POSIX.1-2001. Solaris 7 has basic mqueue but not timed variants.
- * Stub: return ENOSYS. Real usage is rare on Solaris 7.
+ * Return ENOSYS rather than falling back to the blocking non-timed
+ * versions (which would silently ignore the contract and could deadlock).
+ *
+ * Not calling mq_receive/mq_send keeps these .o files free of librt-
+ * versioned symbols (mq_* live in librt on Solaris 7), which matters
+ * for consumers of libsolcompat.a that don't link -lrt — the archive
+ * member otherwise pulls mq_send@@SUNW_* into their link.
  */
 #include <mqueue.h>
 
@@ -325,10 +331,10 @@ mq_timedreceive(mqd_t queue_descriptor, char *message_buffer,
                  size_t message_length, unsigned int *message_priority,
                  const struct timespec *abs_timeout)
 {
-    (void)abs_timeout;
-    /* Fall back to non-timed version */
-    return mq_receive(queue_descriptor, message_buffer,
-                      message_length, message_priority);
+    (void)queue_descriptor; (void)message_buffer; (void)message_length;
+    (void)message_priority; (void)abs_timeout;
+    errno = ENOSYS;
+    return (ssize_t)-1;
 }
 
 int
@@ -336,8 +342,8 @@ mq_timedsend(mqd_t queue_descriptor, const char *message_buffer,
               size_t message_length, unsigned int message_priority,
               const struct timespec *abs_timeout)
 {
-    (void)abs_timeout;
-    /* Fall back to non-timed version */
-    return mq_send(queue_descriptor, message_buffer,
-                   message_length, message_priority);
+    (void)queue_descriptor; (void)message_buffer; (void)message_length;
+    (void)message_priority; (void)abs_timeout;
+    errno = ENOSYS;
+    return -1;
 }

@@ -23,11 +23,7 @@ int unsetenv(const char *name);
 /* gethrtime() is a Solaris builtin — returns hrtime_t (nanoseconds) */
 extern hrtime_t gethrtime(void);
 
-/* Real system clock_gettime for CLOCK_REALTIME delegation */
-extern int __clock_gettime(clockid_t, struct timespec *);
-extern int __clock_getres(clockid_t, struct timespec *);
-
-/* Unhide our names */
+/* Unhide our names (macros from headers may have redefined these) */
 #undef clock_gettime
 #undef clock_getres
 
