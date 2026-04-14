@@ -432,8 +432,11 @@ futimesat(int dirfd, const char *pathname, const struct timeval times[2])
  * instead of a link error.
  */
 #include <errno.h>
-#include <sys/xattr.h>
-
+#include <sys/types.h>
+/* Don't #include <sys/xattr.h> — libsolcompat compiles itself before its
+   own sysroot-overlay headers are staged. Re-declare the prototypes here
+   matching sysroot-overlay/usr/include/sys/xattr.h exactly. Any signature
+   drift here will show up as link errors in xattr-using packages. */
 ssize_t getxattr(const char *path, const char *name, void *value, size_t size)
 { (void)path; (void)name; (void)value; (void)size; errno = ENOTSUP; return -1; }
 ssize_t lgetxattr(const char *path, const char *name, void *value, size_t size)
