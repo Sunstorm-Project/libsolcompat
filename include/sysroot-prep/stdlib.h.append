@@ -55,9 +55,39 @@ int posix_memalign(void **memptr, size_t alignment, size_t size);
  * via stdlib.h and call them without checking _GLIBCXX_HAVE_*. */
 void _Exit(int status);
 
-/* C99 long long arithmetic — Solaris 7 stdlib.h hides these behind
- * `#if !defined(__STDC__) || defined(__EXTENSIONS__) || !defined(_STRICT_STDC)`
- * which trips libstdc++'s `-std=c++17` compile. Redeclare unconditionally. */
+/* C99 long long arithmetic — Solaris 7 stdlib.h gates these behind
+ *   #if __STDC__ - 0 == 0 && !defined(_NO_LONGLONG)
+ * which GCC's fixincludes rewrites in include-fixed/stdlib.h to
+ *   #if !defined(__STRICT_ANSI__) && !defined(_NO_LONGLONG)
+ * so under strict-ANSI modes (-std=c99/-std=c11/-std=c++17) the block
+ * is skipped and cmake 4.3.1's libstdc++ <cstdlib> (which does
+ * `using ::lldiv_t`/`using ::llabs`) fails to compile.
+ *
+ * Declare the missing entities only under __STRICT_ANSI__ — when the
+ * strict-mode gate skipped the Solaris/include-fixed block and there is
+ * no live competing definition.  Under non-strict modes (gnu17 etc.)
+ * include-fixed already provides them, and our append must not
+ * redeclare the anonymous-struct lldiv_t typedef (which would be a
+ * distinct type and trigger "conflicting types" errors).
+ *
+ * Implementations come from Solaris 7 libc weak symbols (llabs, lldiv,
+ * atoll, strtoll, strtoull are all exported from libc.so.1). */
+/* Mirror Solaris's own gate (`__STDC__ - 0 == 0`) inverted: declare
+ * lldiv_t + llabs + lldiv exactly when the Solaris block above was
+ * skipped.  Solaris's block fires only when __STDC__ is 0 or undefined
+ * (gnu/gnu++ modes); in strict C99/C11/C++17 modes __STDC__ is 1 and
+ * the Solaris block is skipped — that's when we need to declare.
+ * Using the same preprocessor form avoids any mismatch between "who
+ * declared it". */
+#if __STDC__ - 0 != 0 && !defined(_NO_LONGLONG)
+typedef struct {
+    long long quot;
+    long long rem;
+} lldiv_t;
+long long            llabs(long long j);
+lldiv_t              lldiv(long long numer, long long denom);
+#endif
+
 long long            atoll(const char *nptr);
 long long            strtoll(const char *nptr, char **endptr, int base);
 unsigned long long   strtoull(const char *nptr, char **endptr, int base);
