@@ -93,6 +93,21 @@ extern unsigned long getauxval(unsigned long type);
 #include <stdint.h>
 extern int getisax(uint32_t *array, int n);
 
+/* auxv_t — Solaris's per-entry aux vector struct. Required by
+ * sys/user.h:130 and other system headers that reference auxv_t
+ * unconditionally even when /usr/include/sys/auxv.h has been
+ * replaced by this overlay. Definition matches the Solaris 7
+ * /usr/include/sys/auxv.h struct shape so codepaths reading
+ * auxv_t->a_type / a_un.a_val work unchanged. */
+typedef struct {
+    int a_type;
+    union {
+        long  a_val;
+        char *a_ptr;
+        void (*a_fcn)(void);
+    } a_un;
+} auxv_t;
+
 #ifdef __cplusplus
 }
 #endif

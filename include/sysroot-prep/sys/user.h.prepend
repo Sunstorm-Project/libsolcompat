@@ -1,0 +1,17 @@
+/*
+ * sys/user.h.prepend — pull in sys/auxv.h so auxv_t is declared.
+ *
+ * Solaris 7's <sys/user.h> references `auxv_t` at line 130
+ * (struct user.u_auxv) but doesn't itself include <sys/auxv.h>.
+ * Without the include, packages that pull in <sys/user.h>
+ * (sparc-midi kernel module, tcx-thc, anything probing system
+ * structures) fail with "unknown type name 'auxv_t'".
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+#ifndef _SOLCOMPAT_SYS_USER_H_PREPEND
+#define _SOLCOMPAT_SYS_USER_H_PREPEND
+
+#include <sys/auxv.h>
+
+#endif /* _SOLCOMPAT_SYS_USER_H_PREPEND */
