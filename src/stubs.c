@@ -12,6 +12,7 @@
 #include <string.h>
 #include <locale.h>
 #include <errno.h>
+#include <poll.h>     /* poll(NULL, 0, ms) — nanosleep-free sleep for sem_timedwait */
 #include <pthread.h>
 
 #ifndef HAVE_PTHREAD_SETNAME_NP
@@ -143,8 +144,7 @@ sem_timedwait(sem_t *sem, const struct timespec *abs_timeout)
     struct timeval now;
 
     /* 10ms poll interval — balances responsiveness vs CPU */
-    poll_interval.tv_sec = 0;
-    poll_interval.tv_nsec = 10000000L; /* 10 ms */
+    (void)poll_interval;
 
     for (;;) {
         /* Try to acquire immediately */
@@ -163,7 +163,9 @@ sem_timedwait(sem_t *sem, const struct timespec *abs_timeout)
             return -1;
         }
 
-        nanosleep(&poll_interval, NULL);
+        /* 10ms poll via poll() — avoids the nanosleep@@SUNW_0.7
+           versioned symbol that would require -lrt at link time. */
+        poll(NULL, 0, 10);
     }
 }
 #endif /* HAVE_SEM_TIMEDWAIT */
