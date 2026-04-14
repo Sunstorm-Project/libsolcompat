@@ -512,3 +512,73 @@ __atomic_fetch_nand_8(volatile void *ptr, uint64_t val, int memorder)
 	} while (cas64((uint64_t *)ptr, old, ~(old & val)) != old);
 	return old;
 }
+
+/* ================================================================
+ * Legacy GCC __sync_* builtins
+ *
+ * Pre-C11 atomic intrinsics. On SPARC v8 (no native CAS) GCC emits
+ * library calls to these helpers. libgcc.a on our cross-toolchain
+ * doesn't ship them (libgcc was configured without libatomic) so
+ * linking libuv (cmake), protobuf, abseil etc. fails with
+ *   undefined reference to `__sync_val_compare_and_swap_4'
+ *
+ * These are full-sequential-consistency per GCC legacy __sync
+ * semantics. On single-CPU QEMU/MicroSPARC-II a plain non-atomic
+ * compare-and-swap is race-free; the loops below are for future
+ * SMP correctness should the target ever gain it.
+ *
+ * Only the sizes/ops we've observed in actual consumer code are
+ * declared; extend as new callers surface.
+ * ================================================================ */
+
+uint32_t
+__sync_val_compare_and_swap_4(volatile void *ptr, uint32_t oldval, uint32_t newval)
+{
+	return cas32((uint32_t *)ptr, oldval, newval);
+}
+
+_Bool
+__sync_bool_compare_and_swap_4(volatile void *ptr, uint32_t oldval, uint32_t newval)
+{
+	return cas32((uint32_t *)ptr, oldval, newval) == oldval;
+}
+
+uint32_t
+__sync_fetch_and_add_4(volatile void *ptr, uint32_t val)
+{
+	uint32_t old;
+	do {
+		old = *(volatile uint32_t *)ptr;
+	} while (cas32((uint32_t *)ptr, old, old + val) != old);
+	return old;
+}
+
+uint32_t
+__sync_fetch_and_sub_4(volatile void *ptr, uint32_t val)
+{
+	uint32_t old;
+	do {
+		old = *(volatile uint32_t *)ptr;
+	} while (cas32((uint32_t *)ptr, old, old - val) != old);
+	return old;
+}
+
+uint32_t
+__sync_add_and_fetch_4(volatile void *ptr, uint32_t val)
+{
+	return __sync_fetch_and_add_4(ptr, val) + val;
+}
+
+uint32_t
+__sync_sub_and_fetch_4(volatile void *ptr, uint32_t val)
+{
+	return __sync_fetch_and_sub_4(ptr, val) - val;
+}
+
+void
+__sync_synchronize(void)
+{
+	/* Full memory barrier. On single-CPU SPARCv8 this is a no-op
+	 * at the CPU level; a compiler barrier is sufficient. */
+	__asm__ __volatile__ ("" ::: "memory");
+}

@@ -11,6 +11,10 @@
 #include <strings.h>   /* Solaris: strcasecmp */
 #include <ctype.h>
 #include <errno.h>
+#include <locale.h>    /* POSIX 2008 locale_t for strerror_l — needed
+                        * when self-building against a sysroot whose
+                        * locale.h.append added locale_t but no other
+                        * include here pulls it in transitively */
 
 /* Forward declaration — defined in snprintf.c */
 extern int solcompat_snprintf(char *, size_t, const char *, ...);
