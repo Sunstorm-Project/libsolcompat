@@ -21,6 +21,14 @@
 #include <pthread.h>
 #include <time.h>
 
+/* C11 _Noreturn fallback for packages compiled in C99/pre-C11 mode.
+   We use _Noreturn on thrd_exit below. GCC 15 rejects the keyword
+   outside C11+, so downgrade to the equivalent attribute. */
+#if !defined(__cplusplus) && !defined(_Noreturn) && \
+    (!defined(__STDC_VERSION__) || __STDC_VERSION__ < 201112L)
+#define _Noreturn __attribute__((__noreturn__))
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

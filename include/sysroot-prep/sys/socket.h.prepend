@@ -1,0 +1,16 @@
+/*
+ * sys/socket.h.prepend — force POSIX struct msghdr on Solaris 7
+ *
+ * Defining _XPG4_2 before sys/socket.h is parsed selects the POSIX
+ * struct msghdr (msg_control / msg_controllen / msg_flags) over the
+ * BSD variant (msg_accrights). openssl, screen, bash, gnulib's
+ * lib/select.c, gawk, hunspell, libxml2, and the curl/openssh/git
+ * chain all reference the POSIX fields. The Solaris 7 kernel
+ * syscall tolerates either struct — the size matches on SPARC ILP32.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _XPG4_2
+#define _XPG4_2
+#endif
