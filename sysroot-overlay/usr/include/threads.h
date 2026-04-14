@@ -21,11 +21,12 @@
 #include <pthread.h>
 #include <time.h>
 
-/* C11 _Noreturn fallback for packages compiled in C99/pre-C11 mode.
-   We use _Noreturn on thrd_exit below. GCC 15 rejects the keyword
-   outside C11+, so downgrade to the equivalent attribute. */
-#if !defined(__cplusplus) && !defined(_Noreturn) && \
-    (!defined(__STDC_VERSION__) || __STDC_VERSION__ < 201112L)
+/* _Noreturn fallback. GCC 15 accepts the C11 keyword only in C11+ C
+   mode. C++ never accepts it (C++11 uses [[noreturn]] attribute
+   instead). Define the fallback unless we're in C11+ C mode. Used
+   on thrd_exit below. */
+#if !defined(_Noreturn) && \
+    (defined(__cplusplus) || !defined(__STDC_VERSION__) || __STDC_VERSION__ < 201112L)
 #define _Noreturn __attribute__((__noreturn__))
 #endif
 

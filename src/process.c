@@ -16,6 +16,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <limits.h>
+#include <poll.h>   /* poll(NULL, 0, ms) — dependency-free sleep for rwlock timed waits */
 
 #include "solcompat/process.h"
 
@@ -585,9 +586,12 @@ rwlock_timed_common(pthread_rwlock_t *rwlock,
         if (now.tv_sec > abs_timeout->tv_sec ||
             (now.tv_sec == abs_timeout->tv_sec && now.tv_nsec >= abs_timeout->tv_nsec))
             return ETIMEDOUT;
+        /* Use poll() for the 10ms wait instead of nanosleep() so the
+           object file doesn't carry an unresolved nanosleep@@SUNW_0.7
+           reference that requires -lrt at final link. poll() lives in
+           Solaris 7 libc; millisecond precision is sufficient here. */
         {
-            struct timespec ts = { 0, poll_ns };
-            nanosleep(&ts, NULL);
+            poll(NULL, 0, (int)(poll_ns / 1000000L));
         }
     }
 }
