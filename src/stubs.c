@@ -140,11 +140,7 @@ duplocale(locale_t locobj)
 int
 sem_timedwait(sem_t *sem, const struct timespec *abs_timeout)
 {
-    struct timespec poll_interval;
     struct timeval now;
-
-    /* 10ms poll interval — balances responsiveness vs CPU */
-    (void)poll_interval;
 
     for (;;) {
         /* Try to acquire immediately */
