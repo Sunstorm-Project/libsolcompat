@@ -63,4 +63,17 @@ unsigned long long   strtoumax(const char *nptr, char **endptr, int base);
 #define __PRIPTR_PREFIX ""
 #endif
 
+/* C99 §7.8 requires <inttypes.h> to include <stdint.h>.  Solaris 7's
+ * <inttypes.h> predates C99 and doesn't, so code that includes only
+ * <inttypes.h> expecting the C99 contract (e.g. refkeen's be_cross.h in
+ * commander-genius referencing uint_fast16_t/uint_fast32_t) fails to
+ * compile.  Pull in libsolcompat's sysroot-overlay <stdint.h>, which
+ * supplies the fast typedefs and C99 limit/constant macros.
+ *
+ * Not done in sys/int_types.h.prepend (see 5260cba revert) because that
+ * path collides with GCC's <stdint-gcc.h> when both are in scope — the
+ * overlay <stdint.h> is already the sole authority for fast types, so
+ * including it here adds no new authority. */
+#include <stdint.h>
+
 #endif /* _SOLCOMPAT_INTTYPES_H_APPEND */
