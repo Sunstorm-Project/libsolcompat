@@ -208,6 +208,64 @@ struct in6_pktinfo {
 };
 #endif
 
+/* --- RFC 3678 source-specific multicast (IPv4) ---
+ * Solaris 7 predates RFC 3678.  Provide the constants and structs so modern
+ * network code (libuv, openssh) compiles.  Kernel will return EINVAL at
+ * runtime for the setsockopt calls — libuv detects this and falls back. */
+#ifndef IP_ADD_SOURCE_MEMBERSHIP
+#define IP_ADD_SOURCE_MEMBERSHIP   39
+#endif
+#ifndef IP_DROP_SOURCE_MEMBERSHIP
+#define IP_DROP_SOURCE_MEMBERSHIP  40
+#endif
+#ifndef IP_BLOCK_SOURCE
+#define IP_BLOCK_SOURCE            41
+#endif
+#ifndef IP_UNBLOCK_SOURCE
+#define IP_UNBLOCK_SOURCE          42
+#endif
+#ifndef MCAST_JOIN_GROUP
+#define MCAST_JOIN_GROUP           41
+#endif
+#ifndef MCAST_LEAVE_GROUP
+#define MCAST_LEAVE_GROUP          42
+#endif
+#ifndef MCAST_JOIN_SOURCE_GROUP
+#define MCAST_JOIN_SOURCE_GROUP    46
+#endif
+#ifndef MCAST_LEAVE_SOURCE_GROUP
+#define MCAST_LEAVE_SOURCE_GROUP   47
+#endif
+#ifndef MCAST_BLOCK_SOURCE
+#define MCAST_BLOCK_SOURCE         43
+#endif
+#ifndef MCAST_UNBLOCK_SOURCE
+#define MCAST_UNBLOCK_SOURCE       44
+#endif
+
+#ifndef _SOLCOMPAT_IP_MREQ_SOURCE
+#define _SOLCOMPAT_IP_MREQ_SOURCE
+struct ip_mreq_source {
+    struct in_addr imr_multiaddr;
+    struct in_addr imr_interface;
+    struct in_addr imr_sourceaddr;
+};
+#endif
+
+#ifndef _SOLCOMPAT_GROUP_REQ
+#define _SOLCOMPAT_GROUP_REQ
+#include <sys/socket.h>  /* sockaddr_storage */
+struct group_req {
+    uint32_t                gr_interface;
+    struct sockaddr_storage gr_group;
+};
+struct group_source_req {
+    uint32_t                gsr_interface;
+    struct sockaddr_storage gsr_group;
+    struct sockaddr_storage gsr_source;
+};
+#endif
+
 /* --- struct ipv6_mreq (IPv6 multicast group request) --- */
 #ifndef _SOLCOMPAT_IPV6_MREQ
 #define _SOLCOMPAT_IPV6_MREQ

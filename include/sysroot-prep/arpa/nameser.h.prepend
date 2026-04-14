@@ -1,0 +1,18 @@
+/*
+ * arpa/nameser.h.prepend — pull in size_t / uchar_t for Solaris 7
+ *
+ * Solaris 7's <arpa/nameser.h> references `uchar_t` and `size_t` in
+ * inline function prototypes without including the headers that define
+ * them.  Worked historically because callers always transitively
+ * included <sys/types.h> / <stddef.h> first; modern code that does
+ * `#include <arpa/nameser.h>` in isolation (openssh, etc.) fails to
+ * compile.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_NAMESER_H_PREPEND
+#define _SOLCOMPAT_NAMESER_H_PREPEND
+#include <sys/types.h>   /* uchar_t */
+#include <stddef.h>      /* size_t */
+#endif
