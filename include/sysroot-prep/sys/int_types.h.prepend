@@ -35,22 +35,48 @@ typedef unsigned short      uint16_t;
 typedef unsigned int        uint32_t;
 typedef unsigned long long  uint64_t;
 
-/* C99 int_least<N>_t / int_fast<N>_t typedefs are deliberately NOT
- * declared here. Three conflicting authorities have different opinions
- * about the widths:
- *   - GCC's <stdint-gcc.h> (built-in):
- *       int_least8_t = char, int_fast8_t = char,
- *       int_fast16_t = char (yes really), int_fast32_t = int
- *   - Solaris 7's <stdint.h> (in /usr/include):
- *       int_fast8_t = int, int_fast16_t = int, int_fast32_t = int
- *   - C99 spec only requires the types to have AT LEAST the given width.
- * Any libsolcompat decision conflicts with one of the other two,
- * triggering "conflicting declaration" build failures somewhere
- * downstream — either libstdc++ canadian build, or per-package builds
- * that include both <sys/int_types.h> and <stdint.h>.
- * Let GCC and Solaris fight it out via the include order; libsolcompat
- * stays out of it. Packages that need the types include <stdint.h>
- * which resolves them via GCC's stdint-gcc.h. */
+/* C99 int_least<N>_t — piggyback on the exact-width typedefs above.
+ * C99 only requires these to be AT LEAST the given width, so aliasing to
+ * the exact-width types is spec-compliant and avoids any independent
+ * width claim.  Each is guarded so downstream headers (or a future
+ * overlay) can pre-define without conflict.
+ *
+ * int_fast<N>_t is deliberately NOT declared here — the sysroot-overlay
+ * <stdint.h> unconditionally typedefs those, and declaring them here
+ * would create a second authority and trigger "conflicting declaration"
+ * errors in packages that include both headers. */
+#ifndef _INT_LEAST8_T
+#define _INT_LEAST8_T
+typedef int8_t   int_least8_t;
+#endif
+#ifndef _INT_LEAST16_T
+#define _INT_LEAST16_T
+typedef int16_t  int_least16_t;
+#endif
+#ifndef _INT_LEAST32_T
+#define _INT_LEAST32_T
+typedef int32_t  int_least32_t;
+#endif
+#ifndef _INT_LEAST64_T
+#define _INT_LEAST64_T
+typedef int64_t  int_least64_t;
+#endif
+#ifndef _UINT_LEAST8_T
+#define _UINT_LEAST8_T
+typedef uint8_t  uint_least8_t;
+#endif
+#ifndef _UINT_LEAST16_T
+#define _UINT_LEAST16_T
+typedef uint16_t uint_least16_t;
+#endif
+#ifndef _UINT_LEAST32_T
+#define _UINT_LEAST32_T
+typedef uint32_t uint_least32_t;
+#endif
+#ifndef _UINT_LEAST64_T
+#define _UINT_LEAST64_T
+typedef uint64_t uint_least64_t;
+#endif
 
 /* Maximum-width integer types */
 typedef long long           intmax_t;
