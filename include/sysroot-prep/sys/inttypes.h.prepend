@@ -1,0 +1,72 @@
+/*
+ * sys/inttypes.h.prepend — Set Solaris integer-type guards before the
+ * system's typedefs run.
+ *
+ * Solaris 7's <sys/inttypes.h> directly typedefs int8_t as plain
+ * 'char', independent of sys/int_types.h. GCC 15's <stdint.h> then
+ * emits 'signed char int8_t' and the two conflict — sparc-midi,
+ * tcx-thc, spm-bootstrap, sqlite, unixtop, any kernel-header-including
+ * code hits this.
+ *
+ * Solaris 7's typedefs are guarded by _INT8_T / _INT16_T / ... — if
+ * those macros are set before the typedefs run, Solaris's versions
+ * are skipped, and our version (inserted here) takes effect. The
+ * prepend mechanism injects this content right after
+ *   `#define _SYS_INTTYPES_H`
+ * at the top of Solaris's file.
+ *
+ * Mirrors sys/int_types.h.prepend — both files are patched to give
+ * the same signed-char int8_t typedef.
+ *
+ * Part of libsolcompat.
+ */
+#ifndef _SOLCOMPAT_SYS_INTTYPES_FIXED
+#define _SOLCOMPAT_SYS_INTTYPES_FIXED
+
+#ifndef _INT8_T
+#define _INT8_T
+typedef signed char         int8_t;
+#endif
+#ifndef _INT16_T
+#define _INT16_T
+typedef short               int16_t;
+#endif
+#ifndef _INT32_T
+#define _INT32_T
+typedef int                 int32_t;
+#endif
+#ifndef _INT64_T
+#define _INT64_T
+typedef long long           int64_t;
+#endif
+
+#ifndef _UINT8_T
+#define _UINT8_T
+typedef unsigned char       uint8_t;
+#endif
+#ifndef _UINT16_T
+#define _UINT16_T
+typedef unsigned short      uint16_t;
+#endif
+#ifndef _UINT32_T
+#define _UINT32_T
+typedef unsigned int        uint32_t;
+#endif
+#ifndef _UINT64_T
+#define _UINT64_T
+typedef unsigned long long  uint64_t;
+#endif
+
+#ifndef _INTPTR_T
+#define _INTPTR_T
+typedef int                 intptr_t;
+#endif
+#ifndef _UINTPTR_T
+#define _UINTPTR_T
+typedef unsigned int        uintptr_t;
+#endif
+
+#define __int8_t_defined
+#define __uint32_t_defined
+
+#endif /* _SOLCOMPAT_SYS_INTTYPES_FIXED */
