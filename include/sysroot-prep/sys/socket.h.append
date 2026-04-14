@@ -65,12 +65,59 @@ struct sockaddr_storage {
 };
 #endif
 
+/* --- _CMSG_DATA_ALIGN / _CMSG_HDR_ALIGN --- alignment helpers used
+ * by CMSG_* macros. POSIX RFC 3542 doesn't define these explicitly;
+ * the names match Linux/BSD conventions. Solaris 7's sys/socket.h
+ * predates RFC 3542, so the helpers and macros below are absent. */
+#ifndef _CMSG_DATA_ALIGN
+#define _CMSG_DATA_ALIGN(len)  (((len) + sizeof(long) - 1) & ~(sizeof(long) - 1))
+#endif
+#ifndef _CMSG_HDR_ALIGN
+#define _CMSG_HDR_ALIGN(len)   _CMSG_DATA_ALIGN(len)
+#endif
+
 /* --- CMSG_LEN / CMSG_SPACE --- */
 #ifndef CMSG_LEN
 #define CMSG_LEN(len)   (_CMSG_DATA_ALIGN(sizeof(struct cmsghdr)) + (len))
 #endif
 #ifndef CMSG_SPACE
 #define CMSG_SPACE(len)  (_CMSG_DATA_ALIGN(sizeof(struct cmsghdr)) + _CMSG_DATA_ALIGN(len))
+#endif
+
+/* --- CMSG_DATA / CMSG_FIRSTHDR / CMSG_NXTHDR ---
+ * RFC 3542 ancillary-data iteration. Solaris 7's sys/socket.h
+ * predates these. Without them, code references like
+ * `CMSG_FIRSTHDR(&msg)` get treated as function calls and link
+ * fails with "undefined reference to `CMSG_FIRSTHDR'". GNU screen,
+ * dbus, openssh, and many other modern packages reference these
+ * unconditionally.
+ *
+ * Note: the BSD-legacy msghdr field aliases at the top of this file
+ * map msg_control → msg_accrights. msg_accrights is a flat fd array
+ * (not a cmsghdr list), so these macros COMPILE but the runtime
+ * iteration won't find any cmsghdrs. Acceptable: most callers only
+ * need the macros to compile and either don't actually pass control
+ * data or have a fallback path. True ancillary-data correctness
+ * requires sendmsg/recvmsg wrappers in libsolcompat src/network.c. */
+#ifndef CMSG_DATA
+#define CMSG_DATA(cmsg)   ((unsigned char *)((cmsg) + 1))
+#endif
+#ifndef CMSG_FIRSTHDR
+#define CMSG_FIRSTHDR(mhdr) \
+    ((mhdr)->msg_controllen >= sizeof(struct cmsghdr) \
+     ? (struct cmsghdr *)((mhdr)->msg_control) \
+     : (struct cmsghdr *)NULL)
+#endif
+#ifndef CMSG_NXTHDR
+#define CMSG_NXTHDR(mhdr, cmsg) \
+    (((cmsg) == NULL) \
+     ? CMSG_FIRSTHDR(mhdr) \
+     : (((unsigned char *)(cmsg) + _CMSG_HDR_ALIGN((cmsg)->cmsg_len) \
+         + sizeof(struct cmsghdr) > \
+         (unsigned char *)((mhdr)->msg_control) + (mhdr)->msg_controllen) \
+        ? (struct cmsghdr *)NULL \
+        : (struct cmsghdr *)((unsigned char *)(cmsg) \
+                             + _CMSG_HDR_ALIGN((cmsg)->cmsg_len))))
 #endif
 
 /* --- SOCK_CLOEXEC / SOCK_NONBLOCK flags for accept4 --- */
