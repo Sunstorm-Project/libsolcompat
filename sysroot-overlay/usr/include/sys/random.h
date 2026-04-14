@@ -28,14 +28,25 @@
 #define GRND_INSECURE 0x0004
 #endif
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-ssize_t getrandom(void *buf, size_t buflen, unsigned int flags);
-
-#ifdef __cplusplus
-}
-#endif
+/*
+ * getrandom() prototype is INTENTIONALLY OMITTED here.
+ *
+ * bash-5.3's lib/sh/random.c declares its own `static int getrandom(...)`
+ * as a fallback when autoconf doesn't detect the libc version. If we
+ * expose an extern prototype via this header, bash's static declaration
+ * collides with it and fails compilation ("static declaration of
+ * 'getrandom' follows non-static declaration"). Leaving the prototype
+ * out lets bash's static live in its own TU scope.
+ *
+ * Packages that explicitly want libsolcompat's getrandom() can either:
+ *   - declare it themselves (`extern ssize_t getrandom(void *, size_t,
+ *     unsigned int);`)
+ *   - include <solcompat/random.h> from libsolcompat-dev
+ *
+ * Autoconf-style probes that link-test `getrandom` still succeed since
+ * libsolcompat.so.1 exports the symbol — they just won't find a
+ * prototype in <sys/random.h>, which is the Linux-style discoverability
+ * tradeoff we accept here.
+ */
 
 #endif /* _SOLCOMPAT_SYS_RANDOM_H */
