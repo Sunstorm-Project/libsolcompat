@@ -1,0 +1,54 @@
+/*
+ * usr/openwin/include/X11/Xfuncproto.h.append — modern X11 attribute
+ * macros absent from Solaris 7's OpenWin Xfuncproto.h
+ *
+ * X11 added _X_NONSTRING (around xorgproto 2018) so headers can mark
+ * fixed-size char arrays that are NOT NUL-terminated. Modern XKBstr.h
+ * uses it on the .name and .real members of XkbKeyAliasRec /
+ * XkbKeyNameRec. SDL2 (and any other X11 client) chokes on
+ * "expected ':', ',', ';', '}' or '__attribute__' before '_X_NONSTRING'"
+ * when compiled against Solaris 7's pre-attribute Xfuncproto.h.
+ *
+ * Define as a no-op for Solaris 7. The runtime semantics are
+ * identical — _X_NONSTRING is a static-analysis hint with no codegen
+ * effect.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_X11_XFUNCPROTO_H_APPEND
+#define _SOLCOMPAT_X11_XFUNCPROTO_H_APPEND
+
+#ifndef _X_NONSTRING
+#  if defined(__GNUC__) && (__GNUC__ >= 8)
+#    define _X_NONSTRING __attribute__((nonstring))
+#  else
+#    define _X_NONSTRING
+#  endif
+#endif
+
+#ifndef _X_ATTRIBUTE_PRINTF
+#  if defined(__GNUC__)
+#    define _X_ATTRIBUTE_PRINTF(x,y) __attribute__((__format__(__printf__,x,y)))
+#  else
+#    define _X_ATTRIBUTE_PRINTF(x,y) /* no-op */
+#  endif
+#endif
+
+#ifndef _X_DEPRECATED
+#  if defined(__GNUC__) && (__GNUC__ >= 4)
+#    define _X_DEPRECATED __attribute__((deprecated))
+#  else
+#    define _X_DEPRECATED /* no-op */
+#  endif
+#endif
+
+#ifndef _X_NORETURN
+#  if defined(__GNUC__)
+#    define _X_NORETURN __attribute__((__noreturn__))
+#  else
+#    define _X_NORETURN /* no-op */
+#  endif
+#endif
+
+#endif /* _SOLCOMPAT_X11_XFUNCPROTO_H_APPEND */

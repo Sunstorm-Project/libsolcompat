@@ -156,12 +156,21 @@ install-headers:
 			"$(SYSROOT)/usr/include/sys/int_types.h"; \
 		echo "  sys/int_types.h replaced with fixed typedefs"; \
 	fi
+	@# Path resolution rule for sysroot-prep entries:
+	@#   If the relative path under sysroot-prep starts with "usr/" or
+	@#   "opt/" we treat it as absolute-from-SYSROOT (so X11/openwin and
+	@#   future SST-prefix headers can be patched directly). Otherwise
+	@#   the entry is anchored at $(SYSROOT)/usr/include/<rel> for
+	@#   backwards compatibility with the existing sys/socket.h, etc.
 	@# --- Prepend content to existing headers (between guard and body) ---
 	@for prepend_file in $$(find include/sysroot-prep -name '*.prepend' -type f 2>/dev/null); do \
 		rel="$${prepend_file#include/sysroot-prep/}"; \
 		hdr="$${rel%.prepend}"; \
 		if [ "$${hdr}" = "sys/int_types.h" ]; then continue; fi; \
-		target="$(SYSROOT)/usr/include/$${hdr}"; \
+		case "$${hdr}" in \
+			usr/*|opt/*) target="$(SYSROOT)/$${hdr}" ;; \
+			*)           target="$(SYSROOT)/usr/include/$${hdr}" ;; \
+		esac; \
 		guard=$$(grep '^#ifndef _SOLCOMPAT_' "$$prepend_file" | head -1 | sed 's/#ifndef //' || true); \
 		if [ -f "$${target}" ]; then \
 			if [ -n "$$guard" ] && grep -q "$$guard" "$${target}" 2>/dev/null; then \
@@ -180,7 +189,10 @@ install-headers:
 	@for append_file in $$(find include/sysroot-prep -name '*.append' -type f); do \
 		rel="$${append_file#include/sysroot-prep/}"; \
 		hdr="$${rel%.append}"; \
-		target="$(SYSROOT)/usr/include/$${hdr}"; \
+		case "$${hdr}" in \
+			usr/*|opt/*) target="$(SYSROOT)/$${hdr}" ;; \
+			*)           target="$(SYSROOT)/usr/include/$${hdr}" ;; \
+		esac; \
 		guard=$$(grep '^#ifndef _SOLCOMPAT_' "$$append_file" | head -1 | sed 's/#ifndef //'); \
 		if [ -f "$${target}" ]; then \
 			if [ -n "$$guard" ] && grep -q "$$guard" "$${target}" 2>/dev/null; then \
