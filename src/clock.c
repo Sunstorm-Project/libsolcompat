@@ -30,6 +30,17 @@ extern int __clock_getres(clockid_t, struct timespec *);
 #undef clock_gettime
 #undef clock_getres
 
+/* Weak aliases so packages that call clock_gettime/clock_getres directly
+   (libpng's contrib/libtests/timepng, gnulib probes that don't honor our
+   header macros, etc.) resolve against libsolcompat.so without needing
+   -lrt. Solaris 7 puts the real symbols in librt (libposix4) which many
+   third-party configures fail to detect. The weak attribute lets librt
+   override us if it's explicitly linked. */
+int clock_gettime(clockid_t clk_id, struct timespec *tp)
+    __attribute__((weak, alias("solcompat_clock_gettime")));
+int clock_getres(clockid_t clk_id, struct timespec *res)
+    __attribute__((weak, alias("solcompat_clock_getres")));
+
 int
 solcompat_clock_gettime(clockid_t clk_id, struct timespec *tp)
 {
