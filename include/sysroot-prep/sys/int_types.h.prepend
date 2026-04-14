@@ -35,36 +35,22 @@ typedef unsigned short      uint16_t;
 typedef unsigned int        uint32_t;
 typedef unsigned long long  uint64_t;
 
-/* C99 minimum-width integer types — int_least<N>_t / uint_least<N>_t.
- * Solaris 7's sys/int_types.h predates C99 and never declared these.
- * On a 32-bit target, use the same widths as the exact-width typedefs
- * above (the C99 spec only requires them to be at least N bits).
- * Required by gnulib (gawk's dfa.c, regex.c), GCC's libstdc++, and any
- * modern code that #includes <stdint.h> referencing int_least64_t etc. */
-typedef int8_t              int_least8_t;
-typedef int16_t             int_least16_t;
-typedef int32_t             int_least32_t;
-typedef int64_t             int_least64_t;
-typedef uint8_t             uint_least8_t;
-typedef uint16_t            uint_least16_t;
-typedef uint32_t            uint_least32_t;
-typedef uint64_t            uint_least64_t;
-
-/* C99 fastest-width integer types — int_fast<N>_t / uint_fast<N>_t.
- * Per C99 §7.18.1.3 these may be wider than the exact-width types.
- * Sun's Solaris 7 stdint.h convention is int / unsigned int for ALL
- * sub-64-bit fast types (cross-verified from the cross-toolchain
- * libstdc++ PCH build). Mismatched widths break libstdc++ with
- * "conflicting declaration 'typedef int int_fast8_t' vs typedef
- * signed char int_fast8_t". */
-typedef int                 int_fast8_t;
-typedef int                 int_fast16_t;
-typedef int                 int_fast32_t;
-typedef long long           int_fast64_t;
-typedef unsigned int        uint_fast8_t;
-typedef unsigned int        uint_fast16_t;
-typedef unsigned int        uint_fast32_t;
-typedef unsigned long long  uint_fast64_t;
+/* C99 int_least<N>_t / int_fast<N>_t typedefs are deliberately NOT
+ * declared here. Three conflicting authorities have different opinions
+ * about the widths:
+ *   - GCC's <stdint-gcc.h> (built-in):
+ *       int_least8_t = char, int_fast8_t = char,
+ *       int_fast16_t = char (yes really), int_fast32_t = int
+ *   - Solaris 7's <stdint.h> (in /usr/include):
+ *       int_fast8_t = int, int_fast16_t = int, int_fast32_t = int
+ *   - C99 spec only requires the types to have AT LEAST the given width.
+ * Any libsolcompat decision conflicts with one of the other two,
+ * triggering "conflicting declaration" build failures somewhere
+ * downstream — either libstdc++ canadian build, or per-package builds
+ * that include both <sys/int_types.h> and <stdint.h>.
+ * Let GCC and Solaris fight it out via the include order; libsolcompat
+ * stays out of it. Packages that need the types include <stdint.h>
+ * which resolves them via GCC's stdint-gcc.h. */
 
 /* Maximum-width integer types */
 typedef long long           intmax_t;
