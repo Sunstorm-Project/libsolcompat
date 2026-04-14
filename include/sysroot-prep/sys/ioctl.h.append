@@ -1,0 +1,40 @@
+/*
+ * sys/ioctl.h.append — Linux/BSD terminal ioctls absent from Solaris 7
+ *
+ * Solaris 7 uses SVR4 controlling-tty semantics (setsid() + first
+ * open of a tty device by a session leader) instead of Linux's
+ * TIOCSCTTY ioctl. Packages that reference TIOCSCTTY unconditionally
+ * (GNU screen, tmux, various terminal-multiplexer code) fail to
+ * compile. Provide the Linux-compatible constant so compilation
+ * succeeds; the ioctl() call will return -1 / EINVAL at runtime and
+ * the caller should fall back to setsid() + open(/dev/tty).
+ *
+ * TIOCCONS (console redirection) is Linux-specific; Solaris 7 has
+ * no equivalent. Same treatment — compile-time constant, runtime
+ * failure, caller's fallback path activates.
+ *
+ * Values taken from Linux uapi/asm-generic/ioctls.h so cross-built
+ * binaries that would run under a Linux emulation layer (Solaris
+ * lxrun, LX brand) would behave consistently; on native Solaris the
+ * kernel rejects them with EINVAL regardless.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_SYS_IOCTL_H_APPEND
+#define _SOLCOMPAT_SYS_IOCTL_H_APPEND
+
+#ifndef TIOCSCTTY
+#define TIOCSCTTY 0x540E
+#endif
+
+#ifndef TIOCCONS
+#define TIOCCONS 0x541D
+#endif
+
+#ifndef TIOCNOTTY
+/* Solaris 7 declares TIOCNOTTY in sys/ttold.h; re-expose here. */
+#define TIOCNOTTY (('t'<<8)|113)
+#endif
+
+#endif /* _SOLCOMPAT_SYS_IOCTL_H_APPEND */
