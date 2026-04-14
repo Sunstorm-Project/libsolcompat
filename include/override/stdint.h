@@ -192,8 +192,16 @@ typedef unsigned int     uintptr_t;
 #if !defined(__int_least8_t_defined) && !defined(_INT_LEAST8_T)
 #  define __int_least8_t_defined
 #  define _INT_LEAST8_T
-  /* Always 'char' — same reason as int8_t above. */
-typedef char int_least8_t;
+  /*
+   * 'signed char' to match GCC's <stdint-gcc.h> (which freestanding /
+   * kernel-mode compiles — sparc-midi, tcx-thc — pull in after this
+   * header).  GCC treats 'char' and 'signed char' as distinct types for
+   * typedef-compatibility even though the SPARC ABI makes them
+   * representationally identical, so a mismatch here trips
+   * "conflicting types for 'int_least8_t'".  See int8_t above for the
+   * same rationale.
+   */
+typedef signed char int_least8_t;
 #endif
 
 #if !defined(_INT_LEAST16_T)
