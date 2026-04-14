@@ -51,17 +51,20 @@ typedef uint32_t            uint_least32_t;
 typedef uint64_t            uint_least64_t;
 
 /* C99 fastest-width integer types — int_fast<N>_t / uint_fast<N>_t.
- * Define identically to the least-width types; the choice of "fastest"
- * is implementation-defined and on SPARC there's no benefit to wider
- * native types for sub-int operations. */
-typedef int8_t              int_fast8_t;
-typedef int16_t             int_fast16_t;
-typedef int32_t             int_fast32_t;
-typedef int64_t             int_fast64_t;
-typedef uint8_t             uint_fast8_t;
-typedef uint16_t            uint_fast16_t;
-typedef uint32_t            uint_fast32_t;
-typedef uint64_t            uint_fast64_t;
+ * Per C99 §7.18.1.3 these may be wider than the exact-width types.
+ * Match the widths GCC's <stdint.h> uses for sparc-sun-solaris2.7
+ * (signed char for fast8, int for fast16/fast32, long long for fast64);
+ * if the widths disagree, the cross-toolchain libstdc++ build fails
+ * with "conflicting declaration 'typedef unsigned int uint_fast16_t'"
+ * vs sys/int_types.h. */
+typedef signed char         int_fast8_t;
+typedef int                 int_fast16_t;
+typedef int                 int_fast32_t;
+typedef long long           int_fast64_t;
+typedef unsigned char       uint_fast8_t;
+typedef unsigned int        uint_fast16_t;
+typedef unsigned int        uint_fast32_t;
+typedef unsigned long long  uint_fast64_t;
 
 /* Maximum-width integer types */
 typedef long long           intmax_t;
