@@ -10,6 +10,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <sys/select.h>  /* select(0, NULL, NULL, NULL, &tv) — nanosleep-free sleep */
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -155,8 +156,24 @@ clock_nanosleep(clockid_t clk_id, int flags,
         req = *request;
     }
 
-    if (nanosleep(&req, remain) < 0)
-        return errno;
+    /* Use select() instead of nanosleep() so the object file doesn't
+       carry an unresolved nanosleep@@SUNW_0.7 reference that requires
+       -lrt at final link. select() lives in Solaris 7 libc;
+       microsecond precision is sufficient for the callers we see.
+       The `remain` output parameter is populated with zeros on
+       completion — we don't currently handle signal-interrupt
+       resumption. */
+    {
+        struct timeval tv;
+        tv.tv_sec = req.tv_sec;
+        tv.tv_usec = req.tv_nsec / 1000;
+        if (select(0, NULL, NULL, NULL, &tv) < 0)
+            return errno;
+        if (remain) {
+            remain->tv_sec = 0;
+            remain->tv_nsec = 0;
+        }
+    }
 
     return 0;
 }
