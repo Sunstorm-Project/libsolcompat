@@ -14,28 +14,46 @@
 #ifndef _SOLCOMPAT_SYS_SOCKET_H_APPEND
 #define _SOLCOMPAT_SYS_SOCKET_H_APPEND
 
-/* Alias POSIX msghdr field names onto Solaris 7's BSD-legacy struct.
-   Even with _XPG4_2 / __EXTENSIONS__, Solaris 7's <sys/socket.h>
-   predates POSIX 2001 ancillary data: struct msghdr has msg_accrights /
-   msg_accrightslen, not msg_control / msg_controllen. Modern code
-   (screen, bash, gawk, hunspell, openssl, curl, openssh, …) writes
-   the POSIX names and fails to compile otherwise.
-
-   Runtime: msg_accrights takes a flat array of file descriptors,
-   NOT a cmsghdr list. Callers using SCM_RIGHTS/cmsghdr will compile
-   but their ancillary data won't be interpreted correctly by the
-   Solaris 7 kernel. Most of our failing packages only touch these
-   fields to zero them out, so the compile fix is enough; true
-   ancillary-data correctness would need sendmsg/recvmsg wrappers
-   in libsolcompat src/network.c.
-
-   msg_flags has no Solaris 7 equivalent — callers that need it must
-   be patched per-package. */
-#ifndef msg_control
-#define msg_control    msg_accrights
-#endif
-#ifndef msg_controllen
-#define msg_controllen msg_accrightslen
+/* POSIX struct msghdr replacement for Solaris 7.
+ *
+ * Solaris 7's <sys/socket.h> declares struct msghdr with the BSD-
+ * legacy layout (msg_accrights/msg_accrightslen, no msg_flags). Modern
+ * code (screen, bash, openssl, openssh, cmake's bundled libuv, libxcb,
+ * etc.) references the POSIX 2001 fields:
+ *   msg_control / msg_controllen   — pointer + length to cmsghdr list
+ *   msg_flags                       — int (MSG_TRUNC etc. on recv)
+ *
+ * Define a POSIX-shaped __solcompat_msghdr struct with the same first
+ * 6 field offsets as Solaris's struct (so sendmsg/recvmsg syscalls
+ * still get correct values for msg_name/iov/etc.) plus a trailing
+ * msg_flags. Then #define msghdr to redirect all subsequent
+ * `struct msghdr` references to the new name.
+ *
+ * RUNTIME CAVEATS:
+ *   - msg_control points into the same offset as Solaris's
+ *     msg_accrights, which the kernel interprets as a flat fd array,
+ *     NOT a cmsghdr list. Code using SCM_RIGHTS/cmsghdr iteration
+ *     compiles but the kernel won't actually interpret cmsg layouts
+ *     correctly. True ancillary-data correctness needs sendmsg/recvmsg
+ *     wrappers in libsolcompat src/network.c (out of scope for now).
+ *   - msg_flags is appended after the fields the kernel reads (24-byte
+ *     boundary for the syscall), so the kernel ignores it. Callers that
+ *     check msg_flags after recvmsg get whatever was last written
+ *     (often 0), taking their "no flag" path. Acceptable for the
+ *     packages that need this just to compile.
+ */
+#ifndef _SOLCOMPAT_MSGHDR_REPLACED
+#define _SOLCOMPAT_MSGHDR_REPLACED
+struct __solcompat_msghdr {
+    void           *msg_name;        /* offset 0  — same as Solaris */
+    int             msg_namelen;     /* offset 4  — same */
+    struct iovec   *msg_iov;         /* offset 8  — same */
+    int             msg_iovlen;      /* offset 12 — same */
+    void           *msg_control;     /* offset 16 — was msg_accrights */
+    int             msg_controllen;  /* offset 20 — was msg_accrightslen */
+    int             msg_flags;       /* offset 24 — APPENDED, kernel ignores */
+};
+#define msghdr __solcompat_msghdr
 #endif
 
 #ifdef __cplusplus
