@@ -155,16 +155,34 @@ clock_nanosleep(clockid_t clk_id, int flags,
     /* Use select() instead of nanosleep() so the object file doesn't
        carry an unresolved nanosleep@@SUNW_0.7 reference that requires
        -lrt at final link. select() lives in Solaris 7 libc;
-       microsecond precision is sufficient for the callers we see.
-       The `remain` output parameter is populated with zeros on
-       completion — we don't currently handle signal-interrupt
-       resumption. */
+       microsecond precision is sufficient for the callers we see. */
     {
-        struct timeval tv;
-        tv.tv_sec = req.tv_sec;
-        tv.tv_usec = req.tv_nsec / 1000;
-        if (select(0, NULL, NULL, NULL, &tv) < 0)
+        struct timeval tv_req, tv_start, tv_end;
+        int rc;
+        tv_req.tv_sec = req.tv_sec;
+        tv_req.tv_usec = req.tv_nsec / 1000;
+        /* Round up sub-microsecond remainder so we never under-sleep. */
+        if (req.tv_nsec % 1000 != 0 && tv_req.tv_usec < 999999)
+            tv_req.tv_usec++;
+        gettimeofday(&tv_start, NULL);
+        rc = select(0, NULL, NULL, NULL, &tv_req);
+        if (rc < 0) {
+            /* EINTR: compute real remaining time so callers (gnulib's
+               rpl_nanosleep, etc.) can resume correctly. */
+            if (remain && errno == EINTR) {
+                long long elapsed_us, requested_us, remain_us;
+                gettimeofday(&tv_end, NULL);
+                elapsed_us = (long long)(tv_end.tv_sec - tv_start.tv_sec) * 1000000LL
+                           + (tv_end.tv_usec - tv_start.tv_usec);
+                requested_us = (long long)req.tv_sec * 1000000LL
+                             + (req.tv_nsec / 1000);
+                remain_us = requested_us - elapsed_us;
+                if (remain_us < 0) remain_us = 0;
+                remain->tv_sec = (time_t)(remain_us / 1000000LL);
+                remain->tv_nsec = (long)((remain_us % 1000000LL) * 1000);
+            }
             return errno;
+        }
         if (remain) {
             remain->tv_sec = 0;
             remain->tv_nsec = 0;
