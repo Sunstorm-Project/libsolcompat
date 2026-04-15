@@ -1,0 +1,72 @@
+/*
+ * sys/int_limits.h.append — unconditional INT64_MAX/UINT64_MAX
+ *
+ * Solaris 7's sys/int_limits.h (and GCC's fixincludes copy under
+ * include-fixed/sys/int_limits.h) defines:
+ *   INT8_MIN, INT*_MAX up to 32-bit — unconditional
+ *   INT64_MAX / UINT64_MAX           — gated on !defined(__STRICT_ANSI__)
+ *                                      && !defined(_NO_LONGLONG)
+ * Under -std=c99/-std=c11/-std=c++17 (strict modes), __STRICT_ANSI__
+ * is defined by GCC, so the 64-bit limits are skipped.  Meanwhile
+ * the 8/16/32-bit macros DO get defined.
+ *
+ * Downstream effect: libsolcompat's sysroot-overlay/usr/include/stdint.h
+ * tries to supply INT64_MAX via an `#ifndef INT8_MIN` guarded block —
+ * but INT8_MIN is already defined from int_limits.h, so the whole
+ * block is skipped and INT64_MAX stays undefined.  Surfaced in cmake's
+ * build of libxkbcommon (scanner-utils.h, utils-numbers.h) as
+ *   error: 'INT64_MAX' undeclared
+ *   note: defined in header '<stdint.h>'; add '#include <stdint.h>'
+ * even though <stdint.h> IS included — the overlay just never emits
+ * INT64_MAX because of the split-guard mismatch with int_limits.h.
+ *
+ * Fix: append unconditional definitions here so strict-mode compiles
+ * get INT64_MAX/UINT64_MAX regardless of __STRICT_ANSI__.  Values
+ * match Solaris's own definitions above us.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_INT_LIMITS_H_APPEND
+#define _SOLCOMPAT_INT_LIMITS_H_APPEND
+
+#ifndef INT64_MIN
+#define INT64_MIN       (-9223372036854775807LL-1LL)
+#endif
+#ifndef INT64_MAX
+#define INT64_MAX       (9223372036854775807LL)
+#endif
+#ifndef UINT64_MAX
+#define UINT64_MAX      (18446744073709551615ULL)
+#endif
+
+/* Re-derive INTMAX_MAX / UINTMAX_MAX: Solaris's int_limits.h fell back
+ * to INT32_MAX above us because INT64_MAX was hidden; now that we've
+ * defined INT64_MAX, INTMAX_MAX should widen accordingly.  Undef-then-
+ * redef is safe: std=c11 permits a #define to be replaced with the
+ * same token-for-token replacement, so consumers that already saw the
+ * 32-bit INTMAX_MAX won't notice the change in the translation-unit
+ * preorder; those that come after us get the 64-bit value. */
+#ifdef INTMAX_MAX
+#undef INTMAX_MAX
+#endif
+#define INTMAX_MAX      INT64_MAX
+#ifdef UINTMAX_MAX
+#undef UINTMAX_MAX
+#endif
+#define UINTMAX_MAX     UINT64_MAX
+
+/* INT_LEAST64_MAX / UINT_LEAST64_MAX — same reasoning: int_limits.h
+ * gated them on INT64_MAX being defined, which it wasn't during its
+ * own pass.  Provide here. */
+#ifndef INT_LEAST64_MIN
+#define INT_LEAST64_MIN  INT64_MIN
+#endif
+#ifndef INT_LEAST64_MAX
+#define INT_LEAST64_MAX  INT64_MAX
+#endif
+#ifndef UINT_LEAST64_MAX
+#define UINT_LEAST64_MAX UINT64_MAX
+#endif
+
+#endif /* _SOLCOMPAT_INT_LIMITS_H_APPEND */
