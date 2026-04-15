@@ -29,7 +29,7 @@
    included. */
 #ifndef _SOLCOMPAT_LWPID_T
 #define _SOLCOMPAT_LWPID_T
-typedef int lwpid_t;
+typedef unsigned int lwpid_t;  /* match Solaris 7 sys/lwp.h:53 */
 #endif
 #endif
 

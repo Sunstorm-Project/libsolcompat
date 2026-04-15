@@ -58,18 +58,45 @@ __extension__ typedef unsigned long long uint_fast64_t;
 /* ================================================================
  * Exact-width integer limits
  * ================================================================ */
+/* Per-macro guards — sys/int_limits.h defines the 8/16/32-bit macros
+ * unconditionally but gates INT64_MAX/UINT64_MAX on !__STRICT_ANSI__.
+ * A single outer `#ifndef INT8_MIN` guard would skip everything when
+ * int_limits.h ran first, leaving INT64_MAX undefined in strict modes
+ * (surfaced as libxkbcommon build errors). */
 #ifndef INT8_MIN
 #define INT8_MIN    (-128)
+#endif
+#ifndef INT8_MAX
 #define INT8_MAX    127
+#endif
+#ifndef UINT8_MAX
 #define UINT8_MAX   255U
+#endif
+#ifndef INT16_MIN
 #define INT16_MIN   (-32768)
+#endif
+#ifndef INT16_MAX
 #define INT16_MAX   32767
+#endif
+#ifndef UINT16_MAX
 #define UINT16_MAX  65535U
+#endif
+#ifndef INT32_MIN
 #define INT32_MIN   (-2147483647-1)
+#endif
+#ifndef INT32_MAX
 #define INT32_MAX   2147483647
+#endif
+#ifndef UINT32_MAX
 #define UINT32_MAX  4294967295U
+#endif
+#ifndef INT64_MIN
 #define INT64_MIN   (-9223372036854775807LL-1LL)
+#endif
+#ifndef INT64_MAX
 #define INT64_MAX   9223372036854775807LL
+#endif
+#ifndef UINT64_MAX
 #define UINT64_MAX  18446744073709551615ULL
 #endif
 
