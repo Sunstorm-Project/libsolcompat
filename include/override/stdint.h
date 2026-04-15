@@ -193,15 +193,16 @@ typedef unsigned int     uintptr_t;
 #  define __int_least8_t_defined
 #  define _INT_LEAST8_T
   /*
-   * 'signed char' to match GCC's <stdint-gcc.h> (which freestanding /
-   * kernel-mode compiles — sparc-midi, tcx-thc — pull in after this
-   * header).  GCC treats 'char' and 'signed char' as distinct types for
-   * typedef-compatibility even though the SPARC ABI makes them
-   * representationally identical, so a mismatch here trips
-   * "conflicting types for 'int_least8_t'".  See int8_t above for the
-   * same rationale.
+   * 'char' — NOT 'signed char' — because GCC's <stdint-gcc.h> declares
+   * int_least8_t as __INT_LEAST8_TYPE__, which the SPARC Solaris 2.7
+   * backend sets to plain 'char'.  Freestanding/kernel compiles
+   * (sparc-midi, tcx-thc) pull in both this header and stdint-gcc.h;
+   * the two types must match exactly.  int8_t above is still 'signed
+   * char' (C++ template matching against stdint uses that); int_least8_t
+   * is allowed by C99 to differ from int8_t ("smallest signed type with
+   * AT LEAST 8 bits of rank"), so this asymmetry is spec-compliant.
    */
-typedef signed char int_least8_t;
+typedef char int_least8_t;
 #endif
 
 #if !defined(_INT_LEAST16_T)

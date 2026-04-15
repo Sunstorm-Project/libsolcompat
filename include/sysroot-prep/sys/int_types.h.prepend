@@ -47,7 +47,12 @@ typedef unsigned long long  uint64_t;
  * errors in packages that include both headers. */
 #ifndef _INT_LEAST8_T
 #define _INT_LEAST8_T
-typedef int8_t   int_least8_t;
+/* 'char' — NOT 'signed char' — because GCC's <stdint-gcc.h> declares
+ * int_least8_t as __INT_LEAST8_TYPE__, which the sparc-sun-solaris2.7
+ * backend sets to plain 'char'.  Kernel-mode compiles pull stdint-gcc.h
+ * after this header; types must match exactly.  See override/stdint.h
+ * for the full rationale. */
+typedef char int_least8_t;
 #endif
 #ifndef _INT_LEAST16_T
 #define _INT_LEAST16_T
