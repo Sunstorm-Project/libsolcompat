@@ -161,6 +161,19 @@ int accept4(int sockfd, struct sockaddr *addr, socklen_t *addrlen, int flags);
 #define CMSG_ALIGN(len) (((len) + sizeof(long) - 1) & ~(sizeof(long) - 1))
 #endif
 
+/* --- SCM_UCRED --- ancillary-data type for passing a ucred_t over a
+ * Unix socket, added in Solaris 10.  glib 2.56's
+ * gio/gunixcredentialsmessage.c gates on G_CREDENTIALS_USE_SOLARIS_UCRED
+ * (enabled for `defined(__sun__)`) and references SCM_UCRED.  Solaris 7
+ * has no kernel support for credential passing over AF_UNIX sockets, so
+ * this define exists for compile-only parity — the value matches
+ * Solaris 10's <sys/socket.h>.  At runtime sendmsg/recvmsg with a
+ * SCM_UCRED cmsg will not deliver credentials; libsolcompat's
+ * ucred_get(peer_fd) returns NULL. */
+#ifndef SCM_UCRED
+#define SCM_UCRED 0x1012
+#endif
+
 #ifdef __cplusplus
 }
 #endif
