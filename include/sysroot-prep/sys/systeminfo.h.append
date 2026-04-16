@@ -1,0 +1,29 @@
+/*
+ * sys/systeminfo.h.append — Solaris 10+ sysinfo() command constants
+ *
+ * Solaris 7's sys/systeminfo.h defines SI_ARCHITECTURE (the 32-bit
+ * arch string) but lacks SI_ARCHITECTURE_64 (added in Solaris 10 to
+ * distinguish sparcv9/amd64 from sparc/i386 on 64-bit kernels).
+ * Qt 6's qtbase/src/corelib/global/qsysinfo.cpp uses SI_ARCHITECTURE_64
+ * unconditionally when __sun is defined.  Define it to 500 — a value
+ * outside Solaris 7's allocated SI_* range — so sysinfo() returns -1
+ * with EINVAL, and Qt falls back to SI_ARCHITECTURE.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+#ifndef _SOLCOMPAT_SYSTEMINFO_H_APPEND
+#define _SOLCOMPAT_SYSTEMINFO_H_APPEND
+
+#ifndef SI_ARCHITECTURE_64
+#define SI_ARCHITECTURE_64 500
+#endif
+
+#ifndef SI_ARCHITECTURE_K
+#define SI_ARCHITECTURE_K  501
+#endif
+
+#ifndef SI_ARCHITECTURE_NATIVE
+#define SI_ARCHITECTURE_NATIVE  SI_ARCHITECTURE
+#endif
+
+#endif /* _SOLCOMPAT_SYSTEMINFO_H_APPEND */

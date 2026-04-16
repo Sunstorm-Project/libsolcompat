@@ -156,6 +156,31 @@ install-headers:
 			"$(SYSROOT)/usr/include/sys/int_types.h"; \
 		echo "  sys/int_types.h replaced with fixed typedefs"; \
 	fi
+	@# --- Patch sys/types.h: make longlong_t a real 'long long' in C++ ---
+	@# Solaris 7's sys/types.h gates the 'typedef long long longlong_t'
+	@# on '__STDC__ - 0 == 0', which is false when __STDC__=1 (strict C
+	@# or any C++ compiler).  The else branch then declares longlong_t
+	@# as a union, and off_t (= longlong_t with _FILE_OFFSET_BITS=64)
+	@# becomes a union — breaking every C++ library that casts off_t.
+	@# Extend the condition to also accept __cplusplus so C++ TUs get
+	@# the integer typedef.
+	@# Patch sys/types.h and stdio.h for C++ longlong_t.  Both headers
+	@# gate their `(u_)longlong_t` / `__longlong_t` typedefs on a broken
+	@# `__STDC__ - 0 == 0` check that falls through to a union in any C++
+	@# mode.  off_t derives from these, so the union leaks into every
+	@# C++ TU and breaks casts.  Extend the guard to accept C++ too.
+	@for longlong_header in \
+	    "$(SYSROOT)/usr/include/sys/types.h" \
+	    "$(SYSROOT)/usr/include/stdio.h"; do \
+		if [ -f "$$longlong_header" ] && \
+		   ! grep -q "_SOLCOMPAT_LONGLONG_CXX" "$$longlong_header"; then \
+			sed -i \
+			    -e 's@^#if __STDC__ - 0 == 0 && !defined(_NO_LONGLONG)$$@/* _SOLCOMPAT_LONGLONG_CXX */\n#if (defined(__cplusplus) || __STDC__ - 0 == 0) \&\& !defined(_NO_LONGLONG)@' \
+			    -e 's@^#if  !defined(__STRICT_ANSI__) && !defined(_NO_LONGLONG)$$@/* _SOLCOMPAT_LONGLONG_CXX */\n#if (defined(__cplusplus) || !defined(__STRICT_ANSI__)) \&\& !defined(_NO_LONGLONG)@' \
+			    "$$longlong_header"; \
+			echo "  $$longlong_header patched for longlong_t in C++"; \
+		fi; \
+	done
 	@# Path resolution rule for sysroot-prep entries:
 	@#   If the relative path under sysroot-prep starts with "usr/" or
 	@#   "opt/" we treat it as absolute-from-SYSROOT (so X11/openwin and

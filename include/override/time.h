@@ -24,9 +24,10 @@
  * _REENTRANT but still use these functions. Ensure they're always
  * declared.
  *
- * Note: ctime_r and asctime_r are NOT included here because Solaris 7
- * uses non-standard 3-argument versions (extra int buflen parameter)
- * which conflict with the POSIX 2-argument signatures.
+ * Note: ctime_r and asctime_r POSIX signatures are provided by
+ * Solaris 7's time.h when _POSIX_PTHREAD_SEMANTICS is defined (the
+ * SST build adds this to COMMON_CPPFLAGS in common.sh). No override
+ * needed.
  */
 #ifndef _REENTRANT
 #ifdef __cplusplus
