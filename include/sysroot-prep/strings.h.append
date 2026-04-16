@@ -1,0 +1,39 @@
+
+/* ================================================================
+ * BSD string-compat declarations
+ * ================================================================
+ * Solaris 7 provides bcopy/bzero/bcmp in libc but declares them in
+ * <strings.h> only under feature-test macros (__EXTENSIONS__ etc.)
+ * that don't always line up with modern user code.  Modern Linux/BSD
+ * libc declare these unconditionally in <strings.h>; packages like
+ * unzip re-#define memcpy(dst,src,n) as bcopy(src,dst,n) without
+ * including <strings.h>, then rely on getting bcopy visibly declared
+ * from some other transitive include.
+ *
+ * Provide unconditional prototypes so compile passes under strict
+ * standards mode too.  The <strings.h> append fires on any TU that
+ * includes <strings.h>; for TUs that only include <string.h>, see
+ * string.h.append for the same declarations.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+#ifndef _SOLCOMPAT_STRINGS_H_APPEND
+#define _SOLCOMPAT_STRINGS_H_APPEND
+
+#include <sys/types.h>   /* size_t */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* POSIX-legacy BSD string functions, present in Solaris 7 libc but
+ * sometimes hidden by feature-test gating. */
+void   bcopy(const void *s1, void *s2, size_t n);
+void   bzero(void *s, size_t n);
+int    bcmp(const void *s1, const void *s2, size_t n);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _SOLCOMPAT_STRINGS_H_APPEND */

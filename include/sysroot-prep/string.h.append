@@ -58,6 +58,16 @@ char *strerror_r(int errnum, char *buf, size_t buflen);
 /* BSD explicit_bzero — guaranteed-not-optimized-away zeroing */
 void explicit_bzero(void *s, size_t n);
 
+/* POSIX-legacy BSD trio: bcopy / bzero / bcmp.  These live in Solaris 7
+ * libc but are declared only in <strings.h> under feature-test gating,
+ * while modern Linux/BSD libc ALSO declare them in <string.h>.  Packages
+ * like unzip re-#define memcpy(dst,src,n) as bcopy(src,dst,n) without
+ * including <strings.h>, relying on <string.h> for visibility.
+ * Implementations are in Solaris 7 libc; these are declarations only. */
+void   bcopy(const void *s1, void *s2, size_t n);
+void   bzero(void *s, size_t n);
+int    bcmp(const void *s1, const void *s2, size_t n);
+
 /* POSIX.1-2008 strerror_l — locale-aware strerror */
 #ifndef _SOLCOMPAT_LOCALE_T
 #define _SOLCOMPAT_LOCALE_T
