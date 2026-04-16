@@ -65,10 +65,23 @@ getopt(int argc, char *const argv[], const char *optstring)
 {
     const char *arg;
     const char *spec;
+    const char *lookup;    /* optstring past any mode-prefix char */
     char        opt;
+    int         dash_mode; /* optstring[0] == '-': return non-opts as opt 1 */
 
     if (optstring == NULL)
         optstring = "";
+
+    /* Decode mode prefix.  GNU extensions:
+     *   "+..."  — POSIX strict ordering (already our default; skip char)
+     *   "-..."  — non-option argv elements are returned as opt code 1
+     *             with optarg set to the element.  gas uses this.
+     *   ":..."  — silent-error mode (handled below for ':' vs '?').
+     * Multiple leading chars (e.g. ":+") are not standard; we strip one. */
+    dash_mode = (optstring[0] == '-');
+    lookup = optstring;
+    if (*lookup == '+' || *lookup == '-')
+        lookup++;
 
     /* Continuing a cluster like -abc from a previous call */
     if (short_next > 0) {
@@ -88,8 +101,15 @@ getopt(int argc, char *const argv[], const char *optstring)
         if (optind >= argc || argv[optind] == NULL)
             return -1;
         arg = argv[optind];
-        if (arg[0] != '-' || arg[1] == '\0')
-            return -1;  /* Non-option — stop scanning */
+        if (arg[0] != '-' || arg[1] == '\0') {
+            /* Non-option argv element */
+            if (dash_mode) {
+                optarg = (char *)arg;
+                optind++;
+                return 1;
+            }
+            return -1;  /* POSIX ordering: stop at first non-option */
+        }
         if (arg[0] == '-' && arg[1] == '-' && arg[2] == '\0') {
             optind++;
             return -1;  /* "--" marker */
@@ -98,8 +118,8 @@ getopt(int argc, char *const argv[], const char *optstring)
         opt = arg[1];
     }
 
-    /* Look up opt in optstring */
-    spec = strchr(optstring, opt);
+    /* Look up opt in optstring (skip the mode-prefix char) */
+    spec = strchr(lookup, opt);
     if (spec == NULL || opt == ':') {
         if (opterr && optstring[0] != ':')
             fprintf(stderr, "%s: invalid option -- '%c'\n",
