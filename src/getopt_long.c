@@ -1,31 +1,160 @@
 /*
- * libsolcompat — getopt_long() and getopt_long_only() implementation
+ * libsolcompat — full getopt / getopt_long / getopt_long_only implementation
  *
- * Solaris 7 has getopt() in libc but lacks getopt_long().
- * This is a clean-room implementation compatible with GNU getopt_long.
+ * Solaris 7 libc provides getopt() with its own internal `optind`, stored
+ * inside libc.so.1.  Any program that links libsolcompat for getopt_long
+ * historically inherited that split-storage model: libsolcompat saw
+ * optind@SYSVABI_1.3 from libc, while the main executable also emitted a
+ * R_SPARC_COPY relocation for optind into its own .bss.  Solaris ld.so.1
+ * does not always reconcile the two, so libc's internal counter advanced
+ * while the executable's view of optind stayed at 1.  Symptom: binutils
+ * tools print "Usage: <option(s)> <file(s)>" when given a valid file, and
+ * nm prints `: '': No such file` because its own optind is stale relative
+ * to libc's.
+ *
+ * Fix: libsolcompat owns getopt()/getopt_long()/getopt_long_only() AND
+ * the optind/optarg/opterr/optopt globals end-to-end.  Consumers that link
+ * libsolcompat never touch libc's getopt or its internal optind, so there
+ * is exactly one copy of the state regardless of what Solaris ld.so.1
+ * does with versioned-vs-unversioned symbol resolution.  libsolcompat
+ * appears before libc in consumers' DT_NEEDED list (see common.sh link
+ * order), so the symbols bind to libsolcompat's definitions, and the
+ * executable's R_SPARC_COPY (if any) initialises from libsolcompat's
+ * properly-initialised copy.
+ *
+ * This is a clean-room GNU-compatible implementation: supports short
+ * options with optional/required arguments, clustering (-abc = -a -b -c),
+ * long options with =VALUE and separate-word VALUE, optional long args,
+ * and -- end-of-options marker.  POSIX-correct.  No argv permutation
+ * (Solaris-style ordered scan, which is what binutils and gawk rely on).
  *
  * Copyright (c) 2024-2026 Sunstorm Project
  * SPDX-License-Identifier: MIT
  */
 
-#include <stdarg.h>   /* before stdio.h: defines __gnuc_va_list */
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-/* Pull in the struct option definition — sysroot-overlay provides getopt.h */
 #include "getopt.h"
 
+/* Public getopt state — definitions, not just declarations.  These
+ * override libc.so.1's versioned optind@SYSVABI_1.3 etc. when libsolcompat
+ * appears before libc in DT_NEEDED. */
+char *optarg = NULL;
+int   optind = 1;   /* POSIX: first call must see optind = 1 */
+int   opterr = 1;   /* Print errors by default */
+int   optopt = 0;
+
+/* Internal cursor inside a clustered short-option argv element (-abc). */
+static int short_next = 0;
+
 /*
- * getopt_long — parse long and short options
+ * getopt — POSIX short-option parser, reimplemented locally so we do not
+ * share optind state with libc.so.1's internal getopt.
  *
- * This wraps the system getopt() for short options and handles
- * --long-option and --long-option=value forms directly.
+ * Return values:
+ *   option character on success
+ *   '?'     on unknown option or missing argument (when optstring[0] != ':')
+ *   ':'     on missing argument when optstring[0] == ':'
+ *   -1      at end of options
  */
+int
+getopt(int argc, char *const argv[], const char *optstring)
+{
+    const char *arg;
+    const char *spec;
+    char        opt;
 
-/* Internal state */
-static int _sol_optcharind = 0;  /* index within a multi-short-opt cluster */
+    if (optstring == NULL)
+        optstring = "";
 
+    /* Continuing a cluster like -abc from a previous call */
+    if (short_next > 0) {
+        if (optind >= argc || argv[optind] == NULL) {
+            short_next = 0;
+            return -1;
+        }
+        arg = argv[optind];
+        opt = arg[short_next];
+        if (opt == '\0') {
+            /* End of this cluster — advance */
+            short_next = 0;
+            optind++;
+            return getopt(argc, argv, optstring);
+        }
+    } else {
+        if (optind >= argc || argv[optind] == NULL)
+            return -1;
+        arg = argv[optind];
+        if (arg[0] != '-' || arg[1] == '\0')
+            return -1;  /* Non-option — stop scanning */
+        if (arg[0] == '-' && arg[1] == '-' && arg[2] == '\0') {
+            optind++;
+            return -1;  /* "--" marker */
+        }
+        short_next = 1;
+        opt = arg[1];
+    }
+
+    /* Look up opt in optstring */
+    spec = strchr(optstring, opt);
+    if (spec == NULL || opt == ':') {
+        if (opterr && optstring[0] != ':')
+            fprintf(stderr, "%s: invalid option -- '%c'\n",
+                    argv[0] ? argv[0] : "", opt);
+        optopt = opt;
+        short_next++;
+        if (argv[optind] != NULL && argv[optind][short_next] == '\0') {
+            short_next = 0;
+            optind++;
+        }
+        return '?';
+    }
+
+    if (spec[1] == ':') {
+        /* Option takes an argument */
+        if (argv[optind][short_next + 1] != '\0') {
+            /* -oARG form */
+            optarg = (char *)&argv[optind][short_next + 1];
+            short_next = 0;
+            optind++;
+        } else if (spec[2] == ':') {
+            /* -o :: — optional argument, not present inline */
+            optarg = NULL;
+            short_next = 0;
+            optind++;
+        } else {
+            /* -o ARG form — next argv is the argument */
+            short_next = 0;
+            optind++;
+            if (optind >= argc) {
+                if (opterr && optstring[0] != ':')
+                    fprintf(stderr,
+                            "%s: option requires an argument -- '%c'\n",
+                            argv[0] ? argv[0] : "", opt);
+                optopt = opt;
+                return (optstring[0] == ':') ? ':' : '?';
+            }
+            optarg = argv[optind++];
+        }
+    } else {
+        /* No argument */
+        optarg = NULL;
+        short_next++;
+        if (argv[optind][short_next] == '\0') {
+            short_next = 0;
+            optind++;
+        }
+    }
+    return opt;
+}
+
+/*
+ * getopt_long — handle --long options directly; short options via local
+ * getopt() above (NOT libc).  Clean-room GNU-compatible.
+ */
 int
 getopt_long(int argc, char *const argv[], const char *optstring,
             const struct option *longopts, int *longindex)
@@ -38,25 +167,28 @@ getopt_long(int argc, char *const argv[], const char *optstring,
 
     arg = argv[optind];
 
-    /* Check for "--" end-of-options marker */
-    if (strcmp(arg, "--") == 0) {
+    /* If in the middle of a short-option cluster, stay in getopt */
+    if (short_next > 0)
+        return getopt(argc, argv, optstring);
+
+    /* "--" end-of-options marker */
+    if (arg[0] == '-' && arg[1] == '-' && arg[2] == '\0') {
         optind++;
         return -1;
     }
 
-    /* Check for long option (--xxx) */
-    if (arg[0] == '-' && arg[1] == '-' && arg[2] != '\0') {
+    /* Long option (--xxx) */
+    if (arg[0] == '-' && arg[1] == '-' && arg[2] != '\0' && longopts != NULL) {
         const char *name = arg + 2;
         const char *eq = strchr(name, '=');
         size_t namelen = eq ? (size_t)(eq - name) : strlen(name);
         int match = -1;
         int ambiguous = 0;
 
-        /* Search for matching long option */
         for (i = 0; longopts[i].name != NULL; i++) {
             if (strncmp(longopts[i].name, name, namelen) == 0) {
                 if (strlen(longopts[i].name) == namelen) {
-                    /* Exact match */
+                    /* Exact match wins */
                     match = i;
                     ambiguous = 0;
                     break;
@@ -72,7 +204,7 @@ getopt_long(int argc, char *const argv[], const char *optstring,
         if (ambiguous) {
             if (opterr)
                 fprintf(stderr, "%s: option '--%.*s' is ambiguous\n",
-                        argv[0], (int)namelen, name);
+                        argv[0] ? argv[0] : "", (int)namelen, name);
             optind++;
             return '?';
         }
@@ -80,15 +212,13 @@ getopt_long(int argc, char *const argv[], const char *optstring,
         if (match < 0) {
             if (opterr)
                 fprintf(stderr, "%s: unrecognized option '--%.*s'\n",
-                        argv[0], (int)namelen, name);
+                        argv[0] ? argv[0] : "", (int)namelen, name);
             optind++;
             return '?';
         }
 
-        /* Found a match */
         if (longindex)
             *longindex = match;
-
         optind++;
 
         if (longopts[match].has_arg == no_argument) {
@@ -96,7 +226,7 @@ getopt_long(int argc, char *const argv[], const char *optstring,
                 if (opterr)
                     fprintf(stderr,
                             "%s: option '--%s' doesn't allow an argument\n",
-                            argv[0], longopts[match].name);
+                            argv[0] ? argv[0] : "", longopts[match].name);
                 return '?';
             }
             optarg = NULL;
@@ -109,10 +239,10 @@ getopt_long(int argc, char *const argv[], const char *optstring,
                 if (opterr)
                     fprintf(stderr,
                             "%s: option '--%s' requires an argument\n",
-                            argv[0], longopts[match].name);
-                return (optstring[0] == ':') ? ':' : '?';
+                            argv[0] ? argv[0] : "", longopts[match].name);
+                return (optstring && optstring[0] == ':') ? ':' : '?';
             }
-        } else { /* optional_argument */
+        } else {
             optarg = eq ? (char *)(eq + 1) : NULL;
         }
 
@@ -123,13 +253,13 @@ getopt_long(int argc, char *const argv[], const char *optstring,
         return longopts[match].val;
     }
 
-    /* Not a long option — delegate to system getopt() */
+    /* Not a long option — short option or non-option */
     return getopt(argc, argv, optstring);
 }
 
 /*
- * getopt_long_only — like getopt_long but also tries long options
- * for single-dash arguments (-option).
+ * getopt_long_only — like getopt_long but single-dash args may be long
+ * options too (e.g. gcc's -static, -shared).
  */
 int
 getopt_long_only(int argc, char *const argv[], const char *optstring,
@@ -143,14 +273,21 @@ getopt_long_only(int argc, char *const argv[], const char *optstring,
 
     arg = argv[optind];
 
-    /* Check for "--" end-of-options marker */
-    if (strcmp(arg, "--") == 0) {
+    if (short_next > 0)
+        return getopt(argc, argv, optstring);
+
+    if (arg[0] == '-' && arg[1] == '-' && arg[2] == '\0') {
         optind++;
         return -1;
     }
 
-    /* For single-dash arguments longer than 2 chars, try as long option first */
-    if (arg[0] == '-' && arg[1] != '-' && arg[1] != '\0' && arg[2] != '\0') {
+    /* "--foo" — pure long option path */
+    if (arg[0] == '-' && arg[1] == '-')
+        return getopt_long(argc, argv, optstring, longopts, longindex);
+
+    /* "-foo" with foo.len >= 2 — try long option first */
+    if (arg[0] == '-' && arg[1] != '\0' && arg[2] != '\0' &&
+        longopts != NULL) {
         const char *name = arg + 1;
         const char *eq = strchr(name, '=');
         size_t namelen = eq ? (size_t)(eq - name) : strlen(name);
@@ -165,7 +302,6 @@ getopt_long_only(int argc, char *const argv[], const char *optstring,
         }
 
         if (match >= 0) {
-            /* Treat as long option */
             if (longindex)
                 *longindex = match;
             optind++;
@@ -179,8 +315,8 @@ getopt_long_only(int argc, char *const argv[], const char *optstring,
                     if (opterr)
                         fprintf(stderr,
                                 "%s: option '-%s' requires an argument\n",
-                                argv[0], longopts[match].name);
-                    return (optstring[0] == ':') ? ':' : '?';
+                                argv[0] ? argv[0] : "", longopts[match].name);
+                    return (optstring && optstring[0] == ':') ? ':' : '?';
                 }
             } else if (longopts[match].has_arg == optional_argument) {
                 optarg = eq ? (char *)(eq + 1) : NULL;
@@ -189,7 +325,7 @@ getopt_long_only(int argc, char *const argv[], const char *optstring,
                     if (opterr)
                         fprintf(stderr,
                                 "%s: option '-%s' doesn't allow an argument\n",
-                                argv[0], longopts[match].name);
+                                argv[0] ? argv[0] : "", longopts[match].name);
                     return '?';
                 }
                 optarg = NULL;
@@ -201,13 +337,8 @@ getopt_long_only(int argc, char *const argv[], const char *optstring,
             }
             return longopts[match].val;
         }
-        /* No long match — fall through to short option processing */
+        /* Fall through to short-option processing */
     }
 
-    /* Handle as long option if it starts with -- */
-    if (arg[0] == '-' && arg[1] == '-')
-        return getopt_long(argc, argv, optstring, longopts, longindex);
-
-    /* Short option — use system getopt */
     return getopt(argc, argv, optstring);
 }
