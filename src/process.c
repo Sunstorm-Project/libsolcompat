@@ -711,3 +711,92 @@ prlimit(pid_t pid, int resource, const struct rlimit *new_limit, struct rlimit *
     errno = ENOSYS;
     return -1;
 }
+
+/* ==================================================================
+ * ucred_t — Solaris 10 process-credentials API.  Solaris 7 lacks it,
+ * so we synthesise the "current process" credentials from getuid/
+ * getgid/getpid.  Socket-peer credentials (ucred_get on a peer fd)
+ * are NOT supported — Solaris 7 has no SCM_UCRED equivalent — so
+ * consumers with fd arguments get NULL + ENOSYS.
+ * ================================================================== */
+
+#include <sys/resource.h>
+
+struct _sol_ucred_s {
+    pid_t pid;
+    uid_t euid, ruid, suid;
+    gid_t egid, rgid, sgid;
+    int   ngroups;
+    gid_t groups[NGROUPS_MAX];
+};
+
+typedef struct _sol_ucred_s _sol_ucred_t;
+
+static size_t
+_sol_ucred_size_impl(void)
+{
+    return sizeof(struct _sol_ucred_s);
+}
+
+size_t
+ucred_size(void)
+{
+    return _sol_ucred_size_impl();
+}
+
+void *
+ucred_get(pid_t pid)
+{
+    struct _sol_ucred_s *c;
+    int n;
+
+    /* We can only report the CURRENT process's credentials.  Solaris 7
+     * getuid/getgid give you self-creds; there's no safe way to query
+     * a different pid's creds from userspace without setuid. */
+    if (pid != -1 && pid != getpid()) {
+        errno = ENOSYS;
+        return NULL;
+    }
+    c = (struct _sol_ucred_s *)malloc(sizeof(*c));
+    if (c == NULL)
+        return NULL;
+    c->pid  = getpid();
+    c->euid = geteuid();
+    c->ruid = getuid();
+    c->suid = c->euid;   /* Solaris 7 has no saved-uid separately accessible */
+    c->egid = getegid();
+    c->rgid = getgid();
+    c->sgid = c->egid;
+    n = getgroups(NGROUPS_MAX, c->groups);
+    c->ngroups = (n < 0) ? 0 : n;
+    return c;
+}
+
+void
+ucred_free(void *ucred)
+{
+    free(ucred);
+}
+
+uid_t  ucred_geteuid(const void *u) { return u ? ((const _sol_ucred_t*)u)->euid : (uid_t)-1; }
+uid_t  ucred_getruid(const void *u) { return u ? ((const _sol_ucred_t*)u)->ruid : (uid_t)-1; }
+uid_t  ucred_getsuid(const void *u) { return u ? ((const _sol_ucred_t*)u)->suid : (uid_t)-1; }
+gid_t  ucred_getegid(const void *u) { return u ? ((const _sol_ucred_t*)u)->egid : (gid_t)-1; }
+gid_t  ucred_getrgid(const void *u) { return u ? ((const _sol_ucred_t*)u)->rgid : (gid_t)-1; }
+gid_t  ucred_getsgid(const void *u) { return u ? ((const _sol_ucred_t*)u)->sgid : (gid_t)-1; }
+pid_t  ucred_getpid(const void *u)  { return u ? ((const _sol_ucred_t*)u)->pid  : (pid_t)-1; }
+
+int
+ucred_getgroups(const void *u, const gid_t **groups)
+{
+    if (u == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    {
+        const struct _sol_ucred_s *c = (const struct _sol_ucred_s *)u;
+        if (groups != NULL)
+            *groups = c->groups;
+        return c->ngroups;
+    }
+}
