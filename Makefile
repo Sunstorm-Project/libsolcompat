@@ -190,12 +190,20 @@ install-headers:
 				grep -n '_NO_LONGLONG\|__STDC__' "$$longlong_header" | head -10 >&2; \
 				exit 1; \
 			fi; \
-			sed -i \
-			    -e 's@^#if __STDC__ - 0 == 0 && !defined(_NO_LONGLONG)$$@/* _SOLCOMPAT_LONGLONG_CXX */\n#if !defined(_NO_LONGLONG)@' \
-			    -e 's@^#if  !defined(__STRICT_ANSI__) && !defined(_NO_LONGLONG)$$@/* _SOLCOMPAT_LONGLONG_CXX */\n#if !defined(_NO_LONGLONG)@' \
-			    "$$longlong_header"; \
+			awk '/^#if __STDC__ - 0 == 0 && !defined\(_NO_LONGLONG\)$$/ { \
+			        print "/* _SOLCOMPAT_LONGLONG_CXX */"; \
+			        print "#if !defined(_NO_LONGLONG)"; \
+			        next; \
+			     } \
+			     /^#if  !defined\(__STRICT_ANSI__\) && !defined\(_NO_LONGLONG\)$$/ { \
+			        print "/* _SOLCOMPAT_LONGLONG_CXX */"; \
+			        print "#if !defined(_NO_LONGLONG)"; \
+			        next; \
+			     } \
+			     { print }' "$$longlong_header" > "$$longlong_header.tmp" && \
+			mv "$$longlong_header.tmp" "$$longlong_header"; \
 			if ! grep -q "_SOLCOMPAT_LONGLONG_CXX" "$$longlong_header"; then \
-				echo "FATAL: longlong_t sed ran but marker NOT in $$longlong_header" >&2; \
+				echo "FATAL: awk patch ran but marker NOT in $$longlong_header" >&2; \
 				echo "  Content around line 52 (expected patch location):" >&2; \
 				sed -n '48,60p' "$$longlong_header" >&2; \
 				exit 1; \
