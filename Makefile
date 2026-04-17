@@ -174,42 +174,44 @@ install-headers:
 	@# GCC 15 unconditionally supports `long long` (C99 and C++11+),
 	@# so the gate is obsolete.  Force-unconditional `long long`
 	@# typedef by rewriting both gates to always evaluate true.
+	@# IDEMPOTENT migration — handle FOUR pattern variants:
+	@#   1. Raw Solaris 7:     #if __STDC__ - 0 == 0 && !defined(_NO_LONGLONG)
+	@#   2. Raw Solaris 7 alt: #if  !defined(__STRICT_ANSI__) && !defined(_NO_LONGLONG)
+	@#   3. Prior patch (C++): #if (defined(__cplusplus) || __STDC__ - 0 == 0) && !defined(_NO_LONGLONG)
+	@#   4. Prior patch alt:   #if (defined(__cplusplus) || !defined(__STRICT_ANSI__)) && !defined(_NO_LONGLONG)
+	@# All rewrite to the unconditional: #if !defined(_NO_LONGLONG)
+	@# This handles persistent sysroot mounts that have accumulated
+	@# prior patches across runs.
 	@for longlong_header in \
 	    "$(SYSROOT)/usr/include/sys/types.h" \
 	    "$(SYSROOT)/usr/include/stdio.h"; do \
-		if [ -f "$$longlong_header" ]; then \
-			if grep -q "_SOLCOMPAT_LONGLONG_CXX" "$$longlong_header"; then \
-				echo "  $$longlong_header: longlong_t already patched (marker present)" >&2; \
-				continue; \
-			fi; \
-			echo "  $$longlong_header: applying longlong_t sed..." >&2; \
-			if ! grep -q '^#if __STDC__ - 0 == 0 && !defined(_NO_LONGLONG)$$' "$$longlong_header"; then \
-				echo "FATAL: longlong_t gate pattern not found in $$longlong_header" >&2; \
-				echo "  Expected pattern '#if __STDC__ - 0 == 0 && !defined(_NO_LONGLONG)'" >&2; \
-				echo "  Actual content with _NO_LONGLONG / __STDC__:" >&2; \
-				grep -n '_NO_LONGLONG\|__STDC__' "$$longlong_header" | head -10 >&2; \
-				exit 1; \
-			fi; \
-			awk '/^#if __STDC__ - 0 == 0 && !defined\(_NO_LONGLONG\)$$/ { \
-			        print "/* _SOLCOMPAT_LONGLONG_CXX */"; \
-			        print "#if !defined(_NO_LONGLONG)"; \
-			        next; \
-			     } \
-			     /^#if  !defined\(__STRICT_ANSI__\) && !defined\(_NO_LONGLONG\)$$/ { \
-			        print "/* _SOLCOMPAT_LONGLONG_CXX */"; \
-			        print "#if !defined(_NO_LONGLONG)"; \
-			        next; \
-			     } \
-			     { print }' "$$longlong_header" > "$$longlong_header.tmp" && \
-			mv "$$longlong_header.tmp" "$$longlong_header"; \
-			if ! grep -q "_SOLCOMPAT_LONGLONG_CXX" "$$longlong_header"; then \
-				echo "FATAL: awk patch ran but marker NOT in $$longlong_header" >&2; \
-				echo "  Content around line 52 (expected patch location):" >&2; \
-				sed -n '48,60p' "$$longlong_header" >&2; \
-				exit 1; \
-			fi; \
-			echo "  $$longlong_header patched for longlong_t (always long long)" >&2; \
+		[ -f "$$longlong_header" ] || continue; \
+		awk '/^#if __STDC__ - 0 == 0 && !defined\(_NO_LONGLONG\)$$/ { \
+		        print "/* _SOLCOMPAT_LONGLONG_CXX */"; \
+		        print "#if !defined(_NO_LONGLONG)"; \
+		        next; \
+		     } \
+		     /^#if  !defined\(__STRICT_ANSI__\) && !defined\(_NO_LONGLONG\)$$/ { \
+		        print "/* _SOLCOMPAT_LONGLONG_CXX */"; \
+		        print "#if !defined(_NO_LONGLONG)"; \
+		        next; \
+		     } \
+		     /^#if \(defined\(__cplusplus\) \|\| __STDC__ - 0 == 0\) && !defined\(_NO_LONGLONG\)$$/ { \
+		        print "#if !defined(_NO_LONGLONG)"; \
+		        next; \
+		     } \
+		     /^#if \(defined\(__cplusplus\) \|\| !defined\(__STRICT_ANSI__\)\) && !defined\(_NO_LONGLONG\)$$/ { \
+		        print "#if !defined(_NO_LONGLONG)"; \
+		        next; \
+		     } \
+		     { print }' "$$longlong_header" > "$$longlong_header.tmp" && \
+		mv "$$longlong_header.tmp" "$$longlong_header"; \
+		if ! grep -q '^#if !defined(_NO_LONGLONG)$$' "$$longlong_header"; then \
+			echo "FATAL: longlong_t unconditional form not present in $$longlong_header after awk" >&2; \
+			grep -n '_NO_LONGLONG\|__STDC__\|__STRICT_ANSI__' "$$longlong_header" | head -10 >&2; \
+			exit 1; \
 		fi; \
+		echo "  $$longlong_header longlong_t unconditional (always long long)" >&2; \
 	done
 	@# Path resolution rule for sysroot-prep entries:
 	@#   If the relative path under sysroot-prep starts with "usr/" or
