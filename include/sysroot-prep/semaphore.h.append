@@ -1,0 +1,30 @@
+/*
+ * semaphore.h.append — sem_timedwait() declaration for Solaris 7
+ *
+ * Solaris 7's <semaphore.h> provides sem_init/sem_wait/sem_post/
+ * sem_trywait/sem_destroy but lacks sem_timedwait (POSIX 2001).
+ * Qt6 and other modern software requires it for timed mutex waits.
+ *
+ * Implementation: libsolcompat polls sem_trywait() in a loop with
+ * 10ms sleeps via poll(NULL, 0, ms), checking the absolute timeout
+ * each iteration.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_SEMAPHORE_H_APPEND
+#define _SOLCOMPAT_SEMAPHORE_H_APPEND
+
+#include <time.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+int sem_timedwait(sem_t *sem, const struct timespec *abs_timeout);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _SOLCOMPAT_SEMAPHORE_H_APPEND */
