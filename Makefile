@@ -326,3 +326,4 @@ clean:
 	rm -rf tests/gen
 
 .PHONY: all check install install-headers install-runtime install-dev install-toolchain test clean
+# cache-bust: 2026-04-17 — force sysroot rebuild after OCI cache poisoning with awk patch
