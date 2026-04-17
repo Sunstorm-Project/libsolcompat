@@ -183,6 +183,14 @@ install-headers:
 			    -e 's@^#if __STDC__ - 0 == 0 && !defined(_NO_LONGLONG)$$@/* _SOLCOMPAT_LONGLONG_CXX */\n#if !defined(_NO_LONGLONG)@' \
 			    -e 's@^#if  !defined(__STRICT_ANSI__) && !defined(_NO_LONGLONG)$$@/* _SOLCOMPAT_LONGLONG_CXX */\n#if !defined(_NO_LONGLONG)@' \
 			    "$$longlong_header"; \
+			if ! grep -q "_SOLCOMPAT_LONGLONG_CXX" "$$longlong_header"; then \
+				echo "FATAL: longlong_t patch did NOT apply to $$longlong_header"; \
+				echo "       sed command ran but file was not modified."; \
+				echo "       Check that the file has the expected"; \
+				echo "       '#if __STDC__ - 0 == 0 && !defined(_NO_LONGLONG)' pattern."; \
+				grep -n '_NO_LONGLONG\|__STDC__' "$$longlong_header" | head -5; \
+				exit 1; \
+			fi; \
 			echo "  $$longlong_header patched for longlong_t (always long long)"; \
 		fi; \
 	done
