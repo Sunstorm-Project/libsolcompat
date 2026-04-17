@@ -177,21 +177,30 @@ install-headers:
 	@for longlong_header in \
 	    "$(SYSROOT)/usr/include/sys/types.h" \
 	    "$(SYSROOT)/usr/include/stdio.h"; do \
-		if [ -f "$$longlong_header" ] && \
-		   ! grep -q "_SOLCOMPAT_LONGLONG_CXX" "$$longlong_header"; then \
+		if [ -f "$$longlong_header" ]; then \
+			if grep -q "_SOLCOMPAT_LONGLONG_CXX" "$$longlong_header"; then \
+				echo "  $$longlong_header: longlong_t already patched (marker present)" >&2; \
+				continue; \
+			fi; \
+			echo "  $$longlong_header: applying longlong_t sed..." >&2; \
+			if ! grep -q '^#if __STDC__ - 0 == 0 && !defined(_NO_LONGLONG)$$' "$$longlong_header"; then \
+				echo "FATAL: longlong_t gate pattern not found in $$longlong_header" >&2; \
+				echo "  Expected pattern '#if __STDC__ - 0 == 0 && !defined(_NO_LONGLONG)'" >&2; \
+				echo "  Actual content with _NO_LONGLONG / __STDC__:" >&2; \
+				grep -n '_NO_LONGLONG\|__STDC__' "$$longlong_header" | head -10 >&2; \
+				exit 1; \
+			fi; \
 			sed -i \
 			    -e 's@^#if __STDC__ - 0 == 0 && !defined(_NO_LONGLONG)$$@/* _SOLCOMPAT_LONGLONG_CXX */\n#if !defined(_NO_LONGLONG)@' \
 			    -e 's@^#if  !defined(__STRICT_ANSI__) && !defined(_NO_LONGLONG)$$@/* _SOLCOMPAT_LONGLONG_CXX */\n#if !defined(_NO_LONGLONG)@' \
 			    "$$longlong_header"; \
 			if ! grep -q "_SOLCOMPAT_LONGLONG_CXX" "$$longlong_header"; then \
-				echo "FATAL: longlong_t patch did NOT apply to $$longlong_header"; \
-				echo "       sed command ran but file was not modified."; \
-				echo "       Check that the file has the expected"; \
-				echo "       '#if __STDC__ - 0 == 0 && !defined(_NO_LONGLONG)' pattern."; \
-				grep -n '_NO_LONGLONG\|__STDC__' "$$longlong_header" | head -5; \
+				echo "FATAL: longlong_t sed ran but marker NOT in $$longlong_header" >&2; \
+				echo "  Content around line 52 (expected patch location):" >&2; \
+				sed -n '48,60p' "$$longlong_header" >&2; \
 				exit 1; \
 			fi; \
-			echo "  $$longlong_header patched for longlong_t (always long long)"; \
+			echo "  $$longlong_header patched for longlong_t (always long long)" >&2; \
 		fi; \
 	done
 	@# Path resolution rule for sysroot-prep entries:
