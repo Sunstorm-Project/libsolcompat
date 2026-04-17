@@ -156,29 +156,34 @@ install-headers:
 			"$(SYSROOT)/usr/include/sys/int_types.h"; \
 		echo "  sys/int_types.h replaced with fixed typedefs"; \
 	fi
-	@# --- Patch sys/types.h: make longlong_t a real 'long long' in C++ ---
+	@# --- Patch sys/types.h: make longlong_t a real 'long long' always ---
 	@# Solaris 7's sys/types.h gates the 'typedef long long longlong_t'
-	@# on '__STDC__ - 0 == 0', which is false when __STDC__=1 (strict C
-	@# or any C++ compiler).  The else branch then declares longlong_t
-	@# as a union, and off_t (= longlong_t with _FILE_OFFSET_BITS=64)
-	@# becomes a union — breaking every C++ library that casts off_t.
-	@# Extend the condition to also accept __cplusplus so C++ TUs get
-	@# the integer typedef.
-	@# Patch sys/types.h and stdio.h for C++ longlong_t.  Both headers
-	@# gate their `(u_)longlong_t` / `__longlong_t` typedefs on a broken
-	@# `__STDC__ - 0 == 0` check that falls through to a union in any C++
-	@# mode.  off_t derives from these, so the union leaks into every
-	@# C++ TU and breaks casts.  Extend the guard to accept C++ too.
+	@# on '__STDC__ - 0 == 0' (K&R-era compilers) and
+	@# '!defined(__STRICT_ANSI__)'.  Both fail for modern C compilers
+	@# in strict mode:
+	@#   - gcc -std=c99 / -std=c11 sets __STDC__=1 AND __STRICT_ANSI__
+	@#   - gcc -std=gnu99 sets __STDC__=1 but not __STRICT_ANSI__
+	@#   - C++ compilers set __STDC__=1 (or undef it)
+	@#
+	@# When both gates fail, longlong_t becomes a union — which breaks
+	@# off_t (= longlong_t with _FILE_OFFSET_BITS=64).  Any code that
+	@# casts an integer to off_t (e.g. `(off_t)-1`, `(off_t)lseek(...)`)
+	@# then fails with "cast to union type from type not present in
+	@# union".
+	@#
+	@# GCC 15 unconditionally supports `long long` (C99 and C++11+),
+	@# so the gate is obsolete.  Force-unconditional `long long`
+	@# typedef by rewriting both gates to always evaluate true.
 	@for longlong_header in \
 	    "$(SYSROOT)/usr/include/sys/types.h" \
 	    "$(SYSROOT)/usr/include/stdio.h"; do \
 		if [ -f "$$longlong_header" ] && \
 		   ! grep -q "_SOLCOMPAT_LONGLONG_CXX" "$$longlong_header"; then \
 			sed -i \
-			    -e 's@^#if __STDC__ - 0 == 0 && !defined(_NO_LONGLONG)$$@/* _SOLCOMPAT_LONGLONG_CXX */\n#if (defined(__cplusplus) || __STDC__ - 0 == 0) \&\& !defined(_NO_LONGLONG)@' \
-			    -e 's@^#if  !defined(__STRICT_ANSI__) && !defined(_NO_LONGLONG)$$@/* _SOLCOMPAT_LONGLONG_CXX */\n#if (defined(__cplusplus) || !defined(__STRICT_ANSI__)) \&\& !defined(_NO_LONGLONG)@' \
+			    -e 's@^#if __STDC__ - 0 == 0 && !defined(_NO_LONGLONG)$$@/* _SOLCOMPAT_LONGLONG_CXX */\n#if !defined(_NO_LONGLONG)@' \
+			    -e 's@^#if  !defined(__STRICT_ANSI__) && !defined(_NO_LONGLONG)$$@/* _SOLCOMPAT_LONGLONG_CXX */\n#if !defined(_NO_LONGLONG)@' \
 			    "$$longlong_header"; \
-			echo "  $$longlong_header patched for longlong_t in C++"; \
+			echo "  $$longlong_header patched for longlong_t (always long long)"; \
 		fi; \
 	done
 	@# Path resolution rule for sysroot-prep entries:

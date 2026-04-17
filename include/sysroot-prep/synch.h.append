@@ -1,0 +1,34 @@
+/*
+ * synch.h.append — smt_pause() declaration for Solaris 7
+ *
+ * Solaris 10+ added smt_pause() to <synch.h> as a CPU pause hint for
+ * simultaneous multithreading (SMT) systems.  Solaris 7 predates SMT
+ * hardware and doesn't ship this function.
+ *
+ * Modern software (mimalloc, Python 3.14+ internal allocator, various
+ * lock-free data structures) calls smt_pause() inside spin-wait loops
+ * to be friendlier to co-scheduled hardware threads.  On non-SMT
+ * hardware, the function is effectively a no-op.
+ *
+ * We provide smt_pause() as an inline no-op.  The Solaris 7 SPARC
+ * hardware this build targets (MicroSPARC-II in SS4, SS5, etc.) has
+ * no SMT, so the pause hint has no runtime effect — it's purely a
+ * compilation compatibility shim.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_SYNCH_H_APPEND
+#define _SOLCOMPAT_SYNCH_H_APPEND
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+static __inline__ void smt_pause(void) { /* no SMT on Solaris 7 SPARC */ }
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _SOLCOMPAT_SYNCH_H_APPEND */
