@@ -34,4 +34,40 @@
 /* POSIX posix_madvise — advisory memory-use pattern hint */
 int posix_madvise(void *addr, size_t len, int advice);
 
+/* --- Solaris 10+ memcntl() hat-level page-size advice ---
+ *
+ * Solaris 10 added memcntl(..., MC_HAT_ADVISE, &memcntl_mha, ...) as a
+ * way for applications to hint the VM about large-page usage.  Solaris 7
+ * has memcntl() but lacks the hat-advise extension.
+ *
+ * mimalloc (bundled in Python 3.14+) unconditionally uses this path on
+ * __sun — compilation fails without these declarations.  Provide the
+ * struct + constants so the code compiles; at runtime memcntl() with
+ * MC_HAT_ADVISE will return -1/errno on Solaris 7 and mimalloc falls
+ * through to its non-hinted path.
+ *
+ * Values match Solaris 10+ <sys/mman.h>.
+ */
+#ifndef MC_HAT_ADVISE
+#define MC_HAT_ADVISE  7
+#endif
+#ifndef MHA_MAPSIZE_VA
+#define MHA_MAPSIZE_VA 0x1
+#endif
+#ifndef MHA_MAPSIZE_STACK
+#define MHA_MAPSIZE_STACK 0x2
+#endif
+#ifndef MHA_MAPSIZE_BSSBRK
+#define MHA_MAPSIZE_BSSBRK 0x4
+#endif
+
+#ifndef _SOLCOMPAT_MEMCNTL_MHA_DEFINED
+#define _SOLCOMPAT_MEMCNTL_MHA_DEFINED
+struct memcntl_mha {
+    uint_t mha_cmd;
+    uint_t mha_flags;
+    size_t mha_pagesize;
+};
+#endif
+
 #endif /* _SOLCOMPAT_SYS_MMAN_H_APPEND */
