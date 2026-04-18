@@ -144,17 +144,13 @@ install-headers:
 	@echo "=== libsolcompat install-headers ==="
 	@echo "  SYSROOT:     $(SYSROOT)"
 	@echo ""
-	@# --- Install sysroot-overlay (complete headers Solaris 7 lacks) ---
+	@# --- Install sysroot-overlay (complete headers Solaris 7 lacks,
+	@#     plus wholesale replacements like sys/int_types.h) ---
 	@if [ -d sysroot-overlay ]; then \
 		echo "Installing sysroot-overlay headers..."; \
 		cp -r sysroot-overlay/* "$(SYSROOT)/"; \
-		echo "  stdint.h, fenv.h, spawn.h, getopt.h, endian.h, etc."; \
-	fi
-	@# --- Replace sys/int_types.h entirely (fix broken 'char int8_t') ---
-	@if [ -f include/sysroot-prep/sys/int_types.h.prepend ]; then \
-		cp include/sysroot-prep/sys/int_types.h.prepend \
-			"$(SYSROOT)/usr/include/sys/int_types.h"; \
-		echo "  sys/int_types.h replaced with fixed typedefs"; \
+		echo "  stdint.h, fenv.h, spawn.h, getopt.h, endian.h,"; \
+		echo "  sys/int_types.h (fixed typedefs), etc."; \
 	fi
 	@# --- Patch sys/types.h: make longlong_t a real 'long long' always ---
 	@# Solaris 7's sys/types.h gates the 'typedef long long longlong_t'
@@ -223,7 +219,6 @@ install-headers:
 	@for prepend_file in $$(find include/sysroot-prep -name '*.prepend' -type f 2>/dev/null); do \
 		rel="$${prepend_file#include/sysroot-prep/}"; \
 		hdr="$${rel%.prepend}"; \
-		if [ "$${hdr}" = "sys/int_types.h" ]; then continue; fi; \
 		case "$${hdr}" in \
 			usr/*|opt/*) target="$(SYSROOT)/$${hdr}" ;; \
 			*)           target="$(SYSROOT)/usr/include/$${hdr}" ;; \

@@ -1,5 +1,5 @@
 /*
- * sys/int_types.h.prepend — Fixed integer typedefs for Solaris 7
+ * sys/int_types.h — Fixed integer typedefs for Solaris 7
  *
  * Replaces the Solaris 7 sys/int_types.h entirely. Two reasons:
  *   1. Solaris 7 typedefs int8_t as plain 'char', which conflicts with

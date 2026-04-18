@@ -11,10 +11,10 @@
  * Same rationale as stdlib.h.append: during the canadian-cross gcc
  * build, libstdc++ compiles against gcc's own include-fixed copy of
  * <locale.h> (which fixincludes took from this sysroot header), and
- * that path is searched BEFORE any caller-supplied -isystem override.
+ * that path is searched BEFORE any caller-supplied -isystem path.
  * So the declarations have to live in the sysroot header directly.
  *
- * libsolcompat provides the runtime implementations (src/xlocale.c)
+ * libsolcompat provides the runtime implementations (src/stubs.c)
  * and the LIB_SPEC auto-append of -lsolcompat links them in.
  *
  * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
@@ -35,7 +35,7 @@ typedef struct _sol_locale_s *locale_t;
 #endif
 
 /* POSIX 2008 LC_*_MASK bits. Values must match libsolcompat's
- * src/xlocale.c and solcompat/stubs.h. */
+ * src/stubs.c and solcompat/stubs.h. */
 #ifndef LC_CTYPE_MASK
 #define LC_CTYPE_MASK    (1 << 0)
 #define LC_NUMERIC_MASK  (1 << 1)
@@ -52,7 +52,7 @@ typedef struct _sol_locale_s *locale_t;
 #endif
 
 /* POSIX 2008 per-thread locale API.  Implementations in
- * libsolcompat/src/xlocale.c; auto-linked via sol2.h LIB_SPEC patch. */
+ * libsolcompat/src/stubs.c; auto-linked via sol2.h LIB_SPEC patch. */
 extern locale_t newlocale(int category_mask, const char *locale_name, locale_t base);
 extern locale_t uselocale(locale_t new_locale);
 extern void     freelocale(locale_t loc);

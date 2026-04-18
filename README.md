@@ -34,7 +34,7 @@ Part of the [Sunstorm Project](https://github.com/Sunstorm-Project). Installed a
 | **atomic** | GCC `__atomic_*` builtins (load/store/exchange/CAS/fetch_add/fetch_or/...) for 1/4/8-byte types, plus Solaris-style `atomic_add_int`/`atomic_cas_uint`/`atomic_swap_ptr` |
 | **hwcap** | `getisax()` stub (Solaris 9+ feature) |
 | **xpg** | `__xpg6` symbol, `KSTAT_DATA_STRING` constants |
-| **override headers** | 26 wrapper headers shadowing Solaris 7 system headers: `stdint.h`, `inttypes.h`, `stdio.h`, `stdlib.h`, `string.h`, `math.h`, `fenv.h`, `time.h`, `ctype.h`, `fcntl.h`, `poll.h`, `spawn.h`, `dirent.h`, `locale.h`, `endian.h`, `atomic.h`, `sys/mman.h`, `sys/socket.h`, `net/if.h`, `netinet/in.h`, `netinet/in6.h`, `arpa/inet.h` |
+| **sysroot headers** | Installed via `sysroot-overlay/` (wholly new headers Solaris 7 lacks: `stdint.h`, `endian.h`, `fenv.h`, `getopt.h`, `atomic.h`, `ifaddrs.h`, `error.h`, `complex.h`, `mntent.h`, `pty.h`, `spawn.h`, `stdatomic.h`, `stdbool.h`, `threads.h`, `uchar.h`, `ucred.h`, `xlocale.h`, `netinet/in6.h`, `sys/auxv.h`, `sys/random.h`, `sys/soundcard.h`, `sys/xattr.h`) and `sysroot-prep/*.append`/`*.prepend` (POSIX/C99 additions appended to pristine Solaris 7 headers: `stdio.h`, `stdlib.h`, `string.h`, `math.h`, `time.h`, `locale.h`, `sys/mman.h`, `sys/socket.h`, `netdb.h`, …) |
 
 ## Building
 
@@ -65,19 +65,15 @@ gmake install DESTDIR=/path/to/staging PREFIX=/opt/sst
 This installs:
 - `lib/libsolcompat.a` — static library
 - `lib/libsolcompat.so.1` — shared library
-- `include/solcompat/*.h` — 21 implementation headers
-- `include/override/*.h` — 26 override headers (shadow system headers)
+- `include/solcompat/*.h` — implementation headers for the solcompat-extension API
+
+Separately, `make install-headers` applies the `sysroot-overlay/` and `sysroot-prep/` trees to the cross-sysroot so pristine Solaris 7 headers gain POSIX/C99 declarations that the libsolcompat `.a`/`.so.1` back at link time. This is driven by `toolchain/bootstrap.sh` in the sst-build-pipeline and is not normally invoked standalone.
 
 ## Usage
 
-### Automatic (recommended)
+### Cross-compile (sst-build-pipeline)
 
-```sh
-CPPFLAGS="-I/opt/sst/include -include solcompat/solcompat.h"
-LDFLAGS="-L/opt/sst/lib -lsolcompat"
-```
-
-The `-include` flag automatically overrides broken libc functions (such as `snprintf`) and provides all missing prototypes.
+The pipeline's `toolchain/bootstrap.sh` runs `make install-headers` into the writable sysroot and links `libsolcompat.so.1` into `cc1`'s `DT_NEEDED` via `patches.sh` Patch 7 (`LIB_SPEC`). No per-package configuration is needed; every target binary picks up libsolcompat automatically.
 
 ### Selective
 

@@ -70,10 +70,10 @@ unsigned long long   strtoumax(const char *nptr, char **endptr, int base);
  * compile.  Pull in libsolcompat's sysroot-overlay <stdint.h>, which
  * supplies the fast typedefs and C99 limit/constant macros.
  *
- * Not done in sys/int_types.h.prepend (see 5260cba revert) because that
- * path collides with GCC's <stdint-gcc.h> when both are in scope — the
- * overlay <stdint.h> is already the sole authority for fast types, so
- * including it here adds no new authority. */
+ * Not done in sysroot-overlay/usr/include/sys/int_types.h (see 5260cba
+ * revert) because that path collides with GCC's <stdint-gcc.h> when both
+ * are in scope — the overlay <stdint.h> is already the sole authority for
+ * fast types, so including it here adds no new authority. */
 #include <stdint.h>
 
 /* ================================================================

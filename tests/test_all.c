@@ -1,7 +1,7 @@
 /*
  * test_all.c — Test suite for libsolcompat
  *
- * Compile: cc -I../include -I../include/override -o test_all test_all.c -L.. -lsolcompat -lrt -lsocket -lnsl -lresolv -ldl -lm
+ * Compile: cc -I../include -o test_all test_all.c -L.. -lsolcompat -lrt -lsocket -lnsl -lresolv -ldl -lm
  * Run:     ./test_all
  *
  * Each subsystem has a test_*() function.  On failure, prints the
