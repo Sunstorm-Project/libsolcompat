@@ -11,7 +11,16 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <time.h>                  /* time() in mkdtemp fallback seed */
-#include "solcompat/random.h"      /* getentropy prototype */
+
+/* Forward-declare getentropy instead of pulling solcompat/random.h.
+ * random.h transitively includes <stdint.h>, which resolves to GCC's
+ * stdint.h wrapper doing #include_next <stdint.h> — the underlying
+ * sysroot stdint.h is supplied by libsolcompat's own sysroot-overlay,
+ * which isn't installed yet at the moment libsolcompat's OWN Makefile
+ * compiles stdlib.c. Chicken-and-egg. The prototype here matches
+ * include/solcompat/random.h:18 exactly; callers that want the full
+ * random API include random.h themselves. */
+extern int getentropy(void *buffer, size_t length);
 
 extern int solcompat_snprintf(char *, size_t, const char *, ...);
 
