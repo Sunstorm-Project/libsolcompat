@@ -115,9 +115,30 @@ getentropy(void *buffer, size_t length)
     if (get_random_bytes(buffer, length) == 0)
         return 0;
 
-    /* Fallback — better than failing */
-    fallback_random_bytes(buffer, length);
-    return 0;
+    /*
+     * No /dev/random or /dev/urandom available.
+     *
+     * Silently falling back to the LCG was a cryptographic footgun:
+     * OpenSSL / OpenSSH / Python's `secrets` / any caller of
+     * arc4random() seeds from getentropy(); if this function silently
+     * returns LCG output, session keys / nonces / CSRF tokens become
+     * predictable with zero diagnostic.  A loud failure is strictly
+     * better than a silent weak-entropy substitution.
+     *
+     * If a caller explicitly wants the predictable fallback (e.g. for
+     * testing), they can set SOLCOMPAT_ALLOW_WEAK_RANDOM=1.
+     *
+     * Base Solaris 7 without SUNWski has neither /dev/random nor
+     * /dev/urandom, so this path is hit by default on vanilla installs.
+     * The right remediation is to ship SUNWski or a userspace RNG;
+     * libsolcompat refuses to paper over its absence with an LCG.
+     */
+    if (getenv("SOLCOMPAT_ALLOW_WEAK_RANDOM") != NULL) {
+        fallback_random_bytes(buffer, length);
+        return 0;
+    }
+    errno = EIO;
+    return -1;
 }
 
 /*

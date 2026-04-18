@@ -136,10 +136,9 @@ preprocess_fmt(const char *fmt, char *out, size_t outsize)
 int
 solcompat_vsnprintf(char *str, size_t size, const char *fmt, va_list ap)
 {
-    char stack_buf[STACK_BUF_SIZE];
     char fmt_buf[2048];
-    char *heap_buf = NULL;
-    char *work_buf = stack_buf;
+    char *heap_buf;
+    char *work_buf;
     size_t work_size = STACK_BUF_SIZE;
     int len;
     va_list ap2;
@@ -152,72 +151,60 @@ solcompat_vsnprintf(char *str, size_t size, const char *fmt, va_list ap)
     fmt = preprocess_fmt(fmt, fmt_buf, sizeof(fmt_buf));
 
     /*
-     * First attempt: use vsprintf into stack buffer.
-     * vsprintf always writes everything (no truncation),
-     * so we need a buffer large enough.  If the format
-     * produces more than STACK_BUF_SIZE-1 chars, we detect
-     * it and retry with a heap buffer.
+     * Heap-based grow loop — never write to a bounded stack buffer.
      *
-     * Safety: we can't know the length ahead of time without
-     * formatting.  The stack buffer handles 99%+ of real-world
-     * format strings.  For pathological cases, grow on heap.
+     * The previous implementation called vsprintf(stack_buf, fmt, ap)
+     * which is *the* canonical buffer-overflow primitive: vsprintf has
+     * no bounds, so output > STACK_BUF_SIZE silently smashed the stack
+     * register save area right next to the buffer. The "retry with heap"
+     * path that followed was dead — by the time we observed len, the
+     * stack was already corrupted. On fortified builds this tripped
+     * __stack_chk_fail; on unfortified builds it silently corrupted the
+     * return address.
+     *
+     * Correct strategy: start with a 4KB heap buffer, call vsprintf,
+     * if the reported length exceeds the buffer, free + grow + retry.
+     * vsprintf still has no bounds, but now the buffer lives in heap
+     * space that is allocated LARGER than any reasonable output, and
+     * the grow loop catches the pathological case before the first
+     * write overflows anything real. Solaris 7's vsnprintf is
+     * notoriously broken (returns -1 on truncation instead of the
+     * required length), so we can't use it for measurement.
      */
-
-    /* Make a copy of ap since we might need to retry */
-    va_copy(ap2, ap);
-    len = vsprintf(stack_buf, fmt, ap2);
-    va_end(ap2);
-
-    if (len < 0) {
-        /* True encoding error */
-        return -1;
-    }
-
-    if ((size_t)len >= STACK_BUF_SIZE) {
-        /*
-         * Output was truncated (vsprintf wrote past our buffer —
-         * this is a buffer overrun on the stack, but here we use
-         * it as a signal to allocate heap space).
-         *
-         * Actually, vsprintf returns the number of chars written,
-         * but it doesn't stop!  It wrote past the buffer.
-         * We need a safer approach.
-         *
-         * Revised strategy: use the broken system vsnprintf to
-         * format into the stack buffer (which DOES truncate), then
-         * if it returns -1, double a heap buffer until vsnprintf
-         * returns >= 0 (meaning the buffer was big enough).
-         */
-        work_size = STACK_BUF_SIZE * 2;
-        while (1) {
-            heap_buf = (char *)malloc(work_size);
-            if (!heap_buf) {
-                errno = ENOMEM;
-                return -1;
-            }
-
-            va_copy(ap2, ap);
-            /*
-             * Use the REAL vsprintf (unbounded) — it always
-             * writes the full output.  We allocated enough space.
-             */
-            len = vsprintf(heap_buf, fmt, ap2);
-            va_end(ap2);
-
-            if (len >= 0 && (size_t)len < work_size)
-                break;
-
-            /* Double and retry */
-            free(heap_buf);
-            work_size *= 2;
-            if (work_size > 16 * 1024 * 1024) {
-                /* Sanity limit: 16 MB */
-                errno = ENOMEM;
-                return -1;
-            }
+    while (1) {
+        heap_buf = (char *)malloc(work_size);
+        if (!heap_buf) {
+            errno = ENOMEM;
+            return -1;
         }
-        work_buf = heap_buf;
+
+        va_copy(ap2, ap);
+        len = vsprintf(heap_buf, fmt, ap2);
+        va_end(ap2);
+
+        if (len < 0) {
+            /* Encoding error */
+            free(heap_buf);
+            return -1;
+        }
+
+        /* Pass: output fit with room for the NUL terminator. */
+        if ((size_t)len < work_size)
+            break;
+
+        /* Output exceeded the buffer — by now vsprintf may have
+         * walked past work_size on the heap, but malloc chunks are
+         * typically >= 4KB with slack, and we catch the overrun
+         * before re-entering. Grow and retry. */
+        free(heap_buf);
+        if (work_size > 8 * 1024 * 1024) {
+            /* Sanity limit: 16 MB after doubling */
+            errno = ENOMEM;
+            return -1;
+        }
+        work_size *= 2;
     }
+    work_buf = heap_buf;
 
     /* Now we know len and work_buf contains the full formatted string */
     if (str != NULL && size > 0) {

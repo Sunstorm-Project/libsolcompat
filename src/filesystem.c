@@ -11,6 +11,7 @@
 #define _FILE_OFFSET_BITS 64
 #define _LARGEFILE_SOURCE 1
 
+#include <stddef.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -109,9 +110,15 @@ futimens(int fd, const struct timespec times[2])
     if (result == 0)
         return 0;
 
-    /* Best effort: silently succeed if we can't set timestamps.
-     * The file content is correct; only the timestamp is approximate. */
-    return 0;
+    /* Both /proc paths failed — return -1 + ENOTSUP so callers can
+     * react. Returning 0 silently was a correctness bug: make, tar,
+     * cp, rsync, and gnulib's utimecmp use futimens to preserve or
+     * update mtime. A silent "success" leaves the kernel mtime
+     * unchanged, and subsequent `make` runs skip rebuilding a file
+     * that was supposedly touched. If a specific caller wants to
+     * ignore timestamp failure, that's the caller's responsibility. */
+    errno = ENOTSUP;
+    return -1;
 }
 
 int
@@ -258,9 +265,15 @@ scandir(const char *dirp, struct dirent ***namelist,
             list = newlist;
         }
 
-        /* Duplicate the dirent */
+        /* Duplicate the dirent. Solaris 7 declares d_name as a flexible
+         * array (char d_name[1]) with the real filename packed immediately
+         * after. Using sizeof(struct dirent) copies only the struct prefix
+         * plus one byte of d_name — anything past the first character is
+         * truncated garbage. Size the allocation to offsetof(d_name) +
+         * strlen + NUL so the whole filename comes along. */
         {
-            size_t entsize = sizeof(struct dirent);
+            size_t entsize = offsetof(struct dirent, d_name) +
+                             strlen(entry->d_name) + 1;
             struct dirent *dup = (struct dirent *)malloc(entsize);
             if (!dup) {
                 size_t i;

@@ -43,20 +43,18 @@ int pthread_setname_np(pthread_t thread, const char *name);
 typedef struct _sol_locale_s *locale_t;
 #endif
 
-#ifndef LC_GLOBAL_LOCALE
-#define LC_GLOBAL_LOCALE ((locale_t)-1)
-#endif
-
-#ifndef LC_ALL_MASK
-#define LC_COLLATE_MASK  (1 << LC_COLLATE)
-#define LC_CTYPE_MASK    (1 << LC_CTYPE)
-#define LC_MESSAGES_MASK (1 << LC_MESSAGES)
-#define LC_MONETARY_MASK (1 << LC_MONETARY)
-#define LC_NUMERIC_MASK  (1 << LC_NUMERIC)
-#define LC_TIME_MASK     (1 << LC_TIME)
-#define LC_ALL_MASK      (LC_COLLATE_MASK | LC_CTYPE_MASK | LC_MESSAGES_MASK | \
-                          LC_MONETARY_MASK | LC_NUMERIC_MASK | LC_TIME_MASK)
-#endif
+/*
+ * locale_t, LC_GLOBAL_LOCALE, and LC_*_MASK are authoritatively defined
+ * in sysroot-prep/locale.h.append, which installs into the sysroot's
+ * /usr/include/locale.h. The previous duplicate definitions here
+ * collided-by-accident with those — the literal `(1 << 0)` in the
+ * append and the `(1 << LC_CTYPE)` here happened to agree because
+ * Solaris 7 ships LC_CTYPE=0, but a sysroot patch that reordered the
+ * LC_* constants would silently desync the two sets. Single source of
+ * truth now: sysroot-prep. #include <locale.h> gets the masks.
+ *
+ * #include <locale.h> above already pulls them in; no fallbacks here.
+ */
 
 /* Function declarations */
 locale_t newlocale(int category_mask, const char *locale, locale_t base);
@@ -88,6 +86,16 @@ char *nl_langinfo_l(int, locale_t);
 /* pthread_condattr_getclock/setclock (POSIX.1-2001) */
 int pthread_condattr_getclock(const pthread_condattr_t *, int *);
 int pthread_condattr_setclock(pthread_condattr_t *, int);
+
+/* solcompat_pthread_cond_timedwait_monotonic — explicit monotonic-timeout
+ * variant for callers that need CLOCK_MONOTONIC semantics. Solaris 7
+ * condvars are REALTIME-only; this wrapper translates the abs_timeout
+ * from monotonic to realtime at call time.  Prefer this over
+ * pthread_cond_timedwait when wall-clock-jump resistance matters. */
+struct timespec;
+int solcompat_pthread_cond_timedwait_monotonic(pthread_cond_t *,
+                                               pthread_mutex_t *,
+                                               const struct timespec *);
 
 /* pthread_attr_getstack/setstack (POSIX.1-2001) */
 int pthread_attr_getstack(const pthread_attr_t *, void **, size_t *);

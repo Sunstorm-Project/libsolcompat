@@ -14,6 +14,8 @@
 #include <errno.h>
 #include <poll.h>     /* poll(NULL, 0, ms) — nanosleep-free sleep for sem_timedwait */
 #include <pthread.h>
+#include <time.h>
+#include <sys/types.h>
 
 #ifndef HAVE_PTHREAD_SETNAME_NP
 int
@@ -54,13 +56,19 @@ pthread_getname_np(pthread_t thread, char *name, size_t len)
 static int
 mask_to_category(int mask)
 {
-    /* Return the first matching category */
-    if (mask & (1 << 0 /* LC_CTYPE */))  return LC_CTYPE;
-    if (mask & (1 << 1 /* LC_NUMERIC */))return LC_NUMERIC;
-    if (mask & (1 << 2 /* LC_TIME */))   return LC_TIME;
-    if (mask & (1 << 3 /* LC_COLLATE */))return LC_COLLATE;
-    if (mask & (1 << 4 /* LC_MONETARY */))return LC_MONETARY;
-    if (mask & (1 << 5 /* LC_MESSAGES */))return LC_MESSAGES;
+    /*
+     * Map the first set LC_*_MASK bit back to its LC_* category enum.
+     * The LC_*_MASK macros live in sysroot-prep/locale.h.append (which
+     * installs into <locale.h>); don't duplicate bit positions here.
+     * If the sysroot's LC_CTYPE etc. values ever change, these macros
+     * track automatically instead of silently desyncing.
+     */
+    if (mask & LC_CTYPE_MASK)    return LC_CTYPE;
+    if (mask & LC_NUMERIC_MASK)  return LC_NUMERIC;
+    if (mask & LC_TIME_MASK)     return LC_TIME;
+    if (mask & LC_COLLATE_MASK)  return LC_COLLATE;
+    if (mask & LC_MONETARY_MASK) return LC_MONETARY;
+    if (mask & LC_MESSAGES_MASK) return LC_MESSAGES;
     return LC_ALL;
 }
 
@@ -251,12 +259,80 @@ pthread_condattr_setclock(pthread_condattr_t *attribute, int clock_id)
      * Accept any valid POSIX clock ID and silently succeed — conditions
      * will use CLOCK_REALTIME regardless.  libuv and other software call
      * this with CLOCK_MONOTONIC and abort if it returns EINVAL.
+     *
+     * CALLER BEWARE: if you pass CLOCK_MONOTONIC here expecting the
+     * condvar's pthread_cond_timedwait to use monotonic time, you get
+     * REALTIME semantics silently.  If the wall clock moves (ntpdate,
+     * date(1), manual set), your timeout fires early or never. For
+     * callers that need monotonic timeout semantics, use
+     * solcompat_pthread_cond_timedwait_monotonic() below — it accepts
+     * an abs_monotonic_timeout and translates to the REALTIME that the
+     * underlying Solaris condvar actually uses.  Still wedged in the
+     * face of wall-clock jumps, but only during the translation window
+     * (nanoseconds) rather than for the entire wait.
      */
     (void)attribute;
     (void)clock_id;
     return 0;
 }
 #endif
+
+/*
+ * solcompat_pthread_cond_timedwait_monotonic — monotonic-timeout variant
+ * of pthread_cond_timedwait for callers that set CLOCK_MONOTONIC on the
+ * condattr. Translates the monotonic abs_timeout into the equivalent
+ * realtime abs_timeout at call time, then calls pthread_cond_timedwait.
+ *
+ * Accuracy: a wall-clock jump (ntpdate, date(1)) occurring inside the
+ * actual wait window distorts the timeout by the size of the jump —
+ * same failure mode as a native CLOCK_REALTIME wait. The wrapper
+ * doesn't fix that, but it narrows the window from "for the entire
+ * wait" to "from translation to the first kernel wakeup".
+ *
+ * Declared in include/solcompat/stubs.h alongside the other pthread
+ * stubs; consumers that need monotonic semantics opt into this call
+ * explicitly.
+ */
+int
+solcompat_pthread_cond_timedwait_monotonic(pthread_cond_t *restrict cond,
+                                           pthread_mutex_t *restrict mutex,
+                                           const struct timespec *restrict abs_monotonic_timeout)
+{
+    struct timespec now_realtime, now_monotonic, abs_realtime;
+    long long delta_sec;
+    long delta_nsec;
+
+    if (!abs_monotonic_timeout) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    /* Snap both clocks as close together as possible so the translation
+     * is based on the smallest window of clock skew. clock_gettime itself
+     * is provided by libsolcompat src/clock.c. */
+    if (clock_gettime(CLOCK_REALTIME, &now_realtime) != 0)
+        return -1;
+    if (clock_gettime(CLOCK_MONOTONIC, &now_monotonic) != 0)
+        return -1;
+
+    /* delta = abs_monotonic_timeout - now_monotonic (signed nanoseconds) */
+    delta_sec = (long long)abs_monotonic_timeout->tv_sec - (long long)now_monotonic.tv_sec;
+    delta_nsec = abs_monotonic_timeout->tv_nsec - now_monotonic.tv_nsec;
+    if (delta_nsec < 0) {
+        delta_nsec += 1000000000L;
+        delta_sec  -= 1;
+    }
+
+    /* abs_realtime = now_realtime + delta */
+    abs_realtime.tv_sec = now_realtime.tv_sec + (time_t)delta_sec;
+    abs_realtime.tv_nsec = now_realtime.tv_nsec + delta_nsec;
+    if (abs_realtime.tv_nsec >= 1000000000L) {
+        abs_realtime.tv_nsec -= 1000000000L;
+        abs_realtime.tv_sec  += 1;
+    }
+
+    return pthread_cond_timedwait(cond, mutex, &abs_realtime);
+}
 
 /*
  * pthread_attr_getstack / setstack — thread stack attributes.

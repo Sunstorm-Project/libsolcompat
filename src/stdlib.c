@@ -10,6 +10,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <time.h>                  /* time() in mkdtemp fallback seed */
+#include "solcompat/random.h"      /* getentropy prototype */
 
 extern int solcompat_snprintf(char *, size_t, const char *, ...);
 
@@ -81,11 +83,48 @@ unsetenv(const char *name)
     return 0;
 }
 
+/*
+ * Fill 6 bytes of buffer with Base-62-ish random characters from the
+ * TMPNAM_ALPHABET. Used by mkdtemp's TOCTOU-free loop below.
+ *
+ * Entropy source: getentropy (which in turn reads /dev/urandom; falls
+ * back to the weak per-process mixer if SOLCOMPAT_ALLOW_WEAK_RANDOM is
+ * set). If getentropy fails, we fall back to time^pid XOR state —
+ * still predictable but at least non-static between processes.
+ *
+ * 62^6 = 5.68e10 possible suffixes per template, which is more than
+ * enough collision space for the 1000-attempt retry loop.
+ */
+static const char TMPNAM_ALPHABET[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+static void
+mkdtemp_fill_suffix(char *suffix, int retry_count)
+{
+    unsigned char entropy[6];
+    int i;
+
+    if (getentropy(entropy, sizeof(entropy)) != 0) {
+        /* getentropy failed (strict mode with no /dev/urandom). Fall
+         * back to a non-static seed mix — still insecure but better
+         * than repeating the same suffix across retries. */
+        unsigned long seed = (unsigned long)time(NULL);
+        seed ^= (unsigned long)getpid() * 2654435761UL;
+        seed ^= (unsigned long)retry_count * 16777619UL;
+        for (i = 0; i < 6; i++) {
+            seed = seed * 1103515245UL + 12345UL;
+            entropy[i] = (unsigned char)(seed >> 16);
+        }
+    }
+    for (i = 0; i < 6; i++)
+        suffix[i] = TMPNAM_ALPHABET[entropy[i] % 62];
+}
+
 char *
 mkdtemp(char *tmpl)
 {
     size_t len;
-    int i;
+    int attempt;
     char *suffix;
 
     if (!tmpl) {
@@ -105,31 +144,31 @@ mkdtemp(char *tmpl)
         return NULL;
     }
 
-    for (i = 0; i < 1000; i++) {
-        /* Use mktemp to generate a unique name, then try mkdir */
-        char saved[7];
-        memcpy(saved, suffix, 6);
-        saved[6] = '\0';
-
-        /* Reset the template */
-        memcpy(suffix, "XXXXXX", 6);
-
-        if (mktemp(tmpl) == NULL || tmpl[0] == '\0') {
-            /* mktemp failed — restore and try again */
-            memcpy(suffix, "XXXXXX", 6);
-            continue;
-        }
+    /*
+     * Loop until we successfully mkdir with O_EXCL-equivalent semantics.
+     * Previously used mktemp(3) + mkdir(), but mktemp has a well-known
+     * name-disclosure race: the filename is generated, the process
+     * descheduled, an attacker pre-creates the directory, mkdir fails
+     * with EEXIST, retry. On Solaris 7's multi-user boxes (or shared
+     * containers) that race is reachable. POSIX.1-2008 deprecated
+     * mktemp precisely because of this.
+     *
+     * Replacement: generate 6 random chars from getentropy, try mkdir
+     * directly. mkdir is atomic (O_EXCL-equivalent), so the race
+     * window collapses to zero — the worst failure mode is EEXIST on
+     * genuine collision, which the retry loop handles.
+     */
+    for (attempt = 0; attempt < 1000; attempt++) {
+        mkdtemp_fill_suffix(suffix, attempt);
 
         if (mkdir(tmpl, 0700) == 0)
             return tmpl;
 
         if (errno != EEXIST) {
-            /* Real error */
+            /* Real error (e.g. ENOENT on parent, EACCES) */
             return NULL;
         }
-
-        /* EEXIST — try again with fresh XXXXXX */
-        memcpy(suffix, "XXXXXX", 6);
+        /* EEXIST — regenerate suffix and retry */
     }
 
     errno = EEXIST;
