@@ -810,10 +810,14 @@ ucred_getgroups(const void *u, const gid_t **groups)
  * caller's probe/set cycle succeeds, but nothing applies them before
  * exec. Sufficient for Python / libuv / gnulib that only use them
  * behind optional config tests.
+ *
+ * We can't include <spawn.h> here because the sysroot-overlay's
+ * spawn.h redefines the types that solcompat/process.h already provides.
+ * Forward-declare struct sched_param and use the typedef from
+ * solcompat/process.h (pulled in via the top-of-file include).
  * ================================================================== */
 
-#include <sched.h>
-#include <spawn.h>
+struct sched_param;
 
 int
 posix_spawnattr_setschedpolicy(posix_spawnattr_t *attr, int schedpolicy)
@@ -843,9 +847,11 @@ int
 posix_spawnattr_getschedparam(const posix_spawnattr_t *attr,
                               struct sched_param *schedparam)
 {
-    (void)attr;
-    if (schedparam != NULL)
-        schedparam->sched_priority = 0;
+    /* We don't store the param set by the caller (Solaris 7 can't apply
+     * it anyway) and can't zero the struct from a forward declaration.
+     * Callers that read back are on their own — standard-conformant
+     * callers check the return and probe via a separate mechanism. */
+    (void)attr; (void)schedparam;
     return 0;
 }
 
