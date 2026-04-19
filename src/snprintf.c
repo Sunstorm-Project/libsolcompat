@@ -234,3 +234,44 @@ solcompat_snprintf(char *str, size_t size, const char *fmt, ...)
 
     return ret;
 }
+
+/*
+ * Plain-name wrappers.  C code gets the C99 behaviour via the
+ * snprintf/vsnprintf -> solcompat_* macros in solcompat/snprintf.h, but
+ * C++ callers can't use those macros (they'd shadow std::snprintf via
+ * <cstdio>).  The header instead declares vsnprintf/snprintf as real
+ * extern "C" functions in the global namespace and relies on the linker
+ * picking them up from libsolcompat before libc.  That only works if
+ * libsolcompat actually defines plain-name symbols -- which is what
+ * these two wrappers do.
+ *
+ * Motivated by gdb 17.1's std::length_error at startup: gdbsupport
+ * string_printf used the C99 "vsnprintf(NULL, 0, fmt, vp) to measure"
+ * idiom, which Solaris 7 libc returns -1 for, so std::string(size, 0)
+ * blew up with 4 GB.  See feedback_solaris7_vsnprintf_null_zero_returns_minus_one
+ * in the sparc-build-host memory.
+ *
+ * Versioning: these exports are unversioned, so a caller whose import
+ * was linked against the Solaris 7 libc vsnprintf@SUNW_1.1 versioned
+ * symbol will NOT pick these up at runtime -- it must be re-linked so
+ * the import drops the version tag.  Every SST C++ package needs a
+ * rebuild to benefit.
+ */
+int
+vsnprintf(char *str, size_t size, const char *fmt, va_list ap)
+{
+    return solcompat_vsnprintf(str, size, fmt, ap);
+}
+
+int
+snprintf(char *str, size_t size, const char *fmt, ...)
+{
+    va_list ap;
+    int ret;
+
+    va_start(ap, fmt);
+    ret = solcompat_vsnprintf(str, size, fmt, ap);
+    va_end(ap);
+
+    return ret;
+}
