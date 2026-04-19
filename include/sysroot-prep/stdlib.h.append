@@ -126,6 +126,10 @@ int mkostemp(char *template_path, int flags);
  * On Solaris 7 we simply delegate to getenv (no AT_SECURE). */
 char *secure_getenv(const char *name);
 
+/* POSIX 2008 posix_openpt — open unused pseudo-terminal master.
+ * libsolcompat implements it over /dev/ptmx in src/pty.c. */
+int posix_openpt(int flags);
+
 /* C99 string to float conversions — libstdc++'s <cstdlib> does
  * `using ::strtof` and `using ::strtold`.  Solaris 7 libc has strtod()
  * but not strtof() or strtold(); libsolcompat provides implementations

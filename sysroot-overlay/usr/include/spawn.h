@@ -65,6 +65,19 @@ int posix_spawnattr_getsigmask(const posix_spawnattr_t *attr, sigset_t *sigmask)
 int posix_spawnattr_setpgroup(posix_spawnattr_t *attr, pid_t pgroup);
 int posix_spawnattr_getpgroup(const posix_spawnattr_t *attr, pid_t *pgroup);
 
+/* Solaris 10+ scheduling attribute accessors. Solaris 7 ignores
+ * POSIX_SPAWN_SETSCHEDULER / POSIX_SPAWN_SETSCHEDPARAM flags entirely
+ * (scheduling attributes are not applied before exec), but gnulib /
+ * Python / libuv consumers still reference the symbols at compile
+ * time. struct sched_param comes from <sched.h>. */
+struct sched_param;
+int posix_spawnattr_setschedpolicy(posix_spawnattr_t *attr, int schedpolicy);
+int posix_spawnattr_getschedpolicy(const posix_spawnattr_t *attr, int *schedpolicy);
+int posix_spawnattr_setschedparam(posix_spawnattr_t *attr,
+                                  const struct sched_param *schedparam);
+int posix_spawnattr_getschedparam(const posix_spawnattr_t *attr,
+                                  struct sched_param *schedparam);
+
 /* File action functions */
 int posix_spawn_file_actions_init(posix_spawn_file_actions_t *fact);
 int posix_spawn_file_actions_destroy(posix_spawn_file_actions_t *fact);

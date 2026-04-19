@@ -1,0 +1,27 @@
+/*
+ * grp.h.append — POSIX 2008 / BSD extensions missing from Solaris 7 <grp.h>
+ *
+ * Solaris 7's <grp.h> predates POSIX 2008 and BSD's getgrouplist,
+ * so Python / util-linux / coreutils probes find the symbol (libsolcompat
+ * ships the implementation in src/process.c) but the compile fails with
+ * `implicit declaration` under -Werror=implicit-function-declaration.
+ *
+ * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
+ */
+
+#ifndef _SOLCOMPAT_GRP_H_APPEND
+#define _SOLCOMPAT_GRP_H_APPEND
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* BSD getgrouplist — also in glibc / macOS. libsolcompat provides
+ * the implementation; see src/process.c. */
+int getgrouplist(const char *user, gid_t group, gid_t *groups, int *ngroups);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _SOLCOMPAT_GRP_H_APPEND */

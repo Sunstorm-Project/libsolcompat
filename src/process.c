@@ -801,6 +801,54 @@ ucred_getgroups(const void *u, const gid_t **groups)
     }
 }
 
+/* ==================================================================
+ * posix_spawnattr_setschedpolicy / setschedparam (Solaris 10+)
+ *
+ * Solaris 7 posix_spawn does not honour POSIX_SPAWN_SETSCHEDULER /
+ * POSIX_SPAWN_SETSCHEDPARAM flags, so the scheduler settings are
+ * effectively ignored. These helpers accept + store the values so the
+ * caller's probe/set cycle succeeds, but nothing applies them before
+ * exec. Sufficient for Python / libuv / gnulib that only use them
+ * behind optional config tests.
+ * ================================================================== */
+
+#include <sched.h>
+#include <spawn.h>
+
+int
+posix_spawnattr_setschedpolicy(posix_spawnattr_t *attr, int schedpolicy)
+{
+    (void)attr; (void)schedpolicy;
+    return 0;
+}
+
+int
+posix_spawnattr_getschedpolicy(const posix_spawnattr_t *attr, int *schedpolicy)
+{
+    (void)attr;
+    if (schedpolicy != NULL)
+        *schedpolicy = 0;  /* SCHED_OTHER equivalent */
+    return 0;
+}
+
+int
+posix_spawnattr_setschedparam(posix_spawnattr_t *attr,
+                              const struct sched_param *schedparam)
+{
+    (void)attr; (void)schedparam;
+    return 0;
+}
+
+int
+posix_spawnattr_getschedparam(const posix_spawnattr_t *attr,
+                              struct sched_param *schedparam)
+{
+    (void)attr;
+    if (schedparam != NULL)
+        schedparam->sched_priority = 0;
+    return 0;
+}
+
 /* getpeerucred — Solaris 10 socket-peer credential API.
  * Solaris 7 has no SCM_UCRED ancillary data and no /proc/self/psinfo/ucred
  * field, so there is no safe userland way to obtain a peer's credentials
