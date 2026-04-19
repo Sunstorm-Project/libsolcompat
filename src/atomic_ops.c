@@ -35,8 +35,11 @@
  */
 
 #include <sys/types.h>
-#include <stdint.h>
-#include <stddef.h>
+/* No <stdint.h> or <stddef.h> — this file is compiled during the sysroot
+ * bootstrap stage BEFORE libsolcompat's install-headers lays the
+ * stdint.h overlay into the sysroot. <sys/types.h> (pulling sys/int_types.h)
+ * already gives us uint32_t / uint64_t / uint16_t. Use `unsigned long`
+ * for pointer-sized integer arithmetic in lieu of uintptr_t. */
 
 #ifdef __GNUC__
 # define ATOMIC_HELPER \
@@ -106,7 +109,7 @@ static struct sst_stripe sst_stripe[SST_STRIPE_COUNT];
 static inline struct sst_stripe *
 sst_stripe_for(const volatile void *p)
 {
-    uintptr_t address_bits = (uintptr_t)p;
+    unsigned long address_bits = (unsigned long)p;
     return &sst_stripe[(address_bits >> 4) & SST_STRIPE_MASK];
 }
 
