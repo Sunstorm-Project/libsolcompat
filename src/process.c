@@ -800,3 +800,19 @@ ucred_getgroups(const void *u, const gid_t **groups)
         return c->ngroups;
     }
 }
+
+/* getpeerucred — Solaris 10 socket-peer credential API.
+ * Solaris 7 has no SCM_UCRED ancillary data and no /proc/self/psinfo/ucred
+ * field, so there is no safe userland way to obtain a peer's credentials
+ * across a socket. Return -1 with errno=ENOTSUP; callers (glib's
+ * gcredentials, libdbus, etc.) already have a SO_PEERCRED / getpeereid
+ * fallback they use when the primary Solaris path fails. */
+int
+getpeerucred(int fd, void **ucred)
+{
+    (void)fd;
+    if (ucred != NULL)
+        *ucred = NULL;
+    errno = ENOTSUP;
+    return -1;
+}

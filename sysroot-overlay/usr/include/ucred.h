@@ -60,6 +60,16 @@ gid_t    ucred_getsgid(const ucred_t *ucred);
 pid_t    ucred_getpid(const ucred_t *ucred);
 int      ucred_getgroups(const ucred_t *ucred, const gid_t **groups);
 
+/* Socket-peer credential retrieval (Solaris 10+ only).
+ *
+ * Real Solaris 10+ reads SCM_UCRED ancillary data off the AF_UNIX peer
+ * descriptor. Solaris 7 has no such kernel support — we always return
+ * -1 with errno=ENOTSUP and leave *ucred untouched (callers must check
+ * the return value; they commonly already have a getpeereid / SO_PEERCRED
+ * fallback for non-Solaris platforms). The prototype exists so glib
+ * 2.56+'s gio/gcredentials link resolves and picks up the stub. */
+int      getpeerucred(int fd, ucred_t **ucred);
+
 #ifdef __cplusplus
 }
 #endif
