@@ -52,6 +52,24 @@ static __inline__ int timespec_get(struct timespec *ts, int base) {
     return _solcompat_timespec_get(ts, base);
 }
 
+/* POSIX 2008 clock_nanosleep — libsolcompat wraps nanosleep+gethrtime.
+ * clockid_t comes from Solaris 7's <time.h> above this append. */
+int clock_nanosleep(clockid_t clock_id, int flags,
+                    const struct timespec *request,
+                    struct timespec *remain);
+
+/* BSD/GNU timegm — inverse of gmtime. libsolcompat implementation
+ * in src/clock.c uses mktime + timezone fixup. */
+struct tm;
+time_t timegm(struct tm *tm);
+
+/* Solaris timezone globals. These ARE defined by libc but Solaris 7's
+ * time.h only declares them under __EXTENSIONS__ / _XOPEN_SOURCE. Redeclare
+ * unconditionally so strict-mode builds (python Modules/timemodule.c with
+ * -Werror=implicit) can reference them without extra #defines. */
+extern long altzone;
+extern int daylight;
+
 #ifdef __cplusplus
 }
 #endif
