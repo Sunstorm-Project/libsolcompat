@@ -180,16 +180,43 @@ __extension__ typedef unsigned long long uint_fast64_t;
 /* ================================================================
  * Integer constant macros
  * ================================================================ */
+/*
+ * Per-macro guards (NOT wrapped in one #ifndef INT8_C) because Solaris 7's
+ * <sys/int_const.h> defines some of these but gates INT64_C / UINT64_C /
+ * INTMAX_C / UINTMAX_C behind `#if __STDC__ - 0 == 0 && !defined(_NO_LONGLONG)`.
+ * Under -std=c99 / -std=c11 the compiler sets __STDC__=1 so the Solaris
+ * path defines INT8_C / INT32_C / UINT32_C but skips the 64-bit constant
+ * macros. A blanket `#ifndef INT8_C` wrapper would then leave INT64_C /
+ * UINT64_C / INTMAX_C / UINTMAX_C permanently undefined.
+ */
 #ifndef INT8_C
 #define INT8_C(x)    (x)
+#endif
+#ifndef UINT8_C
 #define UINT8_C(x)   (x ## U)
+#endif
+#ifndef INT16_C
 #define INT16_C(x)   (x)
+#endif
+#ifndef UINT16_C
 #define UINT16_C(x)  (x ## U)
+#endif
+#ifndef INT32_C
 #define INT32_C(x)   (x)
+#endif
+#ifndef UINT32_C
 #define UINT32_C(x)  (x ## U)
+#endif
+#ifndef INT64_C
 #define INT64_C(x)   (x ## LL)
+#endif
+#ifndef UINT64_C
 #define UINT64_C(x)  (x ## ULL)
+#endif
+#ifndef INTMAX_C
 #define INTMAX_C(x)  (x ## LL)
+#endif
+#ifndef UINTMAX_C
 #define UINTMAX_C(x) (x ## ULL)
 #endif
 
