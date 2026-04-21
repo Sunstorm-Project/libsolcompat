@@ -34,6 +34,21 @@
 /* POSIX posix_madvise — advisory memory-use pattern hint */
 int posix_madvise(void *addr, size_t len, int advice);
 
+/* --- POSIX shared-memory objects (shm_open / shm_unlink) ---
+ *
+ * Solaris 7 declares these in sys/mman.h but gates them behind
+ *   #if (_POSIX_C_SOURCE > 2) || defined(_XPG4_2)
+ * which leaves them invisible when a package compiles without those
+ * feature test macros defined (only -D__EXTENSIONS__).  Python 3.14's
+ * Modules/_multiprocessing/posixshmem.c is one such consumer.
+ *
+ * Solaris 7 ships the implementations in libposix4 (-lposix4), so
+ * linking works once the declarations are in scope. Provide them
+ * unconditionally here.
+ */
+int shm_open(const char *name, int oflag, mode_t mode);
+int shm_unlink(const char *name);
+
 /* --- Solaris 10+ memcntl() hat-level page-size advice ---
  *
  * Solaris 10 added memcntl(..., MC_HAT_ADVISE, &memcntl_mha, ...) as a
