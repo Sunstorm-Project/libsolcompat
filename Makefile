@@ -237,6 +237,13 @@ install-headers:
 		fi; \
 	done
 	@# --- Append declarations to existing sysroot headers ---
+	@# If the target already contains our guard, strip the existing
+	@# _SOLCOMPAT_*_APPEND block first so newer .append content
+	@# (added macros / declarations) replaces the old block in place.
+	@# A plain guard-present skip leaves stale content forever: any
+	@# SYSROOT_ORIG that was patched by an earlier install-headers run
+	@# would permanently shadow .append updates, so libsolcompat bumps
+	@# would silently no-op at sysroot-build time.
 	@echo "Patching sysroot headers with POSIX/C99 declarations..."
 	@for append_file in $$(find include/sysroot-prep -name '*.append' -type f); do \
 		rel="$${append_file#include/sysroot-prep/}"; \
@@ -247,13 +254,12 @@ install-headers:
 		esac; \
 		guard=$$(grep '^#ifndef _SOLCOMPAT_' "$$append_file" | head -1 | sed 's/#ifndef //'); \
 		if [ -f "$${target}" ]; then \
-			if [ -n "$$guard" ] && grep -q "$$guard" "$${target}" 2>/dev/null; then \
-				: ; \
-			else \
-				echo "" >> "$${target}"; \
-				cat "$$append_file" >> "$${target}"; \
-				echo "  Patched $${hdr}"; \
+			if [ -n "$$guard" ] && grep -q "^#ifndef $$guard$$" "$${target}" 2>/dev/null; then \
+				sed -i "/^#ifndef $$guard$$/,/^#endif.*$$guard/d" "$${target}"; \
 			fi; \
+			echo "" >> "$${target}"; \
+			cat "$$append_file" >> "$${target}"; \
+			echo "  Patched $${hdr}"; \
 		else \
 			mkdir -p "$$(dirname "$${target}")"; \
 			cat "$$append_file" > "$${target}"; \
