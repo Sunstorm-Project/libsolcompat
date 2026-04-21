@@ -248,4 +248,151 @@ unsigned long long   strtoumax(const char *nptr, char **endptr, int base);
 #define PRIXPTR  "X"
 #endif
 
+/* ================================================================
+ * C99 §7.8 scanf format macros (SCN* family)
+ * ================================================================
+ * Parallel to the PRI* family above.  Unlike printf, scanf DOES care
+ * about operand width — writing into a uint8_t* via "%u" would stomp
+ * three extra bytes — so the 8/16-bit variants use the "hh"/"h" size
+ * prefix that glibc's <inttypes.h> also uses.  git's builtin/gc.c
+ * references SCNuMAX, and various other packages (gettext, gnulib-
+ * layer code) pull SCN* in too.
+ */
+
+/* Signed decimal */
+#ifndef SCNd8
+#define SCNd8   "hhd"
+#endif
+#ifndef SCNd16
+#define SCNd16  "hd"
+#endif
+#ifndef SCNd32
+#define SCNd32  "d"
+#endif
+#ifndef SCNd64
+#define SCNd64  "lld"
+#endif
+
+#ifndef SCNi8
+#define SCNi8   "hhi"
+#endif
+#ifndef SCNi16
+#define SCNi16  "hi"
+#endif
+#ifndef SCNi32
+#define SCNi32  "i"
+#endif
+#ifndef SCNi64
+#define SCNi64  "lli"
+#endif
+
+/* Unsigned decimal */
+#ifndef SCNu8
+#define SCNu8   "hhu"
+#endif
+#ifndef SCNu16
+#define SCNu16  "hu"
+#endif
+#ifndef SCNu32
+#define SCNu32  "u"
+#endif
+#ifndef SCNu64
+#define SCNu64  "llu"
+#endif
+
+/* Unsigned octal */
+#ifndef SCNo8
+#define SCNo8   "hho"
+#endif
+#ifndef SCNo16
+#define SCNo16  "ho"
+#endif
+#ifndef SCNo32
+#define SCNo32  "o"
+#endif
+#ifndef SCNo64
+#define SCNo64  "llo"
+#endif
+
+/* Unsigned hex */
+#ifndef SCNx8
+#define SCNx8   "hhx"
+#endif
+#ifndef SCNx16
+#define SCNx16  "hx"
+#endif
+#ifndef SCNx32
+#define SCNx32  "x"
+#endif
+#ifndef SCNx64
+#define SCNx64  "llx"
+#endif
+
+/* LEAST/FAST aliases — same width on SPARC32 */
+#ifndef SCNdLEAST8
+#define SCNdLEAST8   SCNd8
+#endif
+#ifndef SCNdLEAST16
+#define SCNdLEAST16  SCNd16
+#endif
+#ifndef SCNdLEAST32
+#define SCNdLEAST32  SCNd32
+#endif
+#ifndef SCNdLEAST64
+#define SCNdLEAST64  SCNd64
+#endif
+
+#ifndef SCNuLEAST8
+#define SCNuLEAST8   SCNu8
+#endif
+#ifndef SCNuLEAST16
+#define SCNuLEAST16  SCNu16
+#endif
+#ifndef SCNuLEAST32
+#define SCNuLEAST32  SCNu32
+#endif
+#ifndef SCNuLEAST64
+#define SCNuLEAST64  SCNu64
+#endif
+
+#ifndef SCNdFAST64
+#define SCNdFAST64   SCNd64
+#endif
+#ifndef SCNuFAST64
+#define SCNuFAST64   SCNu64
+#endif
+
+/* intmax_t / intptr_t — on ILP32 SPARC, intmax_t is long long, intptr_t is int */
+#ifndef SCNdMAX
+#define SCNdMAX  "lld"
+#endif
+#ifndef SCNiMAX
+#define SCNiMAX  "lli"
+#endif
+#ifndef SCNuMAX
+#define SCNuMAX  "llu"
+#endif
+#ifndef SCNoMAX
+#define SCNoMAX  "llo"
+#endif
+#ifndef SCNxMAX
+#define SCNxMAX  "llx"
+#endif
+
+#ifndef SCNdPTR
+#define SCNdPTR  "d"
+#endif
+#ifndef SCNiPTR
+#define SCNiPTR  "i"
+#endif
+#ifndef SCNuPTR
+#define SCNuPTR  "u"
+#endif
+#ifndef SCNoPTR
+#define SCNoPTR  "o"
+#endif
+#ifndef SCNxPTR
+#define SCNxPTR  "x"
+#endif
+
 #endif /* _SOLCOMPAT_INTTYPES_H_APPEND */
