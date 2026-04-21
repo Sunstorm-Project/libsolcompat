@@ -16,9 +16,118 @@
 #include <errno.h>
 #include <time.h>
 #include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 
 /* Solaris gethrtime for entropy mixing */
 extern long long gethrtime(void);
+
+/*
+ * EGD (Entropy Gathering Daemon) client.
+ *
+ * Solaris 7 ships no /dev/urandom and no /dev/random without SUNWski.
+ * The SST toolchain installs `prngd` which exposes an EGD-protocol
+ * Unix socket (default /var/run/egd-pool).  Python, OpenSSL, OpenSSH,
+ * and anything else that calls getentropy / getrandom otherwise fails
+ * loudly.  Read from the EGD socket so those callers get real entropy.
+ *
+ * EGD protocol (per draft-eastlake-randomness-04 / PRNGD docs):
+ *   command 0x02 ("blocking read, arbitrary"):
+ *     client -> server:  byte 0x02, byte count B (1..255)
+ *     server -> client:  B bytes of random data (no length prefix)
+ *
+ *   NOTE: command 0x01 (non-blocking read) DOES prefix the reply with
+ *   a length byte S which may be < B.  We use 0x02 so we always get
+ *   exactly what we asked for, loop externally for counts > 255.
+ *
+ * Socket path override: SOLCOMPAT_EGD_SOCKET env var, else default
+ * /var/run/egd-pool.
+ */
+#define EGD_DEFAULT_SOCKET "/var/run/egd-pool"
+#define EGD_MAX_REQUEST    255
+
+static int
+egd_connect(void)
+{
+    const char *socket_path = getenv("SOLCOMPAT_EGD_SOCKET");
+    if (socket_path == NULL || *socket_path == '\0')
+        socket_path = EGD_DEFAULT_SOCKET;
+
+    int sock = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (sock < 0)
+        return -1;
+
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    /* Reject overflow — path too long means nonsense configuration. */
+    if (strlen(socket_path) >= sizeof(addr.sun_path)) {
+        close(sock);
+        errno = ENAMETOOLONG;
+        return -1;
+    }
+    strcpy(addr.sun_path, socket_path);
+
+    if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        int saved_errno = errno;
+        close(sock);
+        errno = saved_errno;
+        return -1;
+    }
+    return sock;
+}
+
+/*
+ * Read exactly 'len' bytes from EGD socket.  Returns 0 on success,
+ * -1 on any error (connection refused, short read, server returned
+ * fewer bytes than requested).  Caller falls back to other sources
+ * on failure.
+ */
+static int
+egd_get_bytes(void *buf, size_t len)
+{
+    int sock = egd_connect();
+    if (sock < 0)
+        return -1;
+
+    unsigned char *output = (unsigned char *)buf;
+    while (len > 0) {
+        unsigned char request[2];
+        size_t chunk = len > EGD_MAX_REQUEST ? EGD_MAX_REQUEST : len;
+        request[0] = 0x02;                  /* blocking read */
+        request[1] = (unsigned char)chunk;
+
+        /* Send request — EGD expects both bytes in one write. */
+        if (write(sock, request, 2) != 2) {
+            close(sock);
+            return -1;
+        }
+
+        /* Command 0x02 reply is exactly `chunk` bytes of random data,
+         * no length prefix.  Read until we have them all; loop on EINTR
+         * and handle short reads explicitly. */
+        size_t got = 0;
+        while (got < chunk) {
+            ssize_t r = read(sock, output + got, chunk - got);
+            if (r < 0) {
+                if (errno == EINTR) continue;
+                close(sock);
+                return -1;
+            }
+            if (r == 0) {
+                close(sock);
+                return -1;
+            }
+            got += (size_t)r;
+        }
+
+        output += chunk;
+        len -= chunk;
+    }
+
+    close(sock);
+    return 0;
+}
 
 /*
  * explicit_bzero — guaranteed to not be optimized away
@@ -52,29 +161,54 @@ read_all(int fd, void *buf, size_t len)
 }
 
 /*
- * Try to get random bytes from the kernel.
- * Returns 0 on success, -1 if no random device available.
+ * Try to get random bytes from the kernel or EGD.
+ *
+ * Preference order:
+ *   1. /dev/urandom  (Solaris 9+ or SUNWski-patched 7/8)
+ *   2. /dev/random   (SUNWski on 7/8)
+ *   3. EGD socket    (prngd pool — SST ships this)
+ *
+ * Returns 0 on success, -1 if no entropy source works.  The chosen
+ * source is cached in random_source so repeated callers don't re-probe.
  */
 static int
 get_random_bytes(void *buf, size_t len)
 {
-    static int random_fd = -2;  /* -2 = not tried, -1 = not available */
+    /*
+     * Source selection is sticky so arc4_stir / repeated Python boots
+     * don't re-open /dev/urandom (EEXIST / EBUSY semantics vary).
+     *   0 = not probed
+     *   1 = /dev/urandom / /dev/random fd in random_fd
+     *   2 = EGD socket (per-call connect; no cached fd)
+     *  -1 = no source available
+     */
+    static int random_source = 0;
+    static int random_fd = -1;
 
-    if (random_fd == -2) {
-        /* Try /dev/urandom first (may exist on patched systems) */
-        random_fd = open("/dev/urandom", O_RDONLY);
-        if (random_fd < 0) {
-            /* Try /dev/random (SUNWski package) */
-            random_fd = open("/dev/random", O_RDONLY);
+    if (random_source == 0) {
+        int fd = open("/dev/urandom", O_RDONLY);
+        if (fd < 0)
+            fd = open("/dev/random", O_RDONLY);
+        if (fd >= 0) {
+            random_fd = fd;
+            random_source = 1;
+        } else {
+            /* Try EGD as the last resort.  We don't keep the socket
+             * open because EGD servers may close idle connections and
+             * rediscovery-on-failure inside read_all is awkward. */
+            unsigned char probe;
+            if (egd_get_bytes(&probe, 1) == 0)
+                random_source = 2;
+            else
+                random_source = -1;
         }
-        if (random_fd < 0)
-            random_fd = -1;
     }
 
-    if (random_fd < 0)
-        return -1;
-
-    return read_all(random_fd, buf, len);
+    if (random_source == 1)
+        return read_all(random_fd, buf, len);
+    if (random_source == 2)
+        return egd_get_bytes(buf, len);
+    return -1;
 }
 
 /*
@@ -143,15 +277,18 @@ getentropy(void *buffer, size_t length)
 
 /*
  * getrandom — Linux 3.17 syscall interface. Solaris 7 has no equivalent.
- * We delegate to get_random_bytes() (which reads /dev/urandom) and
- * ignore the flags — all three (GRND_NONBLOCK, GRND_RANDOM,
- * GRND_INSECURE) are approximately satisfied because /dev/urandom is
- * non-blocking and pseudo-random on every modern Unix. Returns the
- * number of bytes written, or -1 on error.
+ * We delegate to get_random_bytes() (which tries /dev/urandom, /dev/random,
+ * then the EGD pool) and ignore the flags — all three (GRND_NONBLOCK,
+ * GRND_RANDOM, GRND_INSECURE) are approximately satisfied because every
+ * source we use is non-blocking and kernel-pseudo-random.  Returns the
+ * number of bytes written, or -1 / errno on error.
  *
  * gnulib's getrandom.c and many packages (bash, coreutils, Python,
  * git, openssl, openssh, gettext, sudo, wget) include <sys/random.h>
- * unconditionally and call this.
+ * unconditionally and call this.  Python in particular calls it during
+ * interpreter init for hash randomization; returning a weak LCG there
+ * is the same cryptographic footgun described on getentropy above, so
+ * we fail loudly rather than silently substitute.
  */
 ssize_t
 getrandom(void *buf, size_t buflen, unsigned int flags)
@@ -159,8 +296,13 @@ getrandom(void *buf, size_t buflen, unsigned int flags)
     (void)flags;
     if (get_random_bytes(buf, buflen) == 0)
         return (ssize_t)buflen;
-    fallback_random_bytes(buf, buflen);
-    return (ssize_t)buflen;
+
+    if (getenv("SOLCOMPAT_ALLOW_WEAK_RANDOM") != NULL) {
+        fallback_random_bytes(buf, buflen);
+        return (ssize_t)buflen;
+    }
+    errno = EIO;
+    return -1;
 }
 
 /*
