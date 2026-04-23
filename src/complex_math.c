@@ -19,3 +19,4 @@ __complex__ float cexpf(__complex__ float z) {
     __imag__ result = exp_real * sinf(imag_part);
     return result;
 }
+/* cexp (double complex) already lives in src/math.c */

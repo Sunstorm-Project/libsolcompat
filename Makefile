@@ -114,13 +114,27 @@ check: libsolcompat.a
 .c.lo:
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(PICFLAGS) -c -o $@ $<
 
-# math.o needs -fno-builtin-fma* because GCC 15 treats the builtin
-# declarations as implicit inline definitions, conflicting with our
-# explicit implementations of fma/fmaf/fmal.
+# math.o needs -fno-builtin for the entire TU.  math.c implements roughly
+# 50 C99 math functions that are missing from Solaris 7 libm.  Every
+# `float Xf(float x) { return (float)X((double)x); }` wrapper is a trap
+# for GCC's builtin recognizer: GCC will see the idiom and fold it into
+# a direct `Xf(x)` call — which tail-recurses forever because we ARE
+# Xf's definition.  Observed in the wild: roundf at -O2 compiled to a
+# bare `call roundf@plt` that loops forever under LD_PRELOAD ordering.
+# Also covers the earlier fma/fmaf/fmal conflict with GCC 15's implicit
+# inline declarations.
 src/math.o: src/math.c
-	$(CC) $(CPPFLAGS) $(CFLAGS) -fno-builtin-fma -fno-builtin-fmaf -fno-builtin-fmal -c -o $@ $<
+	$(CC) $(CPPFLAGS) $(CFLAGS) -fno-builtin -c -o $@ $<
 src/math.lo: src/math.c
-	$(CC) $(CPPFLAGS) $(CFLAGS) $(PICFLAGS) -fno-builtin-fma -fno-builtin-fmaf -fno-builtin-fmal -c -o $@ $<
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(PICFLAGS) -fno-builtin -c -o $@ $<
+
+# complex_math.o hits the same builtin-fold trap: our cexp/cexpf bodies
+# look like `expf(re)*cosf(im) + i*expf(re)*sinf(im)`, which GCC will
+# collapse back into a cexp/cexpf call → self-recursion.
+src/complex_math.o: src/complex_math.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -fno-builtin -c -o $@ $<
+src/complex_math.lo: src/complex_math.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(PICFLAGS) -fno-builtin -c -o $@ $<
 
 # ====================================================================
 # install-headers — patch sysroot to look GNU-standard
