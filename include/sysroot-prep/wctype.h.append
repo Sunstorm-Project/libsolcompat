@@ -1,10 +1,18 @@
 /*
- * wctype.h.append — POSIX 2001 iswblank for Solaris 7
+ * wctype.h.append — POSIX 2001 iswblank + POSIX 2008 _l variants for Solaris 7
  *
  * Solaris 7's <wctype.h> ships only the C90 wide-char predicates
- * (iswalpha, iswspace, ...).  POSIX 2001 added iswblank, which gnulib
- * modules (wordwrap.c, regex.c, ...) reference.  libsolcompat provides
- * the implementation.
+ * (iswalpha, iswspace, ...). Two later additions are missing:
+ *
+ *   - POSIX 2001: iswblank — gnulib modules (wordwrap.c, regex.c, ...)
+ *     reference it. libsolcompat provides the implementation in
+ *     src/ctype_compat.c.
+ *
+ *   - POSIX 2008: per-thread-locale variants iswXXX_l / towXXX_l —
+ *     wxWidgets' wx/xlocale.h under --enable-unicode references them.
+ *     Solaris 7 has no per-thread locales, so we route _l calls to the
+ *     global predicates as inline shims here. The locale_t parameter
+ *     is accepted and ignored.
  *
  * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
  */
@@ -18,6 +26,33 @@ extern "C" {
 
 /* POSIX.1-2001 wide-char blank predicate (libsolcompat-provided) */
 int iswblank(wint_t wc);
+
+/* POSIX 2008 locale_t — provided by libsolcompat's locale.h.append
+ * when <locale.h> is in scope. Re-declare here under the same guard
+ * for callers that pull <wctype.h> without <locale.h> (rare but
+ * legal). The forward decl is harmless if locale.h.append already
+ * defined the typedef. */
+#ifndef _SOLCOMPAT_LOCALE_T
+#define _SOLCOMPAT_LOCALE_T
+typedef struct _sol_locale_s *locale_t;
+#endif
+
+/* POSIX 2008 per-thread-locale wide-char predicates / case-mapping.
+ * Static-inline so multiple TUs don't trip on duplicate definitions. */
+static __inline__ int iswalnum_l(wint_t wc, locale_t loc)   { (void)loc; return iswalnum(wc); }
+static __inline__ int iswalpha_l(wint_t wc, locale_t loc)   { (void)loc; return iswalpha(wc); }
+static __inline__ int iswblank_l(wint_t wc, locale_t loc)   { (void)loc; return iswblank(wc); }
+static __inline__ int iswcntrl_l(wint_t wc, locale_t loc)   { (void)loc; return iswcntrl(wc); }
+static __inline__ int iswdigit_l(wint_t wc, locale_t loc)   { (void)loc; return iswdigit(wc); }
+static __inline__ int iswgraph_l(wint_t wc, locale_t loc)   { (void)loc; return iswgraph(wc); }
+static __inline__ int iswlower_l(wint_t wc, locale_t loc)   { (void)loc; return iswlower(wc); }
+static __inline__ int iswprint_l(wint_t wc, locale_t loc)   { (void)loc; return iswprint(wc); }
+static __inline__ int iswpunct_l(wint_t wc, locale_t loc)   { (void)loc; return iswpunct(wc); }
+static __inline__ int iswspace_l(wint_t wc, locale_t loc)   { (void)loc; return iswspace(wc); }
+static __inline__ int iswupper_l(wint_t wc, locale_t loc)   { (void)loc; return iswupper(wc); }
+static __inline__ int iswxdigit_l(wint_t wc, locale_t loc)  { (void)loc; return iswxdigit(wc); }
+static __inline__ wint_t towlower_l(wint_t wc, locale_t loc) { (void)loc; return towlower(wc); }
+static __inline__ wint_t towupper_l(wint_t wc, locale_t loc) { (void)loc; return towupper(wc); }
 
 #ifdef __cplusplus
 }

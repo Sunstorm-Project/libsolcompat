@@ -78,6 +78,28 @@ wchar_t *wcsdup(const wchar_t *s);
 /* POSIX.1-2008 wcsnlen — bounded wide string length */
 size_t wcsnlen(const wchar_t *s, size_t maxlen);
 
+/* POSIX 2008 per-thread-locale wide-char number parsing.
+ * Solaris 7 has no per-thread locales; treat _l variants as
+ * locale-ignoring shims that defer to the global wcsto* functions.
+ * Required by wxWidgets' wx/xlocale.h under --enable-unicode.
+ *
+ * locale_t is established by libsolcompat's locale.h.append. The
+ * guard below tolerates this header being included without
+ * <locale.h> first (rare but legal).
+ */
+#ifndef _SOLCOMPAT_LOCALE_T
+#define _SOLCOMPAT_LOCALE_T
+typedef struct _sol_locale_s *locale_t;
+#endif
+
+double        wcstod(const wchar_t *nptr, wchar_t **endptr);
+long          wcstol(const wchar_t *nptr, wchar_t **endptr, int base);
+unsigned long wcstoul(const wchar_t *nptr, wchar_t **endptr, int base);
+
+static __inline__ double        wcstod_l(const wchar_t *nptr, wchar_t **endptr, locale_t loc)            { (void)loc; return wcstod(nptr, endptr); }
+static __inline__ long          wcstol_l(const wchar_t *nptr, wchar_t **endptr, int base, locale_t loc)  { (void)loc; return wcstol(nptr, endptr, base); }
+static __inline__ unsigned long wcstoul_l(const wchar_t *nptr, wchar_t **endptr, int base, locale_t loc) { (void)loc; return wcstoul(nptr, endptr, base); }
+
 #ifdef __cplusplus
 }
 #endif
