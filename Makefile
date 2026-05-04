@@ -312,6 +312,48 @@ install-dev: libsolcompat.a install-headers
 install-toolchain: install-runtime install-dev
 
 # ====================================================================
+# install-cxx-overlay — install libsolcompat's C++ shadow headers
+# (cmath, cstdlib, ...) INTO the libstdc++ include tree so they
+# shadow the libstdc++-shipped versions.
+# ====================================================================
+# C++ standard headers like <cmath> are searched in the libstdc++
+# install tree (e.g. ${CROSS_PREFIX}/${TARGET}/include/c++/${GCC_VER}/)
+# BEFORE the sysroot's /usr/include — so the libsolcompat overrides
+# at sysroot-overlay/usr/include/cmath, cstdlib never get consulted
+# under their default `make install-headers` placement.  This target
+# copies them into the libstdc++ include tree as override-shadows
+# that #include_next the original libstdc++ header after pre-defining
+# the _GLIBCXX_HAVE_* / _GLIBCXX_USE_C99_MATH* macros that Solaris 7
+# Configure probes can't detect on their own.
+#
+# Required variables:
+#   CXX_INCLUDE_DIR — libstdc++ include root (no trailing slash)
+#                     e.g. /opt/cross/sparc-sun-solaris2.7/include/c++/15.2.0
+#
+# Idempotent: a sentinel guard `_SOLCOMPAT_OVERRIDE_CMATH` etc. inside
+# the override file lets a re-install detect a prior install and skip.
+install-cxx-overlay:
+	@echo ""
+	@echo "=== libsolcompat install-cxx-overlay ==="
+	@echo "  CXX_INCLUDE_DIR: $(CXX_INCLUDE_DIR)"
+	@if [ -z "$(CXX_INCLUDE_DIR)" ]; then \
+		echo "ERROR: CXX_INCLUDE_DIR not set"; exit 1; \
+	fi
+	@if [ ! -d "$(CXX_INCLUDE_DIR)" ]; then \
+		echo "ERROR: $(CXX_INCLUDE_DIR) does not exist"; exit 1; \
+	fi
+	@for hdr in cmath cstdlib; do \
+		src="sysroot-overlay/usr/include/$$hdr"; \
+		dst="$(CXX_INCLUDE_DIR)/$$hdr"; \
+		[ -f "$$src" ] || continue; \
+		if [ -f "$$dst" ] && grep -q "_SOLCOMPAT_OVERRIDE_" "$$dst" 2>/dev/null; then \
+			echo "  $$hdr: override already installed, refreshing"; \
+		fi; \
+		cp "$$src" "$$dst"; \
+		echo "  installed override → $$dst"; \
+	done
+
+# ====================================================================
 # install — traditional PREFIX-based install (for manual/native builds)
 # ====================================================================
 install: all
@@ -342,5 +384,5 @@ clean:
 	rm -f tests/test_all
 	rm -rf tests/gen
 
-.PHONY: all check install install-headers install-runtime install-dev install-toolchain test clean
+.PHONY: all check install install-headers install-runtime install-dev install-toolchain install-cxx-overlay test clean
 # cache-bust: 2026-04-17 — force sysroot rebuild after OCI cache poisoning with awk patch

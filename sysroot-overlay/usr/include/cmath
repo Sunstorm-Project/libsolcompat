@@ -110,6 +110,64 @@ double fma(double, double, double);
 #define _GLIBCXX_USE_C99_MATH_FUNCS 1
 #endif
 
+/* C99 generic / TR1 master gates.
+ * Without these, libstdc++'s baked <cmath> hides std::isnan/isinf/etc.
+ * even though we provide the underlying C functions.  The result is a
+ * Catch-22: libstdc++'s own Configure probe `isnan(0);` includes
+ * <math.h> → <cmath> → <bits/specfun.h> → tr1/special_function_util.h
+ * which references std::isnan, but std::isnan isn't in scope because
+ * _GLIBCXX_HAVE_ISNAN isn't set (the very macro the probe is trying
+ * to set).  Force-define the gates here so the override fires before
+ * libstdc++'s Configure runs again, breaking the cycle. */
+#ifndef _GLIBCXX_USE_C99_MATH
+#define _GLIBCXX_USE_C99_MATH 1
+#endif
+#ifndef _GLIBCXX98_USE_C99_MATH
+#define _GLIBCXX98_USE_C99_MATH 1
+#endif
+#ifndef _GLIBCXX11_USE_C99_MATH
+#define _GLIBCXX11_USE_C99_MATH 1
+#endif
+#ifndef _GLIBCXX_USE_C99_MATH_TR1
+#define _GLIBCXX_USE_C99_MATH_TR1 1
+#endif
+
+/* C99 classification / ordering predicates — libsolcompat exports
+ * these, but libstdc++'s <cmath> needs HAVE_* set to expose std::*. */
+#ifndef _GLIBCXX_HAVE_ISNAN
+#define _GLIBCXX_HAVE_ISNAN 1
+#endif
+#ifndef _GLIBCXX_HAVE_ISNANF
+#define _GLIBCXX_HAVE_ISNANF 1
+#endif
+#ifndef _GLIBCXX_HAVE_ISNANL
+#define _GLIBCXX_HAVE_ISNANL 1
+#endif
+#ifndef _GLIBCXX_HAVE_ISINF
+#define _GLIBCXX_HAVE_ISINF 1
+#endif
+#ifndef _GLIBCXX_HAVE_ISINFF
+#define _GLIBCXX_HAVE_ISINFF 1
+#endif
+#ifndef _GLIBCXX_HAVE_ISINFL
+#define _GLIBCXX_HAVE_ISINFL 1
+#endif
+#ifndef _GLIBCXX_HAVE_FINITE
+#define _GLIBCXX_HAVE_FINITE 1
+#endif
+#ifndef _GLIBCXX_HAVE_FINITEF
+#define _GLIBCXX_HAVE_FINITEF 1
+#endif
+#ifndef _GLIBCXX_HAVE_FINITEL
+#define _GLIBCXX_HAVE_FINITEL 1
+#endif
+#ifndef _GLIBCXX_HAVE_FPCLASS
+#define _GLIBCXX_HAVE_FPCLASS 1
+#endif
+#ifndef _GLIBCXX_HAVE_HYPOT
+#define _GLIBCXX_HAVE_HYPOT 1
+#endif
+
 /* C89 float variants */
 #ifndef _GLIBCXX_HAVE_ACOSF
 #define _GLIBCXX_HAVE_ACOSF 1

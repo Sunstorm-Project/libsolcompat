@@ -75,37 +75,68 @@ extern "C" {
 int solcompat_fpclassify_d(double x);
 int solcompat_fpclassify_f(float x);
 
-#ifndef __cplusplus
 #ifndef fpclassify
 #define fpclassify(x) \
     (sizeof(x) == sizeof(float) ? solcompat_fpclassify_f(x) : solcompat_fpclassify_d(x))
 #endif
-#endif /* !__cplusplus */
 
 /* GCC's __builtin_fpclassify needs these on some targets */
 int __fpclassifyf(float x);
 int __fpclassifyd(double x);
 
-/* C99 isnan/isinf/isfinite/isnormal macros (type-generic).
- * In C++ mode, GCC provides these as builtins via <cmath> so we only
- * define them for C.  Defining them as macros in C++ breaks std::isinf() etc. */
-#ifndef __cplusplus
+/* C99 type-generic classification macros.
+ *
+ * These were previously gated `#ifndef __cplusplus` on the theory that
+ * defining them as macros in C++ mode would break `std::isnan()` etc.
+ * In practice, GCC's <cmath> does `#undef isnan` (and friends) before
+ * declaring the std overloads, exactly so a `<math.h>` macro can
+ * coexist.  Without these macros visible in C++, libstdc++'s own
+ * Configure probe (acinclude.m4 GLIBCXX_CHECK_C99_TR1: isnan(0); in
+ * C++ against <math.h>) returns NO, leaving _GLIBCXX_HAVE_ISNAN
+ * undefined and breaking the libstdc++ shared build at
+ * src/c++17/floating_to_chars.cc.  Expose them in both modes — the
+ * C++ probe needs the symbol callable from <math.h> alone, and end
+ * users including <cmath> still get the std::* names cleanly. */
+/* The `0.0 + (x)` cast forces an int literal (0) up to double so
+ * libstdc++'s Configure probe `isnan(0);` compiles — without it,
+ * __builtin_isnan rejects non-FP arguments.  For float/double/long-double
+ * args this is identity (NaN-ness is preserved across promotion). */
 #ifndef isfinite
-#define isfinite(x) (fpclassify(x) != FP_NAN && fpclassify(x) != FP_INFINITE)
+#define isfinite(x) __builtin_isfinite(0.0 + (x))
 #endif
 #ifndef isinf
-#define isinf(x)    (fpclassify(x) == FP_INFINITE)
+#define isinf(x)    __builtin_isinf(0.0 + (x))
 #endif
 #ifndef isnan
-#define isnan(x)    (fpclassify(x) == FP_NAN)
+#define isnan(x)    __builtin_isnan(0.0 + (x))
 #endif
 #ifndef isnormal
-#define isnormal(x) (fpclassify(x) == FP_NORMAL)
+#define isnormal(x) __builtin_isnormal(0.0 + (x))
 #endif
 #ifndef signbit
-#define signbit(x)  __builtin_signbit(x)
+#define signbit(x)  __builtin_signbit(0.0 + (x))
 #endif
-#endif /* !__cplusplus */
+
+/* C99 quiet ordering predicates (also probed by libstdc++ in both
+ * C++98 and C++11 modes — must be visible against <math.h>). */
+#ifndef isgreater
+#define isgreater(x, y)      __builtin_isgreater(0.0 + (x), 0.0 + (y))
+#endif
+#ifndef isgreaterequal
+#define isgreaterequal(x, y) __builtin_isgreaterequal(0.0 + (x), 0.0 + (y))
+#endif
+#ifndef isless
+#define isless(x, y)         __builtin_isless(0.0 + (x), 0.0 + (y))
+#endif
+#ifndef islessequal
+#define islessequal(x, y)    __builtin_islessequal(0.0 + (x), 0.0 + (y))
+#endif
+#ifndef islessgreater
+#define islessgreater(x, y)  __builtin_islessgreater(0.0 + (x), 0.0 + (y))
+#endif
+#ifndef isunordered
+#define isunordered(x, y)    __builtin_isunordered(0.0 + (x), 0.0 + (y))
+#endif
 
 /* ================================================================
  * Missing double-precision C99 math functions
