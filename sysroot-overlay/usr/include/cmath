@@ -304,6 +304,321 @@ double fma(double, double, double);
 #define _GLIBCXX_HAVE_TANHL 1
 #endif
 
+/* C99 transcendental + numeric — libsolcompat (math.c, math.h.append) or
+ * Solaris 7 libm provides every function declared here.  libstdc++'s
+ * <cmath> conditionally exposes std::lgamma, std::tgamma, ... only when
+ * the corresponding _GLIBCXX_HAVE_* is set; without these, <bits/specfun.h>
+ * (transitively included from <cmath> when _GLIBCXX_USE_STD_SPEC_FUNCS=1
+ * in c++config.h, unconditional under C++17) fails on std::lgamma /
+ * std::tgamma references.
+ *
+ * Where each function comes from:
+ *   - log1p, expm1, hypot, cbrt, copysign, erf, erfc, lgamma, ilogb,
+ *     scalbn, nextafter, remainder, logb, rint  — Solaris 7 libm
+ *   - round, trunc, log2, exp2, fdim, fmin, fmax, tgamma, nearbyint,
+ *     lrint, lround, llrint, llround, remquo, scalbln  — libsolcompat src/math.c
+ *   - fma  — GCC builtin (__builtin_fma); see math.c comment
+ *   - all *f and *l variants  — libsolcompat src/math.c (cast wrappers)
+ *   - acosh, asinh, atanh — Solaris 7 libm; *f/*l in libsolcompat */
+
+/* gamma family */
+#ifndef _GLIBCXX_HAVE_LGAMMA
+#define _GLIBCXX_HAVE_LGAMMA 1
+#endif
+#ifndef _GLIBCXX_HAVE_LGAMMAF
+#define _GLIBCXX_HAVE_LGAMMAF 1
+#endif
+#ifndef _GLIBCXX_HAVE_LGAMMAL
+#define _GLIBCXX_HAVE_LGAMMAL 1
+#endif
+#ifndef _GLIBCXX_HAVE_TGAMMA
+#define _GLIBCXX_HAVE_TGAMMA 1
+#endif
+#ifndef _GLIBCXX_HAVE_TGAMMAF
+#define _GLIBCXX_HAVE_TGAMMAF 1
+#endif
+#ifndef _GLIBCXX_HAVE_TGAMMAL
+#define _GLIBCXX_HAVE_TGAMMAL 1
+#endif
+
+/* log1p / expm1 / log2 / exp2 */
+#ifndef _GLIBCXX_HAVE_LOG1P
+#define _GLIBCXX_HAVE_LOG1P 1
+#endif
+#ifndef _GLIBCXX_HAVE_LOG1PF
+#define _GLIBCXX_HAVE_LOG1PF 1
+#endif
+#ifndef _GLIBCXX_HAVE_LOG1PL
+#define _GLIBCXX_HAVE_LOG1PL 1
+#endif
+#ifndef _GLIBCXX_HAVE_EXPM1
+#define _GLIBCXX_HAVE_EXPM1 1
+#endif
+#ifndef _GLIBCXX_HAVE_EXPM1F
+#define _GLIBCXX_HAVE_EXPM1F 1
+#endif
+#ifndef _GLIBCXX_HAVE_EXPM1L
+#define _GLIBCXX_HAVE_EXPM1L 1
+#endif
+#ifndef _GLIBCXX_HAVE_LOG2
+#define _GLIBCXX_HAVE_LOG2 1
+#endif
+#ifndef _GLIBCXX_HAVE_LOG2F
+#define _GLIBCXX_HAVE_LOG2F 1
+#endif
+#ifndef _GLIBCXX_HAVE_LOG2L
+#define _GLIBCXX_HAVE_LOG2L 1
+#endif
+#ifndef _GLIBCXX_HAVE_EXP2
+#define _GLIBCXX_HAVE_EXP2 1
+#endif
+#ifndef _GLIBCXX_HAVE_EXP2F
+#define _GLIBCXX_HAVE_EXP2F 1
+#endif
+#ifndef _GLIBCXX_HAVE_EXP2L
+#define _GLIBCXX_HAVE_EXP2L 1
+#endif
+
+/* erf / erfc */
+#ifndef _GLIBCXX_HAVE_ERF
+#define _GLIBCXX_HAVE_ERF 1
+#endif
+#ifndef _GLIBCXX_HAVE_ERFF
+#define _GLIBCXX_HAVE_ERFF 1
+#endif
+#ifndef _GLIBCXX_HAVE_ERFL
+#define _GLIBCXX_HAVE_ERFL 1
+#endif
+#ifndef _GLIBCXX_HAVE_ERFC
+#define _GLIBCXX_HAVE_ERFC 1
+#endif
+#ifndef _GLIBCXX_HAVE_ERFCF
+#define _GLIBCXX_HAVE_ERFCF 1
+#endif
+#ifndef _GLIBCXX_HAVE_ERFCL
+#define _GLIBCXX_HAVE_ERFCL 1
+#endif
+
+/* hypot — HAVE_HYPOT defined above (C++ generic gate); F/L variants here */
+#ifndef _GLIBCXX_HAVE_HYPOTF
+#define _GLIBCXX_HAVE_HYPOTF 1
+#endif
+#ifndef _GLIBCXX_HAVE_HYPOTL
+#define _GLIBCXX_HAVE_HYPOTL 1
+#endif
+
+/* fma (GCC __builtin_fma; ::fma declared in <math.h>) */
+#ifndef _GLIBCXX_HAVE_FMA
+#define _GLIBCXX_HAVE_FMA 1
+#endif
+#ifndef _GLIBCXX_HAVE_FMAF
+#define _GLIBCXX_HAVE_FMAF 1
+#endif
+#ifndef _GLIBCXX_HAVE_FMAL
+#define _GLIBCXX_HAVE_FMAL 1
+#endif
+
+/* remainder / copysign / nextafter / scalbn / logb */
+#ifndef _GLIBCXX_HAVE_REMAINDER
+#define _GLIBCXX_HAVE_REMAINDER 1
+#endif
+#ifndef _GLIBCXX_HAVE_REMAINDERF
+#define _GLIBCXX_HAVE_REMAINDERF 1
+#endif
+#ifndef _GLIBCXX_HAVE_REMAINDERL
+#define _GLIBCXX_HAVE_REMAINDERL 1
+#endif
+#ifndef _GLIBCXX_HAVE_COPYSIGN
+#define _GLIBCXX_HAVE_COPYSIGN 1
+#endif
+#ifndef _GLIBCXX_HAVE_COPYSIGNF
+#define _GLIBCXX_HAVE_COPYSIGNF 1
+#endif
+#ifndef _GLIBCXX_HAVE_COPYSIGNL
+#define _GLIBCXX_HAVE_COPYSIGNL 1
+#endif
+#ifndef _GLIBCXX_HAVE_NEXTAFTER
+#define _GLIBCXX_HAVE_NEXTAFTER 1
+#endif
+#ifndef _GLIBCXX_HAVE_NEXTAFTERF
+#define _GLIBCXX_HAVE_NEXTAFTERF 1
+#endif
+#ifndef _GLIBCXX_HAVE_NEXTAFTERL
+#define _GLIBCXX_HAVE_NEXTAFTERL 1
+#endif
+#ifndef _GLIBCXX_HAVE_SCALBN
+#define _GLIBCXX_HAVE_SCALBN 1
+#endif
+#ifndef _GLIBCXX_HAVE_SCALBNF
+#define _GLIBCXX_HAVE_SCALBNF 1
+#endif
+#ifndef _GLIBCXX_HAVE_SCALBNL
+#define _GLIBCXX_HAVE_SCALBNL 1
+#endif
+#ifndef _GLIBCXX_HAVE_LOGB
+#define _GLIBCXX_HAVE_LOGB 1
+#endif
+#ifndef _GLIBCXX_HAVE_LOGBF
+#define _GLIBCXX_HAVE_LOGBF 1
+#endif
+#ifndef _GLIBCXX_HAVE_LOGBL
+#define _GLIBCXX_HAVE_LOGBL 1
+#endif
+
+/* rounding family: rint / round / nearbyint / trunc */
+#ifndef _GLIBCXX_HAVE_RINT
+#define _GLIBCXX_HAVE_RINT 1
+#endif
+#ifndef _GLIBCXX_HAVE_RINTF
+#define _GLIBCXX_HAVE_RINTF 1
+#endif
+#ifndef _GLIBCXX_HAVE_RINTL
+#define _GLIBCXX_HAVE_RINTL 1
+#endif
+#ifndef _GLIBCXX_HAVE_ROUND
+#define _GLIBCXX_HAVE_ROUND 1
+#endif
+#ifndef _GLIBCXX_HAVE_ROUNDF
+#define _GLIBCXX_HAVE_ROUNDF 1
+#endif
+#ifndef _GLIBCXX_HAVE_ROUNDL
+#define _GLIBCXX_HAVE_ROUNDL 1
+#endif
+#ifndef _GLIBCXX_HAVE_NEARBYINT
+#define _GLIBCXX_HAVE_NEARBYINT 1
+#endif
+#ifndef _GLIBCXX_HAVE_NEARBYINTF
+#define _GLIBCXX_HAVE_NEARBYINTF 1
+#endif
+#ifndef _GLIBCXX_HAVE_NEARBYINTL
+#define _GLIBCXX_HAVE_NEARBYINTL 1
+#endif
+#ifndef _GLIBCXX_HAVE_TRUNC
+#define _GLIBCXX_HAVE_TRUNC 1
+#endif
+#ifndef _GLIBCXX_HAVE_TRUNCF
+#define _GLIBCXX_HAVE_TRUNCF 1
+#endif
+#ifndef _GLIBCXX_HAVE_TRUNCL
+#define _GLIBCXX_HAVE_TRUNCL 1
+#endif
+
+/* fdim / fmax / fmin */
+#ifndef _GLIBCXX_HAVE_FDIM
+#define _GLIBCXX_HAVE_FDIM 1
+#endif
+#ifndef _GLIBCXX_HAVE_FDIMF
+#define _GLIBCXX_HAVE_FDIMF 1
+#endif
+#ifndef _GLIBCXX_HAVE_FDIML
+#define _GLIBCXX_HAVE_FDIML 1
+#endif
+#ifndef _GLIBCXX_HAVE_FMAX
+#define _GLIBCXX_HAVE_FMAX 1
+#endif
+#ifndef _GLIBCXX_HAVE_FMAXF
+#define _GLIBCXX_HAVE_FMAXF 1
+#endif
+#ifndef _GLIBCXX_HAVE_FMAXL
+#define _GLIBCXX_HAVE_FMAXL 1
+#endif
+#ifndef _GLIBCXX_HAVE_FMIN
+#define _GLIBCXX_HAVE_FMIN 1
+#endif
+#ifndef _GLIBCXX_HAVE_FMINF
+#define _GLIBCXX_HAVE_FMINF 1
+#endif
+#ifndef _GLIBCXX_HAVE_FMINL
+#define _GLIBCXX_HAVE_FMINL 1
+#endif
+
+/* integer-result rounding: ilogb / lrint / lround / llrint / llround */
+#ifndef _GLIBCXX_HAVE_ILOGB
+#define _GLIBCXX_HAVE_ILOGB 1
+#endif
+#ifndef _GLIBCXX_HAVE_ILOGBF
+#define _GLIBCXX_HAVE_ILOGBF 1
+#endif
+#ifndef _GLIBCXX_HAVE_ILOGBL
+#define _GLIBCXX_HAVE_ILOGBL 1
+#endif
+#ifndef _GLIBCXX_HAVE_LRINT
+#define _GLIBCXX_HAVE_LRINT 1
+#endif
+#ifndef _GLIBCXX_HAVE_LRINTF
+#define _GLIBCXX_HAVE_LRINTF 1
+#endif
+#ifndef _GLIBCXX_HAVE_LRINTL
+#define _GLIBCXX_HAVE_LRINTL 1
+#endif
+#ifndef _GLIBCXX_HAVE_LROUND
+#define _GLIBCXX_HAVE_LROUND 1
+#endif
+#ifndef _GLIBCXX_HAVE_LROUNDF
+#define _GLIBCXX_HAVE_LROUNDF 1
+#endif
+#ifndef _GLIBCXX_HAVE_LROUNDL
+#define _GLIBCXX_HAVE_LROUNDL 1
+#endif
+#ifndef _GLIBCXX_HAVE_LLRINT
+#define _GLIBCXX_HAVE_LLRINT 1
+#endif
+#ifndef _GLIBCXX_HAVE_LLRINTF
+#define _GLIBCXX_HAVE_LLRINTF 1
+#endif
+#ifndef _GLIBCXX_HAVE_LLRINTL
+#define _GLIBCXX_HAVE_LLRINTL 1
+#endif
+#ifndef _GLIBCXX_HAVE_LLROUND
+#define _GLIBCXX_HAVE_LLROUND 1
+#endif
+#ifndef _GLIBCXX_HAVE_LLROUNDF
+#define _GLIBCXX_HAVE_LLROUNDF 1
+#endif
+#ifndef _GLIBCXX_HAVE_LLROUNDL
+#define _GLIBCXX_HAVE_LLROUNDL 1
+#endif
+
+/* cbrt */
+#ifndef _GLIBCXX_HAVE_CBRT
+#define _GLIBCXX_HAVE_CBRT 1
+#endif
+#ifndef _GLIBCXX_HAVE_CBRTF
+#define _GLIBCXX_HAVE_CBRTF 1
+#endif
+#ifndef _GLIBCXX_HAVE_CBRTL
+#define _GLIBCXX_HAVE_CBRTL 1
+#endif
+
+/* hyperbolic inverses */
+#ifndef _GLIBCXX_HAVE_ACOSH
+#define _GLIBCXX_HAVE_ACOSH 1
+#endif
+#ifndef _GLIBCXX_HAVE_ACOSHF
+#define _GLIBCXX_HAVE_ACOSHF 1
+#endif
+#ifndef _GLIBCXX_HAVE_ACOSHL
+#define _GLIBCXX_HAVE_ACOSHL 1
+#endif
+#ifndef _GLIBCXX_HAVE_ASINH
+#define _GLIBCXX_HAVE_ASINH 1
+#endif
+#ifndef _GLIBCXX_HAVE_ASINHF
+#define _GLIBCXX_HAVE_ASINHF 1
+#endif
+#ifndef _GLIBCXX_HAVE_ASINHL
+#define _GLIBCXX_HAVE_ASINHL 1
+#endif
+#ifndef _GLIBCXX_HAVE_ATANH
+#define _GLIBCXX_HAVE_ATANH 1
+#endif
+#ifndef _GLIBCXX_HAVE_ATANHF
+#define _GLIBCXX_HAVE_ATANHF 1
+#endif
+#ifndef _GLIBCXX_HAVE_ATANHL
+#define _GLIBCXX_HAVE_ATANHL 1
+#endif
+
 /* Now let GCC's <cmath> pull everything into std:: */
 #include_next <cmath>
 
