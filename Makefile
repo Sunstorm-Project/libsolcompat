@@ -136,6 +136,19 @@ src/complex_math.o: src/complex_math.c
 src/complex_math.lo: src/complex_math.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(PICFLAGS) -fno-builtin -c -o $@ $<
 
+# atomic_ops.o: same builtin-fold trap, different idiom.  The five
+# __sync_OP_and_fetch_4 wrappers are spelled
+# `__sync_fetch_and_OP_4(p,v) <op> v` — exactly equivalent to a
+# post-OP version, so GCC's __sync_* recognizer rewrites them back
+# into a `call __sync_OP_and_fetch_4` libcall — which is *us*, hence
+# infinite recursion.  Observed: wxSharedPtr refcount decrement
+# spinning forever inside __sync_sub_and_fetch_4 on the wxApp::
+# OnInitGui path (mushclient SPARC port, 2026-05-06).
+src/atomic_ops.o: src/atomic_ops.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -fno-builtin -c -o $@ $<
+src/atomic_ops.lo: src/atomic_ops.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(PICFLAGS) -fno-builtin -c -o $@ $<
+
 # ====================================================================
 # install-headers — patch sysroot to look GNU-standard
 # ====================================================================

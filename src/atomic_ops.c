@@ -519,35 +519,31 @@ SST_SYNC_FETCH_OP(__sync_fetch_and_or_4,   (old | val))
 SST_SYNC_FETCH_OP(__sync_fetch_and_xor_4,  (old ^ val))
 SST_SYNC_FETCH_OP(__sync_fetch_and_nand_4, ~(old & val))
 
-ATOMIC_HELPER uint32_t
-__sync_add_and_fetch_4(volatile void *ptr, uint32_t val)
-{
-    return __sync_fetch_and_add_4(ptr, val) + val;
+/* The post-OP (`_and_fetch`) variants must be implemented directly,
+ * NOT as `return __sync_fetch_and_OP_4(p, v) <op> v`. GCC's __sync
+ * recognizer folds that idiom into a libcall to the `_and_fetch`
+ * variant — i.e., into a recursive self-call — and `-fno-builtin`
+ * does NOT suppress this for the `__sync_*` family. Build the body
+ * directly out of the stripe lock so there is no idiom to fold.
+ */
+#define SST_SYNC_OP_AND_FETCH(NAME, EXPR) \
+ATOMIC_HELPER uint32_t \
+NAME(volatile void *ptr, uint32_t val) \
+{ \
+    struct sst_stripe *s = sst_stripe_for(ptr); \
+    uint32_t new_value; \
+    sst_stripe_lock(s); \
+    new_value = (uint32_t)(EXPR); \
+    *(volatile uint32_t *)ptr = new_value; \
+    sst_stripe_unlock(s); \
+    return new_value; \
 }
 
-ATOMIC_HELPER uint32_t
-__sync_sub_and_fetch_4(volatile void *ptr, uint32_t val)
-{
-    return __sync_fetch_and_sub_4(ptr, val) - val;
-}
-
-ATOMIC_HELPER uint32_t
-__sync_and_and_fetch_4(volatile void *ptr, uint32_t val)
-{
-    return __sync_fetch_and_and_4(ptr, val) & val;
-}
-
-ATOMIC_HELPER uint32_t
-__sync_or_and_fetch_4(volatile void *ptr, uint32_t val)
-{
-    return __sync_fetch_and_or_4(ptr, val) | val;
-}
-
-ATOMIC_HELPER uint32_t
-__sync_xor_and_fetch_4(volatile void *ptr, uint32_t val)
-{
-    return __sync_fetch_and_xor_4(ptr, val) ^ val;
-}
+SST_SYNC_OP_AND_FETCH(__sync_add_and_fetch_4, *(volatile uint32_t *)ptr + val)
+SST_SYNC_OP_AND_FETCH(__sync_sub_and_fetch_4, *(volatile uint32_t *)ptr - val)
+SST_SYNC_OP_AND_FETCH(__sync_and_and_fetch_4, *(volatile uint32_t *)ptr & val)
+SST_SYNC_OP_AND_FETCH(__sync_or_and_fetch_4,  *(volatile uint32_t *)ptr | val)
+SST_SYNC_OP_AND_FETCH(__sync_xor_and_fetch_4, *(volatile uint32_t *)ptr ^ val)
 
 ATOMIC_HELPER uint32_t
 __sync_lock_test_and_set_4(volatile void *ptr, uint32_t val)
