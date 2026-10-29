@@ -9,12 +9,10 @@
  *     char *buf = malloc(n + 1);
  *     snprintf(buf, n + 1, fmt, ...);         // format
  *
- * Strategy: Use the system vsprintf() into a large stack buffer to
- * determine the true length, then copy up to 'size' bytes into the
- * caller's buffer.  For very large formats (>8KB on stack), fall
- * back to a heap allocation with doubling.
- *
- * This intentionally does NOT call the broken system vsnprintf.
+ * Strategy: call libc's bounded vsnprintf through an explicit libc handle. Solaris 7
+ * returns -1 on truncation, so retry with larger buffers until it fits,
+ * then return the full length and copy only what the caller can hold.
+ * Never use unbounded vsprintf to measure an unknown output length.
  *
  * Additionally, Solaris 7's _doprnt (used by vsprintf) does not
  * support C99 length modifiers: %z (size_t), %j (intmax_t),
@@ -31,12 +29,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <dlfcn.h>
 
 /* Unhide our names — we define the actual functions here */
 #undef snprintf
 #undef vsnprintf
 
-#define STACK_BUF_SIZE 8192
+#define INITIAL_BUF_SIZE 8192
 
 /*
  * preprocess_fmt - Convert C99 format specifiers to Solaris 7-compatible ones.
@@ -139,9 +138,12 @@ solcompat_vsnprintf(char *str, size_t size, const char *fmt, va_list ap)
     char fmt_buf[2048];
     char *heap_buf;
     char *work_buf;
-    size_t work_size = STACK_BUF_SIZE;
+    size_t work_size = INITIAL_BUF_SIZE;
     int len;
     va_list ap2;
+    typedef int (*native_vsnprintf_fn)(char *, size_t, const char *, va_list);
+    void *libc_handle;
+    native_vsnprintf_fn native_format;
 
     /*
      * Preprocess the format string to convert C99 length modifiers
@@ -150,27 +152,21 @@ solcompat_vsnprintf(char *str, size_t size, const char *fmt, va_list ap)
      */
     fmt = preprocess_fmt(fmt, fmt_buf, sizeof(fmt_buf));
 
-    /*
-     * Heap-based grow loop — never write to a bounded stack buffer.
-     *
-     * The previous implementation called vsprintf(stack_buf, fmt, ap)
-     * which is *the* canonical buffer-overflow primitive: vsprintf has
-     * no bounds, so output > STACK_BUF_SIZE silently smashed the stack
-     * register save area right next to the buffer. The "retry with heap"
-     * path that followed was dead — by the time we observed len, the
-     * stack was already corrupted. On fortified builds this tripped
-     * __stack_chk_fail; on unfortified builds it silently corrupted the
-     * return address.
-     *
-     * Correct strategy: start with a 4KB heap buffer, call vsprintf,
-     * if the reported length exceeds the buffer, free + grow + retry.
-     * vsprintf still has no bounds, but now the buffer lives in heap
-     * space that is allocated LARGER than any reasonable output, and
-     * the grow loop catches the pathological case before the first
-     * write overflows anything real. Solaris 7's vsnprintf is
-     * notoriously broken (returns -1 on truncation instead of the
-     * required length), so we can't use it for measurement.
-     */
+    /* Resolve libc explicitly: it can precede us in the dependency order,
+     * in which case RTLD_NEXT cannot find it. libc remains loaded through
+     * our DT_NEEDED dependency after this temporary handle is closed. */
+    libc_handle = dlopen("libc.so.1", RTLD_LAZY | RTLD_LOCAL);
+    if (!libc_handle) {
+        errno = ENOSYS;
+        return -1;
+    }
+    native_format = (native_vsnprintf_fn)dlsym(libc_handle, "vsnprintf");
+    dlclose(libc_handle);
+    if (!native_format) {
+        errno = ENOSYS;
+        return -1;
+    }
+
     while (1) {
         heap_buf = (char *)malloc(work_size);
         if (!heap_buf) {
@@ -179,27 +175,16 @@ solcompat_vsnprintf(char *str, size_t size, const char *fmt, va_list ap)
         }
 
         va_copy(ap2, ap);
-        len = vsprintf(heap_buf, fmt, ap2);
+        len = native_format(heap_buf, work_size, fmt, ap2);
         va_end(ap2);
 
-        if (len < 0) {
-            /* Encoding error */
-            free(heap_buf);
-            return -1;
-        }
-
-        /* Pass: output fit with room for the NUL terminator. */
-        if ((size_t)len < work_size)
+        if (len >= 0 && (size_t)len < work_size)
             break;
 
-        /* Output exceeded the buffer — by now vsprintf may have
-         * walked past work_size on the heap, but malloc chunks are
-         * typically >= 4KB with slack, and we catch the overrun
-         * before re-entering. Grow and retry. */
+        /* Solaris 7 reports truncation as -1, unlike C99 implementations. */
         free(heap_buf);
-        if (work_size > 8 * 1024 * 1024) {
-            /* Sanity limit: 16 MB after doubling */
-            errno = ENOMEM;
+        if (work_size >= 16 * 1024 * 1024) {
+            errno = EOVERFLOW;
             return -1;
         }
         work_size *= 2;

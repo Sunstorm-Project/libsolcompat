@@ -389,13 +389,25 @@ test: all
 		-o test_all test_all.c \
 		-L$(CURDIR) -lsolcompat -lrt -lsocket -lnsl -lresolv -lm -ldl && ./test_all
 
+# Shared-library regression, including a libc-first dependency order.
+test-snprintf-bounds: all
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o tests/test_snprintf_bounds \
+		tests/test_snprintf_bounds.c ./$(SONAME) -ldl
+	LD_LIBRARY_PATH=$(CURDIR):$$LD_LIBRARY_PATH ./tests/test_snprintf_bounds
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o tests/test_snprintf_bounds_libc_first \
+		tests/test_snprintf_bounds.c -lc ./$(SONAME) -ldl
+	LD_LIBRARY_PATH=$(CURDIR):$$LD_LIBRARY_PATH ./tests/test_snprintf_bounds_libc_first
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o tests/test_snprintf_bounds_static \
+		tests/test_snprintf_bounds.c ./libsolcompat.a -lrt -lsocket -lnsl -lresolv -lm -ldl
+	./tests/test_snprintf_bounds_static
+
 # ====================================================================
 # Clean
 # ====================================================================
 clean:
 	rm -f $(OBJS) $(PIC_OBJS) libsolcompat.a $(SONAME)
-	rm -f tests/test_all
+	rm -f tests/test_all tests/test_snprintf_bounds tests/test_snprintf_bounds_libc_first tests/test_snprintf_bounds_static
 	rm -rf tests/gen
 
-.PHONY: all check install install-headers install-runtime install-dev install-toolchain install-cxx-overlay test clean
+.PHONY: all check install install-headers install-runtime install-dev install-toolchain install-cxx-overlay test test-snprintf-bounds clean
 # cache-bust: 2026-04-17 — force sysroot rebuild after OCI cache poisoning with awk patch
