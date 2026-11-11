@@ -8,6 +8,7 @@
 #
 # Install targets:
 #   make install                     — traditional install to PREFIX
+#   make install-native-headers NATIVE_INCLUDE_DIR= — fill native GCC header gaps (host Python3)
 #   make install-headers SYSROOT=    — headers only (for bootstrap / fixincludes timing)
 #   make install-runtime SYSROOT=    — libsolcompat.so.1 + symlinks (target runtime)
 #   make install-dev     SYSROOT=    — libsolcompat.a + headers (build-system dev)
@@ -23,6 +24,7 @@ CC       ?= gcc
 AR       ?= ar
 RANLIB   ?= ranlib
 NM       ?= nm
+PYTHON   ?= python3
 CFLAGS   ?= -O2 -Wall -Wextra -Wno-unused-parameter
 CPPFLAGS ?= -D_REENTRANT -I$(CURDIR)/include
 LDFLAGS  ?=
@@ -152,6 +154,12 @@ src/atomic_ops.o: src/atomic_ops.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fno-builtin -c -o $@ $<
 src/atomic_ops.lo: src/atomic_ops.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(PICFLAGS) -fno-builtin -c -o $@ $<
+
+# Generate source-authored forwarding wrappers only at GCC's private fixed-
+# header root; no native vendor system header is modified or copied.
+install-native-headers:
+	@test -n "$(NATIVE_INCLUDE_DIR)" || { echo "NATIVE_INCLUDE_DIR is required" >&2; exit 1; }
+	$(PYTHON) tools/materialize-native-headers.py "$(NATIVE_INCLUDE_DIR)"
 
 # ====================================================================
 # install-headers — patch sysroot to look GNU-standard
@@ -445,5 +453,5 @@ clean:
 	rm -f tests/test_all $(COMPAT_TESTS) tests/test_snprintf_bounds tests/test_snprintf_bounds_libc_first tests/test_snprintf_bounds_static
 	rm -rf tests/gen
 
-.PHONY: all check compat-tests test-compat install install-headers install-runtime install-dev install-toolchain install-cxx-overlay test test-snprintf-bounds clean
+.PHONY: all check compat-tests test-compat install install-native-headers install-headers install-runtime install-dev install-toolchain install-cxx-overlay test test-snprintf-bounds clean
 # cache-bust: 2026-04-17 — force sysroot rebuild after OCI cache poisoning with awk patch

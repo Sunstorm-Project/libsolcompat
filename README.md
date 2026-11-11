@@ -176,3 +176,20 @@ Focused target tests include loader address calculations, native/GNU getcwd
 allocation and growth, and timestamp success/failure behavior. Host checks
 `python3 tests/test_format_attributes.py` and `python3 tests/test_header_prepend.py`
 verify compiler format diagnostics and safe insertion into native header guards.
+
+### Native compiler header coverage
+
+The cross sysroot already contains the compatibility declarations. A native
+compiler also needs them after installation, even for headers that GCC's
+fixincludes did not copy. During package staging, run:
+
+```sh
+make install-native-headers NATIVE_INCLUDE_DIR=/staging/path/to/gcc/include-fixed
+```
+
+This host build step requires Python3. It creates authored `include_next`
+forwarders for missing C headers and installs complete authored C overlays.
+Existing vendor fixed headers remain for the pipeline's guarded-block refresher;
+no vendor header is copied by this generator. C++ overlays use the separate
+`install-cxx-overlay` target. The resulting compiler package needs no Python
+for header lookup on Solaris.
