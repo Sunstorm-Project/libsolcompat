@@ -193,3 +193,7 @@ Existing vendor fixed headers remain for the pipeline's guarded-block refresher;
 no vendor header is copied by this generator. C++ overlays use the separate
 `install-cxx-overlay` target. The resulting compiler package needs no Python
 for header lookup on Solaris.
+
+The socket header does not force `_XPG4_2`: Solaris7 still uses its legacy
+message-header layout, and forcing that feature macro changes unrelated vendor
+declarations. The authoritative socket append supplies the supported API.
