@@ -132,3 +132,28 @@ Runs `tests/test_all.c` covering all subsystems. Requires Solaris 7 SPARC (or QE
 ## License
 
 MIT — see [LICENSE](LICENSE)
+
+
+### Formatting and mount ABI regression checks
+
+The C99 output family uses a bounded output sink and an MIT-licensed formatting
+core derived from musl v1.2.5. The copyright and upstream source URL are retained
+in `src/snprintf.c`. The same core implements stream and string entry points,
+including positional arguments and C99 integer lengths. `frexpl` preserves the
+actual SPARC long-double precision and exponent range instead of narrowing it.
+
+GNU `<mntent.h>` callers use prefixed compatibility exports. Native Solaris
+`<sys/mnttab.h>` callers retain their two-argument `getmntent` ABI; that symbol
+is never replaced with an incompatible one-argument function.
+
+`make compat-tests` builds focused formatting, bounds, long-double and both
+mount-ABI regression binaries. `make test-compat` runs them on the target using
+the just-built DSO. For cross builds, transfer those binaries and the DSO to an
+isolated Solaris system and set a command-local library search path to that
+private directory. Do not execute SPARC test binaries on the build host.
+
+These tests cover byte bounds, long formats/output, C99 j/z/t/hh conversions,
+positional width/precision, stream output, binary128 large/small values and GNU
+and native mount enumeration. Toolchain constructor/destructor/exception
+qualification is separate; passing the C API tests does not qualify C++ startup
+or unwinding. Diagnostic sources under `tests/probes` help isolate those stages.

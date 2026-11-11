@@ -38,6 +38,7 @@ SOVERSION = 1.0.0
 
 # Source files
 SRCS = src/snprintf.c \
+       src/mntent.c \
        src/string.c \
        src/stdio.c \
        src/memstream.c \
@@ -46,6 +47,7 @@ SRCS = src/snprintf.c \
        src/network.c \
        src/clock.c \
        src/math.c \
+       src/frexpl.c \
        src/memory.c \
        src/filesystem.c \
        src/at_funcs.c \
@@ -401,13 +403,33 @@ test-snprintf-bounds: all
 		tests/test_snprintf_bounds.c ./libsolcompat.a -lrt -lsocket -lnsl -lresolv -lm -ldl
 	./tests/test_snprintf_bounds_static
 
+# Focused C99 formatting and native/GNU mount-ABI regression binaries.
+# Build cross binaries with compat-tests; test-compat executes only on target.
+COMPAT_TESTS = tests/test_printf_compat tests/test_mntent_compat \
+               tests/test_mnttab_native tests/test_long_double tests/test_snprintf_bounds
+compat-tests: $(COMPAT_TESTS)
+$(COMPAT_TESTS): $(SONAME)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -fno-builtin -Isysroot-overlay/usr/include \
+	    -o $@ $@.c $(CURDIR)/$(SONAME) -lm -ldl
+
+tests/test_printf_compat: tests/test_printf_compat.c
+tests/test_mntent_compat: tests/test_mntent_compat.c
+tests/test_mnttab_native: tests/test_mnttab_native.c
+tests/test_long_double: tests/test_long_double.c
+tests/test_snprintf_bounds: tests/test_snprintf_bounds.c
+
+test-compat: compat-tests
+	@for test in $(COMPAT_TESTS); do \
+	    LD_LIBRARY_PATH="$(CURDIR)" ./$$test || exit $$?; \
+	done
+
 # ====================================================================
 # Clean
 # ====================================================================
 clean:
 	rm -f $(OBJS) $(PIC_OBJS) libsolcompat.a $(SONAME)
-	rm -f tests/test_all tests/test_snprintf_bounds tests/test_snprintf_bounds_libc_first tests/test_snprintf_bounds_static
+	rm -f tests/test_all $(COMPAT_TESTS) tests/test_snprintf_bounds tests/test_snprintf_bounds_libc_first tests/test_snprintf_bounds_static
 	rm -rf tests/gen
 
-.PHONY: all check install install-headers install-runtime install-dev install-toolchain install-cxx-overlay test test-snprintf-bounds clean
+.PHONY: all check compat-tests test-compat install install-headers install-runtime install-dev install-toolchain install-cxx-overlay test test-snprintf-bounds clean
 # cache-bust: 2026-04-17 — force sysroot rebuild after OCI cache poisoning with awk patch

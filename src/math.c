@@ -7,7 +7,8 @@
  *     exp2, tgamma, nearbyint, lrint, lround, nan, remquo, scalbln, etc.)
  *   - ALL float-precision (f-suffix) wrappers
  *   - ALL long-double-precision (l-suffix) wrappers
- *     (Solaris 7 SPARC: long double == double, both 64-bit IEEE 754)
+ *     (Some legacy wrappers narrow to double; SPARC long double can be
+ *      IEEE binary128. frexpl preserves its full precision and range.)
  *   - fpclassify / __fpclassifyf / __fpclassifyd helpers
  */
 
@@ -323,7 +324,7 @@ long double scalblnl(long double x, long int n)      { return (long double)scalb
 
 /* Special long double */
 long double ldexpl(long double x, int e)    { return (long double)ldexp((double)x, e); }
-long double frexpl(long double x, int *e)   { return (long double)frexp((double)x, e); }
+/* frexpl is implemented without narrowing in src/frexpl.c. */
 long double modfl(long double x, long double *iptr) {
     double di;
     double r = modf((double)x, &di);

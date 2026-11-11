@@ -31,14 +31,20 @@ struct mntent {
     int   mnt_passno;   /* fsck pass (unused on Solaris) */
 };
 
-FILE          *setmntent(const char *filename, const char *type);
-struct mntent *getmntent(FILE *fp);
-int            addmntent(FILE *fp, const struct mntent *mnt);
-int            endmntent(FILE *fp);
-char          *hasmntopt(const struct mntent *mnt, const char *opt);
+FILE          *solcompat_setmntent(const char *filename, const char *type);
+struct mntent *solcompat_getmntent(FILE *fp);
+int            solcompat_addmntent(FILE *fp, const struct mntent *mnt);
+int            solcompat_endmntent(FILE *fp);
+char          *solcompat_hasmntopt(const struct mntent *mnt, const char *opt);
 
 #ifdef __cplusplus
 }
 #endif
 
+/* Keep the native two-argument Solaris getmntent ABI intact. */
+#define setmntent solcompat_setmntent
+#define getmntent solcompat_getmntent
+#define addmntent solcompat_addmntent
+#define endmntent solcompat_endmntent
+#define hasmntopt solcompat_hasmntopt
 #endif /* _SOLCOMPAT_MNTENT_H */

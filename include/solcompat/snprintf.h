@@ -11,11 +11,21 @@
 #define SOLCOMPAT_SNPRINTF_H
 
 #include <stdarg.h>
+#include <stdio.h>
 #include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+
+/* All formatted-output entry points share the C99-compatible engine. */
+int solcompat_printf(const char *fmt, ...);
+int solcompat_vprintf(const char *fmt, va_list ap);
+int solcompat_fprintf(FILE *stream, const char *fmt, ...);
+int solcompat_vfprintf(FILE *stream, const char *fmt, va_list ap);
+int solcompat_sprintf(char *str, const char *fmt, ...);
+int solcompat_vsprintf(char *str, const char *fmt, va_list ap);
 
 int solcompat_snprintf(char *str, size_t size, const char *fmt, ...);
 int solcompat_vsnprintf(char *str, size_t size, const char *fmt, va_list ap);
@@ -37,6 +47,13 @@ int solcompat_vsnprintf(char *str, size_t size, const char *fmt, va_list ap);
 extern "C" int snprintf(char *str, size_t size, const char *fmt, ...);
 extern "C" int vsnprintf(char *str, size_t size, const char *fmt, va_list ap);
 #else
+
+#define printf solcompat_printf
+#define vprintf solcompat_vprintf
+#define fprintf solcompat_fprintf
+#define vfprintf solcompat_vfprintf
+#define sprintf solcompat_sprintf
+#define vsprintf solcompat_vsprintf
 #define snprintf  solcompat_snprintf
 #define vsnprintf solcompat_vsnprintf
 #endif
