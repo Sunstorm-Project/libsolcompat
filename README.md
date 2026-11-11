@@ -204,3 +204,14 @@ originals explicitly. The retained originals are part of the packaged header
 payload. A previously overwritten header with no recoverable original is an
 error requiring a fresh compiler-header installation; the installer never
 silently substitutes a wrapper for the upstream implementation.
+
+For libstdc++'s generated build headers, run `install-cxx-overlay` after its
+configure and include-header generation, before compiling runtime objects. Set
+`CXX_INCLUDE_DIR` to the generated include directory and `CXX_SOURCE_ROOT` to
+the GCC source tree. Generated links are accepted only beneath that explicit
+source root, copied into retained originals, and replaced atomically without
+writing through to GCC sources. Install rules must preserve raw upstream header
+bytes before the installed-prefix overlay is applied. The C++ math facade clears
+false native C++11 classifier-prototype claims after loading `c++config.h`; the
+Solaris C header still lacks those overloads. This is a C++ header correction,
+not a change to the C runtime or Perl's captured C configuration.

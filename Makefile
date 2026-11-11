@@ -362,6 +362,8 @@ install-toolchain: install-runtime install-dev
 #   CXX_INCLUDE_DIR — libstdc++ include root (no trailing slash)
 #                     e.g. /opt/cross/sparc-sun-solaris2.7/include/c++/15.2.0
 #
+# Generated build-header symlinks require CXX_SOURCE_ROOT; their source
+# bytes are retained without writing through the symlink.
 # Idempotent refresh preserves the original header bytes. An old wrapper
 # without a retained original is rejected and requires a fresh compiler install.
 install-cxx-overlay:
@@ -374,7 +376,7 @@ install-cxx-overlay:
 	@if [ ! -d "$(CXX_INCLUDE_DIR)" ]; then \
 		echo "ERROR: $(CXX_INCLUDE_DIR) does not exist"; exit 1; \
 	fi
-	$(PYTHON) tools/materialize-cxx-overlays.py sysroot-overlay/usr/include "$(CXX_INCLUDE_DIR)"
+	$(PYTHON) tools/materialize-cxx-overlays.py sysroot-overlay/usr/include "$(CXX_INCLUDE_DIR)" --upstream-source-root "$(CXX_SOURCE_ROOT)"
 
 # ====================================================================
 # install — traditional PREFIX-based install (for manual/native builds)

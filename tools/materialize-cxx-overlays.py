@@ -2,8 +2,15 @@
 """Preserve upstream C++ headers before applying authored compatibility wrappers."""
 import argparse,os,tempfile
 from pathlib import Path
-p=argparse.ArgumentParser();p.add_argument('source');p.add_argument('destination');a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('source');p.add_argument('destination');p.add_argument('--upstream-source-root');a=p.parse_args()
 src=Path(a.source);dst=Path(a.destination);keep=dst/'.solcompat-upstream'
+allowed=Path(a.upstream_source_root).resolve() if a.upstream_source_root else None
+if dst.is_symlink():raise SystemExit('refusing symlink C++ destination directory')
+if allowed is not None:
+    try:dst.resolve().relative_to(allowed)
+    except ValueError:pass
+    else:raise SystemExit('generated header destination overlaps upstream source root')
+
 def atomic_write(path,content):
     fd,name=tempfile.mkstemp(prefix=path.name+'.solcompat-',dir=path.parent)
     temporary=Path(name)
@@ -14,7 +21,11 @@ def atomic_write(path,content):
         if temporary.exists():temporary.unlink()
 for name in ('cmath','cstdlib'):
     target=dst/name; original=keep/name
-    if target.is_symlink() or keep.is_symlink() or original.is_symlink():raise SystemExit('refusing symlink C++ header path')
+    if keep.is_symlink() or original.is_symlink():raise SystemExit('refusing retained-header symlink')
+    if target.is_symlink():
+        if allowed is None:raise SystemExit('upstream source root required for generated header symlink')
+        try:target.resolve(strict=True).relative_to(allowed)
+        except (ValueError,OSError):raise SystemExit('generated header symlink escapes upstream source root')
     if not target.is_file():raise SystemExit('missing upstream C++ header: '+name)
     text=target.read_text()
     wrapped='_SOLCOMPAT_OVERRIDE_' in text
