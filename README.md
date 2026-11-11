@@ -157,3 +157,22 @@ positional width/precision, stream output, binary128 large/small values and GNU
 and native mount enumeration. Toolchain constructor/destructor/exception
 qualification is separate; passing the C API tests does not qualify C++ startup
 or unwinding. Diagnostic sources under `tests/probes` help isolate those stages.
+
+### Native filesystem and loader contracts
+
+`getcwd(NULL, 0)` allocates and grows a buffer for GNU callers. Positive-size
+allocation and caller-supplied buffers retain native Solaris behavior through
+`_getcwd`. Mount enumeration decodes escaped whitespace and backslashes once.
+For non-PIE executables, `dl_iterate_phdr` reports zero load bias so consumers
+interpret program-header virtual addresses correctly.
+
+Timestamp wrappers validate arguments and preserve files on unsupported calls.
+Descriptor operations unavailable through Solaris return `ENOSYS` so callers can
+use their pathname fallback. Unsupported no-follow timestamp updates also fail;
+they never silently update a symlink's target. These wrappers do not provide
+complete POSIX timestamp support.
+
+Focused target tests include loader address calculations, native/GNU getcwd
+allocation and growth, and timestamp success/failure behavior. Host checks
+`python3 tests/test_format_attributes.py` and `python3 tests/test_header_prepend.py`
+verify compiler format diagnostics and safe insertion into native header guards.

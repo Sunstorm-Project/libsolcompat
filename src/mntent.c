@@ -25,6 +25,23 @@ FILE *solcompat_setmntent(const char *path, const char *mode)
     }
     return fp;
 }
+/* Native Solaris leaves mount-table escapes literal. GNU getmntent
+ * decodes these four sequences exactly once; do not rescan decoded output. */
+static char *decode_mount_field(char *field)
+{
+    char *in=field,*out=field;
+    if(!field)return NULL;
+    while(*in) {
+        if(!strncmp(in,"\\040",4)) {*out++=' ';in+=4;}
+        else if(!strncmp(in,"\\011",4)) {*out++='\t';in+=4;}
+        else if(!strncmp(in,"\\012",4)) {*out++='\n';in+=4;}
+        else if(!strncmp(in,"\\134",4)) {*out++='\\';in+=4;}
+        else *out++=*in++;
+    }
+    *out=0;
+    return field;
+}
+
 struct mntent *solcompat_getmntent(FILE *fp)
 {
     static struct mnttab native;
@@ -33,10 +50,10 @@ struct mntent *solcompat_getmntent(FILE *fp)
     if (!fp) { errno=EINVAL;return NULL; }
     ret=getmntent(fp,&native);
     if(ret) {if(ret>0) errno=EINVAL;return NULL;}
-    entry.mnt_fsname=native.mnt_special;
-    entry.mnt_dir=native.mnt_mountp;
-    entry.mnt_type=native.mnt_fstype;
-    entry.mnt_opts=native.mnt_mntopts;
+    entry.mnt_fsname=decode_mount_field(native.mnt_special);
+    entry.mnt_dir=decode_mount_field(native.mnt_mountp);
+    entry.mnt_type=decode_mount_field(native.mnt_fstype);
+    entry.mnt_opts=decode_mount_field(native.mnt_mntopts);
     entry.mnt_freq=0;entry.mnt_passno=0;
     return &entry;
 }

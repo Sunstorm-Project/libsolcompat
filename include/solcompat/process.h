@@ -24,6 +24,8 @@
 extern "C" {
 #endif
 
+char *solcompat_getcwd(char *buffer, size_t size);
+
 int daemon(int nochdir, int noclose);
 
 int pipe2(int pipefd[2], int flags);

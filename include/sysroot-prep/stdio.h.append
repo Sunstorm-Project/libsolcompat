@@ -44,15 +44,24 @@ FILE *open_memstream(char **ptr, size_t *sizeloc);
  * provided instead of macros so that std::snprintf works correctly. */
 
 /* All formatted-output entry points share the C99-compatible engine. */
-int solcompat_printf(const char *fmt, ...);
-int solcompat_vprintf(const char *fmt, va_list ap);
-int solcompat_fprintf(FILE *stream, const char *fmt, ...);
-int solcompat_vfprintf(FILE *stream, const char *fmt, va_list ap);
-int solcompat_sprintf(char *str, const char *fmt, ...);
-int solcompat_vsprintf(char *str, const char *fmt, va_list ap);
+#ifndef SOLCOMPAT_PRINTF_FORMAT
+# if defined(__clang__)
+#  define SOLCOMPAT_PRINTF_FORMAT(fmt, args) __attribute__((format(printf, fmt, args)))
+# elif defined(__GNUC__)
+#  define SOLCOMPAT_PRINTF_FORMAT(fmt, args) __attribute__((format(gnu_printf, fmt, args)))
+# else
+#  define SOLCOMPAT_PRINTF_FORMAT(fmt, args)
+# endif
+#endif
+int solcompat_printf(const char *fmt, ...) SOLCOMPAT_PRINTF_FORMAT(1, 2);
+int solcompat_vprintf(const char *fmt, va_list ap) SOLCOMPAT_PRINTF_FORMAT(1, 0);
+int solcompat_fprintf(FILE *stream, const char *fmt, ...) SOLCOMPAT_PRINTF_FORMAT(2, 3);
+int solcompat_vfprintf(FILE *stream, const char *fmt, va_list ap) SOLCOMPAT_PRINTF_FORMAT(2, 0);
+int solcompat_sprintf(char *str, const char *fmt, ...) SOLCOMPAT_PRINTF_FORMAT(2, 3);
+int solcompat_vsprintf(char *str, const char *fmt, va_list ap) SOLCOMPAT_PRINTF_FORMAT(2, 0);
 
-int solcompat_snprintf(char *str, size_t size, const char *fmt, ...);
-int solcompat_vsnprintf(char *str, size_t size, const char *fmt, va_list ap);
+int solcompat_snprintf(char *str, size_t size, const char *fmt, ...) SOLCOMPAT_PRINTF_FORMAT(3, 4);
+int solcompat_vsnprintf(char *str, size_t size, const char *fmt, va_list ap) SOLCOMPAT_PRINTF_FORMAT(3, 0);
 
 #ifdef __cplusplus
 int snprintf(char *str, size_t size, const char *fmt, ...);
