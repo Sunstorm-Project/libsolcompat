@@ -44,6 +44,9 @@ def materialize(source,destination):
         text=(MARKER+'#ifndef '+guard+'\n#define '+guard+'\n'+parts.get('.prepend','')+
               '\n#include_next <'+relative.as_posix()+'>\n'+parts.get('.append','')+
               '\n#endif /* '+guard+' */\n')
+        # assert.h intentionally re-evaluates NDEBUG on every inclusion.
+        if relative==Path('assert.h'):
+            text=(MARKER+parts.get('.prepend','')+'\n#include_next <assert.h>\n'+parts.get('.append',''))
         target.parent.mkdir(parents=True,exist_ok=True);target.write_text(text);target.chmod(0o644);count+=1
     for relative,path in overlay_files.items():
         target=safe_target(relative)

@@ -31,6 +31,17 @@ class NativeHeaders(unittest.TestCase):
             m.materialize(source,dest)
             self.assertIn('AFTER_VENDOR 29',(dest/'stdio.h').read_text())
             self.assertNotIn('AFTER_VENDOR 23',(dest/'stdio.h').read_text())
+    def test_assert_header_rechecks_ndebug(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);prep=root/'include/sysroot-prep';prep.mkdir(parents=True)
+            (root/'sysroot-overlay/usr/include').mkdir(parents=True)
+            (prep/'assert.h.append').write_text('#ifndef CENTRAL_STATIC_ASSERT\n#define CENTRAL_STATIC_ASSERT 1\n#endif\n')
+            vendor=root/'vendor';vendor.mkdir()
+            (vendor/'assert.h').write_text('#undef assert\n#ifdef NDEBUG\n#define assert(x) ((void)0)\n#else\n#define assert(x) ((void)sizeof(char[(x)?1:-1]))\n#endif\n')
+            dest=root/'fixed';m.materialize(root,dest)
+            caller=root/'check.c';caller.write_text('#define NDEBUG\n#include <assert.h>\n#undef assert\n#undef NDEBUG\n#include <assert.h>\n#ifndef assert\n#error assert was not restored on reinclusion\n#endif\nvoid check(void){assert(1); }\n')
+            subprocess.run(['cc','-Werror=implicit-function-declaration','-fsyntax-only','-nostdinc','-I'+str(dest),'-I'+str(vendor),str(caller)],check=True)
+
     def test_abi_types_requires_existing_fixed_header(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);prep=root/'include/sysroot-prep/sys';prep.mkdir(parents=True)

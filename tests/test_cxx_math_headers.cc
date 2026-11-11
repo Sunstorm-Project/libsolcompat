@@ -12,10 +12,18 @@
 #include <cmath>
 #include <math.h>
 #endif
+#ifdef STDLIB_FIRST
+#include <stdlib.h>
 #include <cstdlib>
+#else
+#include <cstdlib>
+#include <stdlib.h>
+#endif
 #include <type_traits>
 static_assert(std::is_same<decltype(std::isnan(1.0)),bool>::value,"classification overload");
 int main(){
+ lldiv_t division=::lldiv(7LL,3LL);
+ if(division.quot!=2 || division.rem!=1 || std::llabs(-7LL)!=7) return 6;
  char *end=0;
  if(std::strtoll("123",&end,10)!=123 || *end) return 1;
  if(std::abs(-4)!=4 || std::sqrt(9.0)!=3.0) return 2;
