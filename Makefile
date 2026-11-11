@@ -28,7 +28,7 @@ CPPFLAGS ?= -D_REENTRANT -I$(CURDIR)/include
 LDFLAGS  ?=
 PICFLAGS  = -fPIC
 
-PREFIX   ?= /usr/tgcware
+PREFIX   ?= /opt/sst
 LIBDIR    = $(PREFIX)/lib
 INCDIR    = $(PREFIX)/include/solcompat
 DOCDIR    = $(PREFIX)/share/doc/solcompat
