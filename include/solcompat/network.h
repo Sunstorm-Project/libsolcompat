@@ -518,6 +518,8 @@ char        *if_indextoname(unsigned int ifindex, char *ifname);
 int solcompat_socket(int domain, int type, int protocol);
 int solcompat_socketpair(int domain, int type, int protocol, int pair[2]);
 #ifndef SOLCOMPAT_NATIVE_SOCKET
+#undef socket
+#undef socketpair
 #define socket solcompat_socket
 #define socketpair solcompat_socketpair
 #endif
