@@ -353,8 +353,8 @@ install-toolchain: install-runtime install-dev
 # BEFORE the sysroot's /usr/include — so the libsolcompat overrides
 # at sysroot-overlay/usr/include/cmath, cstdlib never get consulted
 # under their default `make install-headers` placement.  This target
-# copies them into the libstdc++ include tree as override-shadows
-# that #include_next the original libstdc++ header after pre-defining
+# retains the original headers under .solcompat-upstream, then installs
+# wrappers with explicit relative includes after pre-defining
 # the _GLIBCXX_HAVE_* / _GLIBCXX_USE_C99_MATH* macros that Solaris 7
 # Configure probes can't detect on their own.
 #
@@ -362,8 +362,8 @@ install-toolchain: install-runtime install-dev
 #   CXX_INCLUDE_DIR — libstdc++ include root (no trailing slash)
 #                     e.g. /opt/cross/sparc-sun-solaris2.7/include/c++/15.2.0
 #
-# Idempotent: a sentinel guard `_SOLCOMPAT_OVERRIDE_CMATH` etc. inside
-# the override file lets a re-install detect a prior install and skip.
+# Idempotent refresh preserves the original header bytes. An old wrapper
+# without a retained original is rejected and requires a fresh compiler install.
 install-cxx-overlay:
 	@echo ""
 	@echo "=== libsolcompat install-cxx-overlay ==="
@@ -374,16 +374,7 @@ install-cxx-overlay:
 	@if [ ! -d "$(CXX_INCLUDE_DIR)" ]; then \
 		echo "ERROR: $(CXX_INCLUDE_DIR) does not exist"; exit 1; \
 	fi
-	@for hdr in cmath cstdlib; do \
-		src="sysroot-overlay/usr/include/$$hdr"; \
-		dst="$(CXX_INCLUDE_DIR)/$$hdr"; \
-		[ -f "$$src" ] || continue; \
-		if [ -f "$$dst" ] && grep -q "_SOLCOMPAT_OVERRIDE_" "$$dst" 2>/dev/null; then \
-			echo "  $$hdr: override already installed, refreshing"; \
-		fi; \
-		cp "$$src" "$$dst"; \
-		echo "  installed override → $$dst"; \
-	done
+	$(PYTHON) tools/materialize-cxx-overlays.py sysroot-overlay/usr/include "$(CXX_INCLUDE_DIR)"
 
 # ====================================================================
 # install — traditional PREFIX-based install (for manual/native builds)

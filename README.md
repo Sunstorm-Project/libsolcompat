@@ -197,3 +197,10 @@ for header lookup on Solaris.
 The socket header does not force `_XPG4_2`: Solaris7 still uses its legacy
 message-header layout, and forcing that feature macro changes unrelated vendor
 declarations. The authoritative socket append supplies the supported API.
+
+C++ compatibility wrappers retain the original upstream `cmath` and `cstdlib`
+under `.solcompat-upstream` in the compiler header tree, then include those
+originals explicitly. The retained originals are part of the packaged header
+payload. A previously overwritten header with no recoverable original is an
+error requiring a fresh compiler-header installation; the installer never
+silently substitutes a wrapper for the upstream implementation.
