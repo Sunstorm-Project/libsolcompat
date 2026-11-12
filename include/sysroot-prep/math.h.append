@@ -26,6 +26,11 @@
 #ifndef _SOLCOMPAT_MATH_H_APPEND
 #define _SOLCOMPAT_MATH_H_APPEND
 
+#ifdef _SOLCOMPAT_RESTORE_ISNAN
+#undef isnan
+#undef _SOLCOMPAT_RESTORE_ISNAN
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif

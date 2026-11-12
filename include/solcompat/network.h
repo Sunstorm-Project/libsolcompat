@@ -505,12 +505,23 @@ char        *if_indextoname(unsigned int ifindex, char *ifname);
 #define IFNAMSIZ IF_NAMESIZE
 #endif
 
-/* --- SOCK_CLOEXEC / SOCK_NONBLOCK flags for accept4 --- */
+/* --- SOCK_CLOEXEC / SOCK_NONBLOCK creation flags --- */
 #ifndef SOCK_CLOEXEC
 #define SOCK_CLOEXEC  0x80000
 #endif
 #ifndef SOCK_NONBLOCK
 #define SOCK_NONBLOCK 0x800
+#endif
+
+/* Modern creation flags are emulated for rebuilt callers. Native Solaris
+ * socket/socketpair remain available by defining SOLCOMPAT_NATIVE_SOCKET. */
+int solcompat_socket(int domain, int type, int protocol);
+int solcompat_socketpair(int domain, int type, int protocol, int pair[2]);
+#ifndef SOLCOMPAT_NATIVE_SOCKET
+#undef socket
+#undef socketpair
+#define socket solcompat_socket
+#define socketpair solcompat_socketpair
 #endif
 
 /* --- accept4 --- */

@@ -36,6 +36,9 @@ extern size_t strlcpy(char *, const char *, size_t);
 #ifndef AT_FDCWD
 #define AT_FDCWD (-3041965)
 #endif
+#ifndef AT_SYMLINK_NOFOLLOW
+#define AT_SYMLINK_NOFOLLOW 0x100
+#endif
 #define AT_FDCWD_LINUX (-100)
 #define IS_AT_FDCWD(fd) ((fd) == AT_FDCWD || (fd) == AT_FDCWD_LINUX)
 
@@ -68,12 +71,30 @@ futimens(int fd, const struct timespec times[2])
      *
      * 2. If that fails, try /proc/<pid>/fd/N (older Solaris style).
      *
-     * 3. If nothing works, silently succeed — setting timestamps is
-     *    non-critical for most callers (touch, cp, tar) and the file
-     *    has already been created/modified with the right content.
+     * 3. If neither path is supported, report ENOSYS so callers that
+     *    also know the pathname can use their pathname fallback.
      */
     char procpath[64];
     int result;
+    struct stat fd_stat;
+
+    /* Validate the descriptor before constructing a /proc pathname. */
+    if (fstat(fd, &fd_stat) < 0)
+        return -1;
+    if (times != NULL) {
+        int i;
+        for (i = 0; i < 2; ++i) {
+            long ns = times[i].tv_nsec;
+            if (ns != UTIME_NOW && ns != UTIME_OMIT
+                && (ns < 0 || ns >= 1000000000L)) {
+                errno = EINVAL;
+                return -1;
+            }
+        }
+        if (times[0].tv_nsec == UTIME_OMIT
+            && times[1].tv_nsec == UTIME_OMIT)
+            return 0;
+    }
 
     /* UTIME_NOW / UTIME_OMIT handling */
     struct utimbuf ut;
@@ -110,14 +131,11 @@ futimens(int fd, const struct timespec times[2])
     if (result == 0)
         return 0;
 
-    /* Both /proc paths failed — return -1 + ENOTSUP so callers can
-     * react. Returning 0 silently was a correctness bug: make, tar,
-     * cp, rsync, and gnulib's utimecmp use futimens to preserve or
-     * update mtime. A silent "success" leaves the kernel mtime
-     * unchanged, and subsequent `make` runs skip rebuilding a file
-     * that was supposedly touched. If a specific caller wants to
-     * ignore timestamp failure, that's the caller's responsibility. */
-    errno = ENOTSUP;
+    /* Solaris procfs does not necessarily permit changing an open file's
+     * timestamps through these paths.  ENOSYS is the unavailable-operation
+     * protocol used by gnulib's fdutimens pathname fallback.  Never claim
+     * success when neither kernel operation changed the timestamp. */
+    errno = ENOSYS;
     return -1;
 }
 
@@ -132,7 +150,31 @@ utimensat(int dirfd, const char *pathname,
     int saved_fd = -1;
     int result;
 
-    (void)flags;  /* AT_SYMLINK_NOFOLLOW not supportable via utime */
+    /* utime cannot update a symlink itself. Never follow its target when
+     * the caller explicitly requested no-follow semantics. */
+    if (flags & ~AT_SYMLINK_NOFOLLOW) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (flags & AT_SYMLINK_NOFOLLOW) {
+        errno = ENOSYS;
+        return -1;
+    }
+    if (pathname == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (times != NULL) {
+        int i;
+        for (i = 0; i < 2; ++i) {
+            long ns = times[i].tv_nsec;
+            if (ns != UTIME_NOW && ns != UTIME_OMIT
+                && (ns < 0 || ns >= 1000000000L)) {
+                errno = EINVAL;
+                return -1;
+            }
+        }
+    }
 
     /* Resolve path relative to dirfd */
     if (pathname[0] == '/' || IS_AT_FDCWD(dirfd)) {
@@ -426,15 +468,26 @@ futimesat(int dirfd, const char *pathname, const struct timeval times[2])
 {
     struct timespec ts[2];
 
+    /* GNU/Solaris futimesat permits NULL to select dirfd itself.  Keep
+     * utimensat's NULL-path EFAULT contract separate; descriptor failure
+     * must preserve futimens' ENOSYS pathname-fallback protocol. */
     if (times == NULL)
-        return utimensat(dirfd, pathname, NULL, 0);
+        return pathname == NULL ? futimens(dirfd, NULL)
+                                : utimensat(dirfd, pathname, NULL, 0);
+
+    if (times[0].tv_usec < 0 || times[0].tv_usec > 999999
+        || times[1].tv_usec < 0 || times[1].tv_usec > 999999) {
+        errno = EINVAL;
+        return -1;
+    }
 
     ts[0].tv_sec  = times[0].tv_sec;
     ts[0].tv_nsec = (long)times[0].tv_usec * 1000L;
     ts[1].tv_sec  = times[1].tv_sec;
     ts[1].tv_nsec = (long)times[1].tv_usec * 1000L;
 
-    return utimensat(dirfd, pathname, ts, 0);
+    return pathname == NULL ? futimens(dirfd, ts)
+                            : utimensat(dirfd, pathname, ts, 0);
 }
 
 /*

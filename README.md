@@ -132,3 +132,86 @@ Runs `tests/test_all.c` covering all subsystems. Requires Solaris 7 SPARC (or QE
 ## License
 
 MIT — see [LICENSE](LICENSE)
+
+
+### Formatting and mount ABI regression checks
+
+The C99 output family uses a bounded output sink and an MIT-licensed formatting
+core derived from musl v1.2.5. The copyright and upstream source URL are retained
+in `src/snprintf.c`. The same core implements stream and string entry points,
+including positional arguments and C99 integer lengths. `frexpl` preserves the
+actual SPARC long-double precision and exponent range instead of narrowing it.
+
+GNU `<mntent.h>` callers use prefixed compatibility exports. Native Solaris
+`<sys/mnttab.h>` callers retain their two-argument `getmntent` ABI; that symbol
+is never replaced with an incompatible one-argument function.
+
+`make compat-tests` builds focused formatting, bounds, long-double and both
+mount-ABI regression binaries. `make test-compat` runs them on the target using
+the just-built DSO. For cross builds, transfer those binaries and the DSO to an
+isolated Solaris system and set a command-local library search path to that
+private directory. Do not execute SPARC test binaries on the build host.
+
+These tests cover byte bounds, long formats/output, C99 j/z/t/hh conversions,
+positional width/precision, stream output, binary128 large/small values and GNU
+and native mount enumeration. Toolchain constructor/destructor/exception
+qualification is separate; passing the C API tests does not qualify C++ startup
+or unwinding. Diagnostic sources under `tests/probes` help isolate those stages.
+
+### Native filesystem and loader contracts
+
+`getcwd(NULL, 0)` allocates and grows a buffer for GNU callers. Positive-size
+allocation and caller-supplied buffers retain native Solaris behavior through
+`_getcwd`. Mount enumeration decodes escaped whitespace and backslashes once.
+For non-PIE executables, `dl_iterate_phdr` reports zero load bias so consumers
+interpret program-header virtual addresses correctly.
+
+Timestamp wrappers validate arguments and preserve files on unsupported calls.
+Descriptor operations unavailable through Solaris return `ENOSYS` so callers can
+use their pathname fallback. Unsupported no-follow timestamp updates also fail;
+they never silently update a symlink's target. These wrappers do not provide
+complete POSIX timestamp support.
+
+Focused target tests include loader address calculations, native/GNU getcwd
+allocation and growth, and timestamp success/failure behavior. Host checks
+`python3 tests/test_format_attributes.py` and `python3 tests/test_header_prepend.py`
+verify compiler format diagnostics and safe insertion into native header guards.
+
+### Native compiler header coverage
+
+The cross sysroot already contains the compatibility declarations. A native
+compiler also needs them after installation, even for headers that GCC's
+fixincludes did not copy. During package staging, run:
+
+```sh
+make install-native-headers NATIVE_INCLUDE_DIR=/staging/path/to/gcc/include-fixed
+```
+
+This host build step requires Python3. It creates authored `include_next`
+forwarders for missing C headers and installs complete authored C overlays.
+Existing vendor fixed headers remain for the pipeline's guarded-block refresher;
+no vendor header is copied by this generator. C++ overlays use the separate
+`install-cxx-overlay` target. The resulting compiler package needs no Python
+for header lookup on Solaris.
+
+The socket header does not force `_XPG4_2`: Solaris7 still uses its legacy
+message-header layout, and forcing that feature macro changes unrelated vendor
+declarations. The authoritative socket append supplies the supported API.
+
+C++ compatibility wrappers retain the original upstream `cmath` and `cstdlib`
+under `.solcompat-upstream` in the compiler header tree, then include those
+originals explicitly. The retained originals are part of the packaged header
+payload. A previously overwritten header with no recoverable original is an
+error requiring a fresh compiler-header installation; the installer never
+silently substitutes a wrapper for the upstream implementation.
+
+For libstdc++'s generated build headers, run `install-cxx-overlay` after its
+configure and include-header generation, before compiling runtime objects. Set
+`CXX_INCLUDE_DIR` to the generated include directory and `CXX_SOURCE_ROOT` to
+the GCC source tree. Generated links are accepted only beneath that explicit
+source root, copied into retained originals, and replaced atomically without
+writing through to GCC sources. Install rules must preserve raw upstream header
+bytes before the installed-prefix overlay is applied. The C++ math facade clears
+false native C++11 classifier-prototype claims after loading `c++config.h`; the
+Solaris C header still lacks those overloads. This is a C++ header correction,
+not a change to the C runtime or Perl's captured C configuration.

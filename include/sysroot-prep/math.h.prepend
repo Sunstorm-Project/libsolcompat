@@ -1,0 +1,8 @@
+/* Keep Solaris' legacy int isnan(double) out of C++'s bool overload set. */
+#ifndef _SOLCOMPAT_MATH_H_PREPEND
+#define _SOLCOMPAT_MATH_H_PREPEND
+#if defined(__cplusplus) && !defined(isnan)
+#define _SOLCOMPAT_RESTORE_ISNAN 1
+#define isnan __solcompat_native_isnan
+#endif
+#endif /* _SOLCOMPAT_MATH_H_PREPEND */
