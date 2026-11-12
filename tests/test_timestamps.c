@@ -6,8 +6,10 @@
 #include <errno.h>
 #include <stdio.h>
 #include <time.h>
+#include <sys/time.h>
 extern int futimens(int, const struct timespec *);
 extern int utimensat(int, const char *, const struct timespec *, int);
+extern int futimesat(int, const char *, const struct timeval *);
 int main(void) {
     struct timespec ts[2];
     struct stat before, after;
@@ -36,6 +38,25 @@ int main(void) {
     ts[0].tv_nsec = ts[1].tv_nsec = 0;
     errno=0; r=futimens(fd,ts);
     if (r != 0 && !(r == -1 && errno == ENOSYS)) return 11;
+    {
+        struct timeval tv[2];
+        tv[0].tv_sec=tv[1].tv_sec=1200000000;
+        tv[0].tv_usec=tv[1].tv_usec=0;
+        errno=0; r=futimesat(fd,NULL,tv);
+        if (r != 0 && !(r == -1 && errno == ENOSYS)) return 12;
+        errno=0; r=futimesat(fd,NULL,NULL);
+        if (r != 0 && !(r == -1 && errno == ENOSYS)) return 13;
+        errno=0;
+        if (futimesat(-1,NULL,tv) != -1 || errno != EBADF) return 14;
+        tv[0].tv_usec=1000000;
+        errno=0;
+        if (futimesat(fd,NULL,tv) != -1 || errno != EINVAL) return 15;
+        tv[0].tv_usec=-1;
+        errno=0;
+        if (futimesat(-100,"timestamp-target",tv) != -1 || errno != EINVAL) return 16;
+        errno=0;
+        if (utimensat(-100,NULL,ts,0) != -1 || errno != EFAULT) return 17;
+    }
     close(fd); unlink("timestamp-link"); unlink("timestamp-target");
     puts("timestamp arguments, no-follow preservation, and fallback protocol passed");
     return 0;

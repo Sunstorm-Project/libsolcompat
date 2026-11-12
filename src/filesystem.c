@@ -468,15 +468,26 @@ futimesat(int dirfd, const char *pathname, const struct timeval times[2])
 {
     struct timespec ts[2];
 
+    /* GNU/Solaris futimesat permits NULL to select dirfd itself.  Keep
+     * utimensat's NULL-path EFAULT contract separate; descriptor failure
+     * must preserve futimens' ENOSYS pathname-fallback protocol. */
     if (times == NULL)
-        return utimensat(dirfd, pathname, NULL, 0);
+        return pathname == NULL ? futimens(dirfd, NULL)
+                                : utimensat(dirfd, pathname, NULL, 0);
+
+    if (times[0].tv_usec < 0 || times[0].tv_usec > 999999
+        || times[1].tv_usec < 0 || times[1].tv_usec > 999999) {
+        errno = EINVAL;
+        return -1;
+    }
 
     ts[0].tv_sec  = times[0].tv_sec;
     ts[0].tv_nsec = (long)times[0].tv_usec * 1000L;
     ts[1].tv_sec  = times[1].tv_sec;
     ts[1].tv_nsec = (long)times[1].tv_usec * 1000L;
 
-    return utimensat(dirfd, pathname, ts, 0);
+    return pathname == NULL ? futimens(dirfd, ts)
+                            : utimensat(dirfd, pathname, ts, 0);
 }
 
 /*
