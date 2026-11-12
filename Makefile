@@ -447,5 +447,8 @@ clean:
 	rm -f tests/test_all $(COMPAT_TESTS) tests/test_snprintf_bounds tests/test_snprintf_bounds_libc_first tests/test_snprintf_bounds_static
 	rm -rf tests/gen
 
-.PHONY: all check compat-tests test-compat install install-native-headers install-headers install-runtime install-dev install-toolchain install-cxx-overlay test test-snprintf-bounds clean
+test-mman-linkage:
+	$(PYTHON) tests/test_mman_cpp_linkage.py
+
+.PHONY: all check compat-tests test-compat install install-native-headers install-headers install-runtime install-dev install-toolchain install-cxx-overlay test test-snprintf-bounds test-mman-linkage clean
 # cache-bust: 2026-04-17 — force sysroot rebuild after OCI cache poisoning with awk patch
