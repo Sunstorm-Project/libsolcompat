@@ -191,9 +191,8 @@ mkostemp(char *tmpl, int flags)
 }
 
 /*
- * Minimal posix_spawn implementation using fork/exec.
- * This doesn't handle all file_actions or spawn attributes,
- * but covers the common case.
+ * fork/exec spawn with ordered file actions and supported attributes.
+ * Unsupported attribute flags fail explicitly before creating a child.
  */
 
 /* undef posix_spawn macros if present, so we can define the actual functions */
@@ -214,6 +213,15 @@ posix_spawnattr_destroy(posix_spawnattr_t *attr)
     return 0;
 }
 
+/* Private representation; the public file-actions structure is unchanged. */
+enum spawn_action_kind { SPAWN_OPEN, SPAWN_CLOSE, SPAWN_DUP2 };
+struct spawn_action {
+    enum spawn_action_kind kind;
+    int fd, newfd, oflag;
+    mode_t mode;
+    char *path;
+};
+
 int
 posix_spawn_file_actions_init(posix_spawn_file_actions_t *fact)
 {
@@ -224,8 +232,11 @@ posix_spawn_file_actions_init(posix_spawn_file_actions_t *fact)
 int
 posix_spawn_file_actions_destroy(posix_spawn_file_actions_t *fact)
 {
-    if (fact->__actions)
-        free(fact->__actions);
+    int i;
+    struct spawn_action *actions = fact->__actions;
+    for (i = 0; i < fact->__used; ++i)
+        free(actions[i].path);
+    free(actions);
     memset(fact, 0, sizeof(*fact));
     return 0;
 }
@@ -286,55 +297,291 @@ posix_spawnattr_getpgroup(const posix_spawnattr_t *attr, pid_t *pgroup)
     return 0;
 }
 
+static int
+spawn_add_action(posix_spawn_file_actions_t *fact, struct spawn_action action)
+{
+    struct spawn_action *actions;
+    int allocated;
+    if (fact->__used == fact->__allocated) {
+        if (fact->__allocated > INT_MAX / 2 / (int)sizeof(*actions))
+            return ENOMEM;
+        allocated = fact->__allocated ? fact->__allocated * 2 : 8;
+        actions = realloc(fact->__actions, (size_t)allocated * sizeof(*actions));
+        if (!actions)
+            return ENOMEM;
+        fact->__actions = actions;
+        fact->__allocated = allocated;
+    }
+    actions = fact->__actions;
+    actions[fact->__used++] = action;
+    return 0;
+}
+
 int
 posix_spawn_file_actions_addopen(posix_spawn_file_actions_t *fact,
     int fildes, const char *path, int oflag, mode_t mode)
 {
-    (void)fact; (void)fildes; (void)path; (void)oflag; (void)mode;
-    /* Stub — not fully implemented but satisfies link-time dependency */
-    return 0;
+    struct spawn_action action;
+    int error;
+    if (fildes < 0)
+        return EBADF;
+    if (!path)
+        return EINVAL;
+    memset(&action, 0, sizeof(action));
+    action.kind = SPAWN_OPEN;
+    action.fd = fildes;
+    action.oflag = oflag;
+    action.mode = mode;
+    action.path = strdup(path);
+    if (!action.path)
+        return ENOMEM;
+    error = spawn_add_action(fact, action);
+    if (error)
+        free(action.path);
+    return error;
 }
 
 int
 posix_spawn_file_actions_addclose(posix_spawn_file_actions_t *fact, int fildes)
 {
-    (void)fact; (void)fildes;
-    return 0;
+    struct spawn_action action;
+    if (fildes < 0)
+        return EBADF;
+    memset(&action, 0, sizeof(action));
+    action.kind = SPAWN_CLOSE;
+    action.fd = fildes;
+    return spawn_add_action(fact, action);
 }
 
 int
 posix_spawn_file_actions_adddup2(posix_spawn_file_actions_t *fact,
     int fildes, int newfildes)
 {
-    (void)fact; (void)fildes; (void)newfildes;
+    struct spawn_action action;
+    if (fildes < 0 || newfildes < 0)
+        return EBADF;
+    memset(&action, 0, sizeof(action));
+    action.kind = SPAWN_DUP2;
+    action.fd = fildes;
+    action.newfd = newfildes;
+    return spawn_add_action(fact, action);
+}
+
+static int
+spawn_attributes(const posix_spawnattr_t *attr)
+{
+    int sig;
+    struct sigaction sa;
+    if (!attr)
+        return 0;
+    if (attr->__flags & POSIX_SPAWN_RESETIDS) {
+        if (setegid(getgid()) < 0 || seteuid(getuid()) < 0)
+            return errno;
+    }
+    if ((attr->__flags & POSIX_SPAWN_SETPGROUP) &&
+        setpgid(0, attr->__pgrp) < 0)
+        return errno;
+    if (attr->__flags & POSIX_SPAWN_SETSIGDEF) {
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = SIG_DFL;
+        sigemptyset(&sa.sa_mask);
+        for (sig = 1; sig < NSIG; ++sig) {
+            /* These uncatchable signals already have their default action. */
+            if (sig != SIGKILL && sig != SIGSTOP &&
+                sigismember(&attr->__sd, sig) == 1 &&
+                sigaction(sig, &sa, NULL) < 0)
+                return errno;
+        }
+    }
+    if ((attr->__flags & POSIX_SPAWN_SETSIGMASK) &&
+        sigprocmask(SIG_SETMASK, &attr->__ss, NULL) < 0)
+        return errno;
+    return 0;
+}
+
+static int
+spawn_actions(const posix_spawn_file_actions_t *fact)
+{
+    int i, fd, flags;
+    const struct spawn_action *actions;
+    if (!fact)
+        return 0;
+    actions = fact->__actions;
+    for (i = 0; i < fact->__used; ++i) {
+        const struct spawn_action *a = &actions[i];
+        switch (a->kind) {
+        case SPAWN_CLOSE:
+            if (close(a->fd) < 0)
+                return errno;
+            break;
+        case SPAWN_DUP2:
+            if (a->fd == a->newfd) {
+                flags = fcntl(a->fd, F_GETFD);
+                if (flags < 0 || fcntl(a->fd, F_SETFD, flags & ~FD_CLOEXEC) < 0)
+                    return errno;
+            } else if (dup2(a->fd, a->newfd) < 0)
+                return errno;
+            break;
+        case SPAWN_OPEN:
+            /* POSIX open action closes the destination before opening. */
+            close(a->fd);
+            fd = open(a->path, a->oflag, a->mode);
+            if (fd < 0)
+                return errno;
+            if (fd != a->fd) {
+                if (dup2(fd, a->fd) < 0) {
+                    int error = errno;
+                    close(fd);
+                    return error;
+                }
+                close(fd);
+            }
+            break;
+        }
+    }
+    return 0;
+}
+
+/* POSIX spawnp searches the caller's PATH, independently of child envp. */
+static void
+spawn_search_exec(const char *file, const char *path,
+    char *const argv[], char *const envp[])
+{
+    const char *start, *end;
+    char candidate[PATH_MAX];
+    size_t dirlen, filelen = strlen(file);
+    int access_error = 0;
+    if (strchr(file, '/')) {
+        execve(file, argv, envp);
+        return;
+    }
+    if (!path)
+        path = "/usr/bin:/bin";
+    start = path;
+    for (;;) {
+        end = strchr(start, ':');
+        dirlen = end ? (size_t)(end-start) : strlen(start);
+        if (dirlen + (dirlen ? 1 : 0) + filelen + 1 <= sizeof(candidate)) {
+            if (dirlen) {
+                memcpy(candidate, start, dirlen);
+                candidate[dirlen++] = '/';
+            }
+            memcpy(candidate+dirlen, file, filelen+1);
+            execve(candidate, argv, envp);
+            if (errno == EACCES)
+                access_error = EACCES;
+            else if (errno != ENOENT && errno != ENOTDIR)
+                return;
+        }
+        if (!end)
+            break;
+        start = end+1;
+    }
+    errno = access_error ? access_error : ENOENT;
+}
+
+static int
+spawn_common(pid_t *pid, const char *path,
+    const posix_spawn_file_actions_t *fact, const posix_spawnattr_t *attr,
+    char *const argv[], char *const envp[], int search)
+{
+    int pipefd[2], error, minimum = 3, fd, status, saved_errno = errno;
+    int i;
+    size_t received;
+    ssize_t count;
+    pid_t child;
+    const struct spawn_action *actions = fact ? fact->__actions : NULL;
+    const char *caller_path = search ? getenv("PATH") : NULL;
+    const short supported = POSIX_SPAWN_RESETIDS | POSIX_SPAWN_SETPGROUP |
+        POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK;
+    if (attr && (attr->__flags & ~supported))
+        return ENOTSUP;
+    if (pipe(pipefd) < 0)
+        return errno;
+    /* Reserve an unused descriptor not named by any action.  A valid action
+     * may name OPEN_MAX-1: placing the channel above the maximum is invalid. */
+    for (;;) {
+        fd = fcntl(pipefd[1], F_DUPFD, minimum);
+        if (fd < 0) {
+            error = errno;
+            close(pipefd[0]); close(pipefd[1]);
+            return error;
+        }
+        for (i = 0; fact && i < fact->__used; ++i)
+            if (fd == actions[i].fd ||
+                (actions[i].kind == SPAWN_DUP2 && fd == actions[i].newfd))
+                break;
+        if (!fact || i == fact->__used)
+            break;
+        close(fd);
+        if (fd == INT_MAX) {
+            close(pipefd[0]); close(pipefd[1]);
+            return EMFILE;
+        }
+        minimum = fd + 1;
+    }
+    close(pipefd[1]);
+    pipefd[1] = fd;
+    if (fcntl(fd, F_SETFD, FD_CLOEXEC) < 0) {
+        error = errno;
+        close(pipefd[0]); close(fd);
+        return error;
+    }
+    child = fork();
+    if (child < 0) {
+        error = errno;
+        close(pipefd[0]); close(fd);
+        return error;
+    }
+    if (child == 0) {
+        close(pipefd[0]);
+        error = spawn_attributes(attr);
+        if (!error)
+            error = spawn_actions(fact);
+        if (!error) {
+            if (search) {
+                spawn_search_exec(path, caller_path, argv, envp);
+            } else
+                execve(path, argv, envp);
+            error = errno;
+        }
+        received = 0;
+        while (received < sizeof(error)) {
+            count = write(fd, (char *)&error + received, sizeof(error) - received);
+            if (count > 0) received += (size_t)count;
+            else if (count < 0 && errno == EINTR) continue;
+            else break;
+        }
+        _exit(127);
+    }
+    close(fd);
+    received = 0;
+    error = 0;
+    while (received < sizeof(error)) {
+        count = read(pipefd[0], (char *)&error + received, sizeof(error) - received);
+        if (count > 0) received += (size_t)count;
+        else if (count < 0 && errno == EINTR) continue;
+        else if (count < 0) { error = errno; received = sizeof(error); break; }
+        else break;
+    }
+    close(pipefd[0]);
+    if (received) {
+        while (waitpid(child, &status, 0) < 0 && errno == EINTR) ;
+        errno = saved_errno;
+        return received == sizeof(error) ? error : EIO;
+    }
+    if (pid)
+        *pid = child;
+    errno = saved_errno;
     return 0;
 }
 
 int
 posix_spawn(pid_t *pid, const char *path,
-            const posix_spawn_file_actions_t *file_actions,
-            const posix_spawnattr_t *attrp,
-            char *const argv[], char *const envp[])
+    const posix_spawn_file_actions_t *fact, const posix_spawnattr_t *attr,
+    char *const argv[], char *const envp[])
 {
-    pid_t child;
-
-    (void)file_actions;  /* Not fully implemented */
-    (void)attrp;
-
-    child = fork();
-    if (child < 0)
-        return errno;
-
-    if (child == 0) {
-        /* Child */
-        execve(path, argv, envp);
-        _exit(127);
-    }
-
-    /* Parent */
-    if (pid)
-        *pid = child;
-    return 0;
+    return spawn_common(pid, path, fact, attr, argv, envp, 0);
 }
 
 /* -----------------------------------------------------------------------
@@ -436,33 +683,10 @@ execvpe(const char *filename, char *const argv[], char *const envp[])
 
 int
 posix_spawnp(pid_t *pid, const char *file,
-             const posix_spawn_file_actions_t *file_actions,
-             const posix_spawnattr_t *attrp,
-             char *const argv[], char *const envp[])
+    const posix_spawn_file_actions_t *fact, const posix_spawnattr_t *attr,
+    char *const argv[], char *const envp[])
 {
-    pid_t child;
-
-    (void)file_actions;
-    (void)attrp;
-
-    child = fork();
-    if (child < 0)
-        return errno;
-
-    if (child == 0) {
-        /* Child — use PATH lookup.  environ is ignored in execvp,
-         * but we set it before execvp */
-        if (envp) {
-            extern char **environ;
-            environ = (char **)envp;
-        }
-        execvp(file, argv);
-        _exit(127);
-    }
-
-    if (pid)
-        *pid = child;
-    return 0;
+    return spawn_common(pid, file, fact, attr, argv, envp, 1);
 }
 
 /*

@@ -416,7 +416,7 @@ test-snprintf-bounds: all
 # Focused C99 formatting and native/GNU mount-ABI regression binaries.
 # Build cross binaries with compat-tests; test-compat executes only on target.
 COMPAT_TESTS = tests/test_printf_compat tests/test_mntent_compat \
-               tests/test_mnttab_native tests/test_long_double tests/test_snprintf_bounds tests/test_dl_iterate_phdr tests/test_timestamps tests/test_getcwd_compat tests/test_socket_flags tests/test_socket_flag_failures
+               tests/test_mnttab_native tests/test_long_double tests/test_snprintf_bounds tests/test_dl_iterate_phdr tests/test_timestamps tests/test_getcwd_compat tests/test_socket_flags tests/test_socket_flag_failures tests/test_spawn_actions
 compat-tests: $(COMPAT_TESTS)
 $(COMPAT_TESTS): $(SONAME)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fno-builtin -Isysroot-overlay/usr/include \
@@ -430,6 +430,7 @@ tests/test_snprintf_bounds: tests/test_snprintf_bounds.c
 tests/test_dl_iterate_phdr: tests/test_dl_iterate_phdr.c
 tests/test_timestamps: tests/test_timestamps.c
 tests/test_getcwd_compat: tests/test_getcwd_compat.c
+tests/test_spawn_actions: tests/test_spawn_actions.c
 tests/test_socket_flags: tests/test_socket_flags.c
 tests/test_socket_flag_failures: tests/test_socket_flag_failures.c src/socket_flags.c
 
