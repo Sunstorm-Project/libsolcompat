@@ -834,15 +834,16 @@ pthread_rwlock_timedwrlock(pthread_rwlock_t *rwlock, const struct timespec *abs_
 
 /* ==================================================================
  * Robust-mutex stubs — libsolcompat has no real robust mutex support.
- * We accept attr-level configuration but silently map to stalled
- * (default) behavior. Matches gnulib's fallback expectation.
+ * Only the default stalled mode is available on Solaris 7.
  * ================================================================== */
 
 int
 pthread_mutexattr_setrobust(pthread_mutexattr_t *attr, int robustness)
 {
     (void)attr;
-    if (robustness != PTHREAD_MUTEX_STALLED && robustness != PTHREAD_MUTEX_ROBUST)
+    if (robustness == PTHREAD_MUTEX_ROBUST)
+        return ENOTSUP;
+    if (robustness != PTHREAD_MUTEX_STALLED)
         return EINVAL;
     return 0;
 }
