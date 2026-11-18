@@ -1,12 +1,7 @@
 /*
  * random.c — Cryptographic and general-purpose randomness for Solaris 7
  *
- * Solaris 7 has no /dev/urandom, no arc4random, no getentropy.
- * We use /dev/random (which does exist on some Solaris 7 installs
- * with the SUNWski package) or fall back to a combination of
- * gethrtime(), getpid(), and time() for seeding.
- *
- * For production cryptographic use, SUNWski should be installed.
+ * Secure bytes come from a Solaris random device or the PRNGD socket.
  */
 
 #include <stdlib.h>
@@ -49,7 +44,9 @@ extern long long gethrtime(void);
 static int
 egd_connect(void)
 {
-    const char *socket_path = getenv("SOLCOMPAT_EGD_SOCKET");
+    const char *socket_path = NULL;
+    if (getuid() == geteuid() && getgid() == getegid())
+        socket_path = getenv("SOLCOMPAT_EGD_SOCKET");
     if (socket_path == NULL || *socket_path == '\0')
         socket_path = EGD_DEFAULT_SOCKET;
 
@@ -168,47 +165,27 @@ read_all(int fd, void *buf, size_t len)
  *   2. /dev/random   (SUNWski on 7/8)
  *   3. EGD socket    (prngd pool — SST ships this)
  *
- * Returns 0 on success, -1 if no entropy source works.  The chosen
- * source is cached in random_source so repeated callers don't re-probe.
+ * Open a fresh source per request so failures are retryable and forked
+ * processes and threads never share generator state or cached descriptors.
  */
 static int
 get_random_bytes(void *buf, size_t len)
 {
-    /*
-     * Source selection is sticky so arc4_stir / repeated Python boots
-     * don't re-open /dev/urandom (EEXIST / EBUSY semantics vary).
-     *   0 = not probed
-     *   1 = /dev/urandom / /dev/random fd in random_fd
-     *   2 = EGD socket (per-call connect; no cached fd)
-     *  -1 = no source available
-     */
-    static int random_source = 0;
-    static int random_fd = -1;
+    static const char *const devices[] = { "/dev/urandom", "/dev/random" };
+    size_t i;
 
-    if (random_source == 0) {
-        int fd = open("/dev/urandom", O_RDONLY);
-        if (fd < 0)
-            fd = open("/dev/random", O_RDONLY);
+    if (len == 0)
+        return 0;
+    for (i = 0; i < sizeof(devices) / sizeof(devices[0]); i++) {
+        int fd = open(devices[i], O_RDONLY);
         if (fd >= 0) {
-            random_fd = fd;
-            random_source = 1;
-        } else {
-            /* Try EGD as the last resort.  We don't keep the socket
-             * open because EGD servers may close idle connections and
-             * rediscovery-on-failure inside read_all is awkward. */
-            unsigned char probe;
-            if (egd_get_bytes(&probe, 1) == 0)
-                random_source = 2;
-            else
-                random_source = -1;
+            int result = read_all(fd, buf, len);
+            close(fd);
+            if (result == 0)
+                return 0;
         }
     }
-
-    if (random_source == 1)
-        return read_all(random_fd, buf, len);
-    if (random_source == 2)
-        return egd_get_bytes(buf, len);
-    return -1;
+    return egd_get_bytes(buf, len);
 }
 
 /*
@@ -254,7 +231,7 @@ getentropy(void *buffer, size_t length)
      *
      * Silently falling back to the LCG was a cryptographic footgun:
      * OpenSSL / OpenSSH / Python's `secrets` / any caller of
-     * arc4random() seeds from getentropy(); if this function silently
+     * getentropy() may use the result as seed material. If this function silently
      * returns LCG output, session keys / nonces / CSRF tokens become
      * predictable with zero diagnostic.  A loud failure is strictly
      * better than a silent weak-entropy substitution.
@@ -305,71 +282,23 @@ getrandom(void *buf, size_t buflen, unsigned int flags)
     return -1;
 }
 
-/*
- * arc4random family
- *
- * Uses ChaCha20 when backed by real entropy,
- * or the fallback PRNG when not.
- * For simplicity, we use a basic implementation that reseeds
- * from getentropy() periodically.
- */
-
-static unsigned long arc4_state[4];
-static int arc4_initialized = 0;
-static int arc4_count = 0;
-
-static void
-arc4_stir(void)
+/* These APIs have no error return. Never expose partially filled output
+ * or use the optional weak test generator when the entropy source fails. */
+void
+arc4random_buf(void *buf, size_t nbytes)
 {
-    unsigned char seed[16];
-    getentropy(seed, sizeof(seed));
-    memcpy(arc4_state, seed, sizeof(seed));
-    arc4_count = 0;
-    arc4_initialized = 1;
-    explicit_bzero(seed, sizeof(seed));
-}
-
-static unsigned long
-arc4_next(void)
-{
-    /* Simple mixing — not ChaCha20, but reasonable for non-crypto use */
-    if (!arc4_initialized || arc4_count > 1600000)
-        arc4_stir();
-
-    arc4_state[0] += arc4_state[1];
-    arc4_state[1] = (arc4_state[1] << 13) | (arc4_state[1] >> 19);
-    arc4_state[1] ^= arc4_state[0];
-    arc4_state[0] = (arc4_state[0] << 16) | (arc4_state[0] >> 16);
-    arc4_state[2] += arc4_state[3];
-    arc4_state[3] = (arc4_state[3] << 17) | (arc4_state[3] >> 15);
-    arc4_state[3] ^= arc4_state[2];
-    arc4_state[0] += arc4_state[3];
-    arc4_state[2] += arc4_state[1];
-
-    arc4_count++;
-    return arc4_state[0];
+    if (get_random_bytes(buf, nbytes) < 0) {
+        explicit_bzero(buf, nbytes);
+        abort();
+    }
 }
 
 uint32_t
 arc4random(void)
 {
-    return (uint32_t)arc4_next();
-}
-
-void
-arc4random_buf(void *buf, size_t nbytes)
-{
-    unsigned char *p = (unsigned char *)buf;
-    while (nbytes >= 4) {
-        uint32_t val = arc4random();
-        memcpy(p, &val, 4);
-        p += 4;
-        nbytes -= 4;
-    }
-    if (nbytes > 0) {
-        uint32_t val = arc4random();
-        memcpy(p, &val, nbytes);
-    }
+    uint32_t value;
+    arc4random_buf(&value, sizeof(value));
+    return value;
 }
 
 uint32_t
@@ -381,7 +310,7 @@ arc4random_uniform(uint32_t upper_bound)
         return 0;
 
     /* Avoid modulo bias */
-    min = (uint32_t)(-(int32_t)upper_bound) % upper_bound;
+    min = (uint32_t)(0U - upper_bound) % upper_bound;
     for (;;) {
         r = arc4random();
         if (r >= min)
