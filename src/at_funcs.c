@@ -45,6 +45,10 @@ extern size_t strlcpy(char *, const char *, size_t);
 #define AT_FDCWD (-3041965)
 #endif
 #define AT_FDCWD_LINUX (-100)
+/* Public Solaris 7 sysroot ABI, also needed with original system headers. */
+#ifndef O_DIRECTORY
+#define O_DIRECTORY 0x1000000
+#endif
 #ifndef AT_SYMLINK_NOFOLLOW
 #define AT_SYMLINK_NOFOLLOW 0x100
 #endif
@@ -149,9 +153,50 @@ openat(int dirfd, const char *pathname, int flags, ...)
     if (saved < 0)
         return -1;
 
-    result = open(pathname, flags, mode);
+    if (flags & O_DIRECTORY) {
+        struct stat st;
+        /* Solaris 7 ignores the compatibility bit. Check before open so a
+         * FIFO cannot block and an ordinary file cannot be truncated. */
+        if (flags & O_CREAT) {
+            errno = EINVAL;
+            result = -1;
+        } else if (stat(pathname, &st) < 0) {
+            result = -1;
+        } else if (!S_ISDIR(st.st_mode)) {
+            errno = ENOTDIR;
+            result = -1;
+        } else if ((flags & O_ACCMODE) != O_RDONLY || (flags & O_TRUNC)) {
+            errno = EISDIR;
+            result = -1;
+        } else {
+            result = open(pathname, (flags & ~O_DIRECTORY) | O_NONBLOCK);
+            if (result >= 0) {
+                int error = 0;
+                if (fstat(result, &st) < 0)
+                    error = errno;
+                else if (!S_ISDIR(st.st_mode))
+                    error = ENOTDIR;
+                else if (!(flags & O_NONBLOCK)) {
+                    int status = fcntl(result, F_GETFL);
+                    if (status < 0 || fcntl(result, F_SETFL, status & ~O_NONBLOCK) < 0)
+                        error = errno;
+                }
+                if (error) {
+                    close(result);
+                    result = -1;
+                    errno = error;
+                }
+            }
+        }
+    } else {
+        result = open(pathname, flags, mode);
+    }
 
-    at_leave(saved);
+    {
+        int error = errno;
+        at_leave(saved);
+        errno = error;
+    }
     return result;
 }
 
@@ -223,6 +268,11 @@ unlinkat(int dirfd, const char *pathname, int flags)
 {
     int saved, result;
 
+    if (flags & ~AT_REMOVEDIR) {
+        errno = EINVAL;
+        return -1;
+    }
+
     saved = at_enter(dirfd, pathname);
     if (saved < 0)
         return -1;
@@ -240,6 +290,11 @@ int
 fstatat(int dirfd, const char *pathname, struct stat *buf, int flags)
 {
     int saved, result;
+
+    if (flags & ~AT_SYMLINK_NOFOLLOW) {
+        errno = EINVAL;
+        return -1;
+    }
 
     saved = at_enter(dirfd, pathname);
     if (saved < 0)
@@ -260,6 +315,11 @@ fchownat(int dirfd, const char *pathname,
 {
     int saved, result;
 
+    if (flags & ~AT_SYMLINK_NOFOLLOW) {
+        errno = EINVAL;
+        return -1;
+    }
+
     saved = at_enter(dirfd, pathname);
     if (saved < 0)
         return -1;
@@ -277,7 +337,16 @@ int
 fchmodat(int dirfd, const char *pathname, mode_t mode, int flags)
 {
     int saved, result;
-    (void)flags;  /* AT_SYMLINK_NOFOLLOW not possible with chmod on Solaris 7 */
+
+    if (flags & ~AT_SYMLINK_NOFOLLOW) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (flags & AT_SYMLINK_NOFOLLOW) {
+        /* Solaris 7 chmod follows links and cannot apply this constraint. */
+        errno = ENOTSUP;
+        return -1;
+    }
 
     saved = at_enter(dirfd, pathname);
     if (saved < 0)
