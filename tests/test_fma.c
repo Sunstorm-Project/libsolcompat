@@ -5,6 +5,8 @@
 /* Force an external call even when GCC knows the inputs. */
 static double (*volatile fused)(double, double, double) = fma;
 
+static float (*volatile fused_float)(float, float, float) = fmaf;
+
 int main(void)
 {
     if (fused(1.0 + 0x1p-27, 1.0 - 0x1p-27, -1.0) != -0x1p-54) {
@@ -25,6 +27,12 @@ int main(void)
     }
     if (!isnan(fused(INFINITY, 0.0, 1.0))) {
         fputs("invalid product failed\n", stderr);
+        return 1;
+    }
+    float x = 1.0f + 0x1p-12f;
+    if (fused_float(x, x, 0x1p-90f) != 1.0f + 0x1p-11f + 0x1p-23f ||
+        fused_float(x, x, -0x1p-90f) != 1.0f + 0x1p-11f) {
+        fputs("float double rounding failed\n", stderr);
         return 1;
     }
     puts("PASS fused multiply-add cancellation, overflow, subnormal and special values");

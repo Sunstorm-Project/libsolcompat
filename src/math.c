@@ -252,11 +252,6 @@ float modff(float x, float *iptr) {
     return (float)r;
 }
 
-/* Ternary float */
-float fmaf(float x, float y, float z) {
-    return (float)((double)x * (double)y + (double)z);
-}
-
 /* Rounding / integer conversion */
 long int      lrintf(float x)  { return lrint((double)x); }
 long int      lroundf(float x) { return lround((double)x); }
