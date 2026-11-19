@@ -55,6 +55,7 @@ SRCS = src/snprintf.c \
        src/memory.c \
        src/filesystem.c \
        src/at_funcs.c \
+       src/statat32.c \
        src/pty.c \
        src/process.c \
        src/poll.c \

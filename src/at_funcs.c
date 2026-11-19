@@ -302,27 +302,37 @@ unlinkat(int dirfd, const char *pathname, int flags)
     return result;
 }
 
-int
-fstatat(int dirfd, const char *pathname, struct stat *buf, int flags)
-{
-    int saved, result;
+#include "statat_internal.h"
 
+static int
+stat_large(const char *pathname, void *buf, int flags)
+{
+    return flags & AT_SYMLINK_NOFOLLOW ? lstat(pathname, buf) : stat(pathname, buf);
+}
+
+int
+solcompat_statat_with(int dirfd, const char *pathname, void *buf, int flags,
+                      solcompat_stat_fn query)
+{
+    int saved, result, error;
     if (flags & ~AT_SYMLINK_NOFOLLOW) {
         errno = EINVAL;
         return -1;
     }
-
     saved = at_enter(dirfd, pathname);
     if (saved < 0)
         return -1;
-
-    if (flags & AT_SYMLINK_NOFOLLOW)
-        result = lstat(pathname, buf);
-    else
-        result = stat(pathname, buf);
-
+    result = query(pathname, buf, flags);
+    error = errno;
     at_leave(saved);
+    errno = error;
     return result;
+}
+
+int
+fstatat(int dirfd, const char *pathname, struct stat *buf, int flags)
+{
+    return solcompat_statat_with(dirfd, pathname, buf, flags, stat_large);
 }
 
 int

@@ -47,6 +47,10 @@ extern int futimens(int fd, const struct timespec times[2]);
 /* POSIX 2008 *at() family — gnulib-using packages expect these in
  * sys/stat.h. libsolcompat implements each via the fchdir() dance
  * in src/at_funcs.c. */
+/* The original bare symbol uses the large-file layout. */
+#if defined(__sun) && !defined(_LP64) && (!defined(_FILE_OFFSET_BITS) || _FILE_OFFSET_BITS != 64)
+#define fstatat solcompat_fstatat32
+#endif
 extern int fstatat(int dirfd, const char *pathname,
                    struct stat *statbuf, int flags);
 extern int mkdirat(int dirfd, const char *pathname, mode_t mode);
