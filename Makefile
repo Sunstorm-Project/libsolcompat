@@ -58,6 +58,7 @@ SRCS = src/snprintf.c \
        src/memory.c \
        src/filesystem.c \
        src/at_funcs.c \
+       src/scandir.c \
        src/statat32.c \
        src/pty.c \
        src/process.c \
@@ -77,8 +78,8 @@ SRCS = src/snprintf.c \
        src/complex_math.c \
        src/ssp.c
 
-OBJS     = $(SRCS:.c=.o)
-PIC_OBJS = $(SRCS:.c=.lo)
+OBJS     = $(SRCS:.c=.o) src/scandir32.o
+PIC_OBJS = $(SRCS:.c=.lo) src/scandir32.lo
 
 # ====================================================================
 # Build targets — always produce both static and shared
@@ -133,6 +134,11 @@ check: libsolcompat.a
 # bare `call roundf@plt` that loops forever under LD_PRELOAD ordering.
 # Also covers the earlier fma/fmaf/fmal conflict with GCC 15's implicit
 # inline declarations.
+src/scandir32.o: src/scandir.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -DSOLCOMPAT_SMALL_DIRENT -c -o $@ $<
+src/scandir32.lo: src/scandir.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(PICFLAGS) -DSOLCOMPAT_SMALL_DIRENT -c -o $@ $<
+
 src/fma.o src/fma.lo src/fmaf.o src/fmaf.lo src/fmal.o src/fmal.lo: override CFLAGS += -ffp-contract=off -fno-builtin -frounding-math
 
 src/math.o: src/math.c
@@ -424,7 +430,7 @@ COMPAT_TESTS = $(addprefix tests/test_,printf_compat mntent_compat mnttab_native
     long_double snprintf_bounds dl_iterate_phdr timestamps getcwd_compat \
     socket_flags socket_flag_failures spawn_actions at_flags fstatat_layout \
     pipe_flags execvpe_env clock_deadline timegm_utc semaphore_deadline \
-    fma fmal scalblnl neighbors math_classify inet_text interfaces nameinfo addrinfo fdopendir file_space timed_locks)
+    fma fmal scalblnl neighbors math_classify inet_text interfaces nameinfo addrinfo fdopendir scandir_layout file_space timed_locks)
 
 compat-tests: $(COMPAT_TESTS)
 $(COMPAT_TESTS): %: %.c $(SONAME)

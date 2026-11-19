@@ -50,6 +50,11 @@ int futimesat(int dirfd, const char *pathname, const struct timeval times[2]);
 int flock(int fd, int operation);
 
 /* --- scandir / alphasort --- */
+/* The original bare symbols operate on the large-file dirent layout. */
+#if defined(__sun) && !defined(_LP64) && (!defined(_FILE_OFFSET_BITS) || _FILE_OFFSET_BITS != 64)
+#define scandir solcompat_scandir32
+#define alphasort solcompat_alphasort32
+#endif
 int scandir(const char *dirp, struct dirent ***namelist,
             int (*filter)(const struct dirent *),
             int (*compar)(const struct dirent **, const struct dirent **));
