@@ -7,6 +7,7 @@
 #include <stdarg.h>   /* __gnuc_va_list used by Solaris 7 stdio.h prototypes */
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -435,16 +436,27 @@ spawn_attributes(const posix_spawnattr_t *attr)
         sa.sa_handler = SIG_DFL;
         sigemptyset(&sa.sa_mask);
         for (sig = 1; sig < NSIG; ++sig) {
-            /* These uncatchable signals already have their default action. */
-            if (sig != SIGKILL && sig != SIGSTOP &&
-                sigismember(&attr->__sd, sig) == 1 &&
-                sigaction(sig, &sa, NULL) < 0)
+            if (sig == SIGKILL || sig == SIGSTOP || sigismember(&attr->__sd, sig) != 1)
+                continue;
+            if (sigaction(sig, &sa, NULL) < 0) {
+                /* Solaris libthread reserves these even in a forked child. */
+                if (errno == EINVAL &&
+                    (sig == SIGWAITING || sig == SIGLWP || sig == SIGCANCEL))
+                    continue;
                 return errno;
+            }
         }
     }
-    if ((attr->__flags & POSIX_SPAWN_SETSIGMASK) &&
-        sigprocmask(SIG_SETMASK, &attr->__ss, NULL) < 0)
-        return errno;
+    if (attr->__flags & POSIX_SPAWN_SETSIGMASK) {
+        sigset_t mask;
+        if (sigprocmask(SIG_SETMASK, &attr->__ss, NULL) < 0 ||
+            sigprocmask(SIG_BLOCK, NULL, &mask) < 0)
+            return errno;
+        /* Solaris libthread maintains a user-level mask. The new image
+         * inherits the calling LWP's kernel mask across exec. */
+        if (syscall(SYS_sigprocmask, SIG_SETMASK, &mask, NULL) < 0)
+            return errno;
+    }
     return 0;
 }
 
