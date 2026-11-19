@@ -61,6 +61,7 @@ SRCS = src/snprintf.c \
        src/scandir.c \
        src/statat32.c \
        src/pty.c \
+       src/threads.c \
        src/process.c \
        src/poll.c \
        src/random.c \
@@ -430,7 +431,7 @@ COMPAT_TESTS = $(addprefix tests/test_,printf_compat mntent_compat mnttab_native
     long_double snprintf_bounds dl_iterate_phdr timestamps getcwd_compat \
     socket_flags socket_flag_failures spawn_actions at_flags fstatat_layout \
     pipe_flags execvpe_env clock_deadline timegm_utc semaphore_deadline \
-    fma fmal scalblnl neighbors math_classify inet_text interfaces nameinfo addrinfo fdopendir scandir_layout file_space issue8_io timed_locks)
+    fma fmal scalblnl neighbors math_classify inet_text interfaces nameinfo addrinfo fdopendir scandir_layout file_space issue8_io c11_threads timed_locks)
 
 compat-tests: $(COMPAT_TESTS)
 $(COMPAT_TESTS): %: %.c $(SONAME)
@@ -439,7 +440,7 @@ $(COMPAT_TESTS): %: %.c $(SONAME)
 
 tests/test_interfaces tests/test_socket_flags: TEST_LIBS = -lsocket -lnsl
 tests/test_spawn_actions: TEST_LIBS = -lpthread -lrt -Wl,-z,origin -Wl,-R,'$$ORIGIN/..'
-tests/test_timed_locks: TEST_LIBS = -lpthread -lrt
+tests/test_timed_locks tests/test_c11_threads: TEST_LIBS = -lpthread -lrt
 tests/test_clock_deadline tests/test_semaphore_deadline: TEST_LIBS = -lrt
 tests/test_socket_flag_failures: src/socket_flags.c
 
