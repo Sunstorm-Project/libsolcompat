@@ -313,12 +313,49 @@ long double hypotl(long double x, long double y)     { return (long double)hypot
 long double fdiml(long double x, long double y)      { return (long double)fdim((double)x, (double)y); }
 long double fminl(long double x, long double y)      { return (long double)fmin((double)x, (double)y); }
 long double fmaxl(long double x, long double y)      { return (long double)fmax((double)x, (double)y); }
-long double scalbnl(long double x, int n)            { return (long double)scalbn((double)x, n); }
-long double scalblnl(long double x, long int n)      { return (long double)scalbln((double)x, n); }
-/* fmal: provided by GCC builtin — see comment above fma */
+/* Keep intermediate powers normal. For a scale larger than the exponent
+ * range, the extra mantissa bits leave the subnormal rounding to the
+ * final multiplication. The bounds also handle LONG_MIN without negation. */
+long double scalblnl(long double x, long n)
+{
+    const int high = LDBL_MAX_EXP - 1;
+    const int low = LDBL_MIN_EXP - 1 + LDBL_MANT_DIG;
+    long double scale = 1.0L;
+    long double factor;
+    int i;
 
-/* Special long double */
-long double ldexpl(long double x, int e)    { return (long double)ldexp((double)x, e); }
+    if (!__builtin_isfinite(x) || x == 0.0L)
+        return x;
+    for (i = 0; i < 2 && n > high; ++i) {
+        x *= LDBL_MAX / (2.0L - LDBL_EPSILON);
+        n -= high;
+    }
+    for (i = 0; i < 2 && n < LDBL_MIN_EXP - 1; ++i) {
+        x *= LDBL_MIN * (2.0L / LDBL_EPSILON);
+        n -= low;
+    }
+    if (n > high)
+        n = high;
+    if (n < LDBL_MIN_EXP - 1)
+        n = LDBL_MIN_EXP - 1;
+    factor = n < 0 ? 0.5L : 2.0L;
+    if (n < 0)
+        n = -n;
+    while (n) {
+        if (n & 1)
+            scale *= factor;
+        n >>= 1;
+        if (n)
+            factor *= factor;
+    }
+    x *= scale;
+    if (x == 0.0L || __builtin_isinf(x))
+        errno = ERANGE;
+    return x;
+}
+
+long double scalbnl(long double x, int n) { return scalblnl(x, n); }
+long double ldexpl(long double x, int n) { return scalblnl(x, n); }
 /* frexpl is implemented without narrowing in src/frexpl.c. */
 long double modfl(long double x, long double *iptr) {
     double di;
