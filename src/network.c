@@ -271,6 +271,7 @@ gai_strerror(int errcode)
     case EAI_SERVICE:  return "Servname not supported for ai_socktype";
     case EAI_SOCKTYPE: return "ai_socktype not supported";
     case EAI_SYSTEM:   return "System error";
+    case EAI_OVERFLOW: return "Output buffer too small";
     default:           return "Unknown error";
     }
 }
@@ -280,64 +281,70 @@ getnameinfo(const struct sockaddr *sa, socklen_t salen,
             char *host, socklen_t hostlen,
             char *serv, socklen_t servlen, int flags)
 {
-    struct hostent *he;
-    struct servent *se;
     unsigned short port;
+    const void *address;
+    const char *proto = flags & NI_DGRAM ? "udp" : "tcp";
+    unsigned int scope = 0;
 
-    if (sa->sa_family == AF_INET) {
+    if (!sa || salen < sizeof(sa->sa_family))
+        return EAI_FAMILY;
+    if (flags & ~(NI_NUMERICHOST | NI_NUMERICSERV | NI_NAMEREQD | NI_NOFQDN | NI_DGRAM))
+        return EAI_BADFLAGS;
+    if ((!host || !hostlen) && (!serv || !servlen))
+        return EAI_NONAME;
+    if (sa->sa_family == AF_INET && salen >= sizeof(struct sockaddr_in)) {
         const struct sockaddr_in *sin = (const struct sockaddr_in *)sa;
         port = sin->sin_port;
-
-        if (host && hostlen > 0) {
-            if (flags & NI_NUMERICHOST) {
-                char *ip = inet_ntoa(sin->sin_addr);
-                if (strlen(ip) >= hostlen)
-                    return EAI_OVERFLOW;
-                strcpy(host, ip);
-            } else {
-                he = gethostbyaddr((const char *)&sin->sin_addr,
-                                   sizeof(sin->sin_addr), AF_INET);
-                if (he) {
-                    if (strlen(he->h_name) >= hostlen)
-                        return EAI_OVERFLOW;
-                    strcpy(host, he->h_name);
-                } else {
-                    if (flags & NI_NAMEREQD)
-                        return EAI_NONAME;
-                    char *ip = inet_ntoa(sin->sin_addr);
-                    if (strlen(ip) >= hostlen)
-                        return EAI_OVERFLOW;
-                    strcpy(host, ip);
-                }
-            }
-        }
-    } else if (sa->sa_family == AF_INET6) {
+        address = &sin->sin_addr;
+    } else if (sa->sa_family == AF_INET6 && salen >= sizeof(struct sockaddr_in6)) {
         const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6 *)sa;
         port = sin6->sin6_port;
-
-        if (host && hostlen > 0) {
-            /* Always numeric for IPv6 — no reverse DNS on Solaris 7 */
-            if (!inet_ntop(AF_INET6, &sin6->sin6_addr, host, hostlen))
-                return EAI_OVERFLOW;
-        }
+        address = &sin6->sin6_addr;
+        scope = sin6->sin6_scope_id;
     } else {
         return EAI_FAMILY;
     }
 
-    if (serv && servlen > 0) {
-        if (flags & NI_NUMERICSERV) {
-            solcompat_snprintf(serv, servlen, "%d", ntohs(port));
+    if (host && hostlen) {
+        struct hostent entry, *found = NULL;
+        char scratch[8192], numeric[INET6_ADDRSTRLEN + 12];
+        const char *name;
+        int resolver_error = 0;
+        if (!(flags & NI_NUMERICHOST) && sa->sa_family == AF_INET)
+            found = gethostbyaddr_r((const char *)address, sizeof(struct in_addr),
+                                    AF_INET, &entry, scratch, sizeof(scratch), &resolver_error);
+        if (found && found->h_name) {
+            name = found->h_name;
         } else {
-            const char *proto = (flags & NI_DGRAM) ? "udp" : "tcp";
-            se = getservbyport(port, proto);
-            if (se) {
-                if (strlen(se->s_name) >= servlen)
-                    return EAI_OVERFLOW;
-                strcpy(serv, se->s_name);
-            } else {
-                solcompat_snprintf(serv, servlen, "%d", ntohs(port));
+            if (!(flags & NI_NUMERICHOST) && (flags & NI_NAMEREQD))
+                return resolver_error == TRY_AGAIN ? EAI_AGAIN : EAI_NONAME;
+            if (!inet_ntop(sa->sa_family, address, numeric, sizeof(numeric)))
+                return EAI_SYSTEM;
+            if (scope) {
+                size_t len = strlen(numeric);
+                solcompat_snprintf(numeric + len, sizeof(numeric) - len, "%%%u", scope);
             }
+            name = numeric;
         }
+        if (strlen(name) >= hostlen)
+            return EAI_OVERFLOW;
+        strcpy(host, name);
+    }
+    if (serv && servlen) {
+        struct servent entry, *found = NULL;
+        char scratch[4096], numeric[6];
+        const char *name;
+        if (!(flags & NI_NUMERICSERV))
+            found = getservbyport_r(port, proto, &entry, scratch, sizeof(scratch));
+        if (found && found->s_name) {
+            name = found->s_name;
+        } else {
+            solcompat_snprintf(numeric, sizeof(numeric), "%u", (unsigned int)ntohs(port));
+            name = numeric;
+        }
+        if (strlen(name) >= servlen)
+            return EAI_OVERFLOW;
+        strcpy(serv, name);
     }
 
     return 0;
