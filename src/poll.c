@@ -62,20 +62,36 @@ pselect(int nfds, fd_set *readfds, fd_set *writefds,
     int ret;
 
     if (timeout) {
+        if (timeout->tv_sec < 0 || timeout->tv_nsec < 0 ||
+            timeout->tv_nsec >= 1000000000L) {
+            errno = EINVAL;
+            return -1;
+        }
         tv.tv_sec = timeout->tv_sec;
-        tv.tv_usec = timeout->tv_nsec / 1000;
+        tv.tv_usec = (timeout->tv_nsec + 999L) / 1000L;
+        if (tv.tv_usec == 1000000L) {
+            if (tv.tv_sec < LONG_MAX) {
+                ++tv.tv_sec;
+                tv.tv_usec = 0;
+            } else {
+                tv.tv_usec = 999999;
+            }
+        }
         tvp = &tv;
     } else {
         tvp = NULL;
     }
 
-    if (sigmask)
-        sigprocmask(SIG_SETMASK, sigmask, &origmask);
+    if (sigmask && sigprocmask(SIG_SETMASK, sigmask, &origmask) < 0)
+        return -1;
 
     ret = select(nfds, readfds, writefds, exceptfds, tvp);
 
-    if (sigmask)
+    if (sigmask) {
+        int saved = errno;
         sigprocmask(SIG_SETMASK, &origmask, NULL);
+        errno = saved;
+    }
 
     return ret;
 }
