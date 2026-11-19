@@ -1,2 +1,5 @@
+#ifndef _SOLCOMPAT_NET_IF_H_PREPEND
+#define _SOLCOMPAT_NET_IF_H_PREPEND
 /* Solaris 7 net/if.h embeds sockaddr fields without including their definition. */
 #include <sys/socket.h>
+#endif
