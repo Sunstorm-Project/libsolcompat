@@ -17,8 +17,8 @@ extern "C" {
 #endif
 
 /*
- * Solaris 7 only defines CLOCK_REALTIME (value 0).
- * We define additional clock IDs using values that don't conflict.
+ * Solaris uses realtime ID 0 or 3 depending on the caller's feature macros.
+ * Preserve the existing SST IDs for compatibility.
  */
 #ifndef CLOCK_MONOTONIC
 #define CLOCK_MONOTONIC          4   /* matches later Solaris */
