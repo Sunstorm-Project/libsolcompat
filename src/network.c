@@ -393,6 +393,17 @@ inet_ntop(int af, const void *src, char *dst, socklen_t size)
             best_len = cur_len;
         }
 
+        if (best_start == 0 && best_len == 5 && words[5] == 0xffff) {
+            n = solcompat_snprintf(tmp, sizeof(tmp), "::ffff:%u.%u.%u.%u",
+                                   p[12], p[13], p[14], p[15]);
+            if ((socklen_t)n >= size) {
+                errno = ENOSPC;
+                return NULL;
+            }
+            memcpy(dst, tmp, n + 1);
+            return dst;
+        }
+
         /* Format with :: compression */
         for (i = 0; i < 8; i++) {
             if (i == best_start) {
@@ -420,101 +431,88 @@ inet_ntop(int af, const void *src, char *dst, socklen_t size)
     return NULL;
 }
 
-/*
- * inet_pton — convert presentation string to binary address
- */
-int
-inet_pton(int af, const char *src, void *dst)
+/* RFC 3493 dotted decimal. inet_aton also accepts legacy abbreviated,
+ * octal, and hexadecimal forms that inet_pton must reject. */
+static int decimal_address(const char *p, unsigned char out[4])
 {
+    for (int i = 0; i < 4; ++i) {
+        unsigned int n = 0;
+        if (*p < '0' || *p > '9' || (*p == '0' && p[1] >= '0' && p[1] <= '9'))
+            return 0;
+        do {
+            n = n * 10 + (*p++ - '0');
+            if (n > 255)
+                return 0;
+        } while (*p >= '0' && *p <= '9');
+        out[i] = n;
+        if (i < 3 && *p++ != '.')
+            return 0;
+    }
+    return *p == 0;
+}
+
+int inet_pton(int af, const char *src, void *dst)
+{
+    unsigned char buf[16];
+    int used = 0, gap = -1;
+    const char *p = src;
     if (af == AF_INET) {
-        struct in_addr addr;
-        if (inet_aton(src, &addr) == 0)
+        if (!decimal_address(p, buf))
             return 0;
-        memcpy(dst, &addr, sizeof(addr));
+        memcpy(dst, buf, 4);
         return 1;
     }
-    if (af == AF_INET6) {
-        /*
-         * Minimal IPv6 address parser: handles full 8-group hex
-         * notation (a:b:c:d:e:f:g:h) and the :: abbreviation.
-         * Does NOT handle embedded IPv4 (::ffff:1.2.3.4).
-         */
-        unsigned char buf[16];
-        unsigned int groups[8];
-        int ngroups = 0, dcolon = -1;
-        const char *p = src;
-        int i;
-
-        memset(buf, 0, sizeof(buf));
-        memset(groups, 0, sizeof(groups));
-
-        /* Handle leading :: */
-        if (p[0] == ':' && p[1] == ':') {
-            dcolon = 0;
-            p += 2;
-            if (*p == '\0') {
-                /* :: = all zeros */
-                memcpy(dst, buf, 16);
-                return 1;
-            }
-        }
-
-        while (*p && ngroups < 8) {
-            char *endptr;
-            unsigned long val;
-
-            if (!isxdigit((unsigned char)*p))
-                return 0;
-
-            val = strtoul(p, &endptr, 16);
-            if (val > 0xFFFF)
-                return 0;
-            groups[ngroups++] = (unsigned int)val;
-            p = endptr;
-
-            if (*p == ':') {
-                p++;
-                if (*p == ':') {
-                    if (dcolon >= 0)
-                        return 0; /* only one :: allowed */
-                    dcolon = ngroups;
-                    p++;
-                    if (*p == '\0')
-                        break;
-                }
-            } else if (*p != '\0') {
-                return 0;
-            }
-        }
-
-        if (*p != '\0')
-            return 0;
-
-        if (dcolon >= 0) {
-            /* Expand :: by shifting groups right */
-            int tail = ngroups - dcolon;
-            int fill = 8 - ngroups;
-            if (fill < 0)
-                return 0;
-            for (i = tail - 1; i >= 0; i--)
-                groups[dcolon + fill + i] = groups[dcolon + i];
-            for (i = 0; i < fill; i++)
-                groups[dcolon + i] = 0;
-            ngroups = 8;
-        }
-
-        if (ngroups != 8)
-            return 0;
-
-        for (i = 0; i < 8; i++) {
-            buf[i * 2]     = (unsigned char)(groups[i] >> 8);
-            buf[i * 2 + 1] = (unsigned char)(groups[i] & 0xFF);
-        }
-        memcpy(dst, buf, 16);
-        return 1;
+    if (af != AF_INET6) {
+        errno = EAFNOSUPPORT;
+        return -1;
     }
-    errno = EAFNOSUPPORT;
-    return -1;
+    if (*p == ':') {
+        if (p[1] != ':')
+            return 0;
+        gap = 0;
+        p += 2;
+    }
+    while (*p) {
+        const char *start = p;
+        unsigned int value = 0;
+        if (used >= 16)
+            return 0;
+        while (isxdigit((unsigned char)*p)) {
+            unsigned char c = *p++;
+            if (p - start > 4)
+                return 0;
+            value = value * 16 + (c <= '9' ? c - '0' : (c | 32) - 'a' + 10);
+        }
+        if (*p == '.') {
+            if (used > 12 || !decimal_address(start, buf + used))
+                return 0;
+            used += 4;
+            break;
+        }
+        if (p == start)
+            return 0;
+        buf[used++] = value >> 8;
+        buf[used++] = value;
+        if (!*p)
+            break;
+        if (*p++ != ':' || !*p)
+            return 0;
+        if (*p == ':') {
+            if (gap >= 0)
+                return 0;
+            gap = used;
+            ++p;
+        }
+    }
+    if (gap >= 0 && used < 16) {
+        int missing = 16 - used;
+        memmove(buf + gap + missing, buf + gap, used - gap);
+        memset(buf + gap, 0, missing);
+    } else if (used != 16 || gap >= 0) {
+        return 0;
+    }
+    memcpy(dst, buf, sizeof(buf));
+    return 1;
 }
 
 /* Leave room for an interface added between the count and list ioctls.
