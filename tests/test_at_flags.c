@@ -25,6 +25,11 @@ int main(void)
         fchownat(dirfd, "target", -1, -1, -1) != -1 || errno != EINVAL ||
         fchmodat(dirfd, "target", 0777, -1) != -1 || errno != EINVAL)
         goto done;
+    if (faccessat(dirfd, "target", F_OK, AT_EACCESS) != 0 ||
+        faccessat(dirfd, "target", F_OK, -1) != -1 || errno != EINVAL ||
+        faccessat(dirfd, "link", F_OK, AT_SYMLINK_NOFOLLOW) != -1 ||
+        errno != ENOTSUP)
+        goto done;
     if (openat(dirfd, "target", O_DIRECTORY | O_RDONLY) != -1 ||
         errno != ENOTDIR || stat("target", &st) || (st.st_mode & 0777) != 0600)
         goto done;

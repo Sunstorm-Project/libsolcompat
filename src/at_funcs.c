@@ -52,6 +52,9 @@ extern size_t strlcpy(char *, const char *, size_t);
 #ifndef AT_SYMLINK_NOFOLLOW
 #define AT_SYMLINK_NOFOLLOW 0x100
 #endif
+#ifndef AT_EACCESS
+#define AT_EACCESS 0x0010
+#endif
 #ifndef AT_REMOVEDIR
 #define AT_REMOVEDIR 0x200
 #endif
@@ -434,7 +437,17 @@ int
 faccessat(int dirfd, const char *pathname, int mode, int flags)
 {
     int saved, result;
-    (void)flags;  /* AT_EACCESS not supportable */
+    if (flags & ~(AT_EACCESS | AT_SYMLINK_NOFOLLOW)) {
+        errno = EINVAL;
+        return -1;
+    }
+    /* access() uses the real IDs and follows the final symlink. */
+    if ((flags & AT_SYMLINK_NOFOLLOW) ||
+        ((flags & AT_EACCESS) &&
+         (getuid() != geteuid() || getgid() != getegid()))) {
+        errno = ENOTSUP;
+        return -1;
+    }
 
     saved = at_enter(dirfd, pathname);
     if (saved < 0)
