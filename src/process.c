@@ -797,42 +797,50 @@ int pthread_spin_lock(pthread_spinlock_t *lock)    { return pthread_mutex_lock(&
 int pthread_spin_trylock(pthread_spinlock_t *lock) { return pthread_mutex_trylock(&lock->_m); }
 int pthread_spin_unlock(pthread_spinlock_t *lock)  { return pthread_mutex_unlock(&lock->_m); }
 
-/* ==================================================================
- * pthread_rwlock_timed{rd,wr}lock — POSIX 2008 timed rwlock variants.
- * Solaris 7 has pthread_rwlock_{rd,wr}lock (blocking) and _try* (non-
- * blocking). We emulate the timed versions via a try-then-sleep loop
- * with 10ms polling granularity until the abs_timeout is reached.
- * ================================================================== */
+/* Timed locks are not cancellation points. Use the kernel poll directly
+ * for a short sleep and retry interrupted waits against CLOCK_REALTIME. */
+static int timed_lock_wait(const struct timespec *deadline)
+{
+    struct timespec now;
+    long long remaining;
+    int delay;
+    if (!deadline || deadline->tv_nsec < 0 || deadline->tv_nsec >= 1000000000L)
+        return EINVAL;
+    if (clock_gettime(CLOCK_REALTIME, &now) < 0)
+        return errno;
+    remaining = ((long long)deadline->tv_sec - now.tv_sec) * 1000000000LL +
+                deadline->tv_nsec - now.tv_nsec;
+    if (remaining <= 0)
+        return ETIMEDOUT;
+    delay = remaining >= 10000000 ? 10 : (int)((remaining + 999999) / 1000000);
+    if (syscall(SYS_poll, NULL, 0, delay) < 0 && errno != EINTR)
+        return errno;
+    return 0;
+}
+
+int pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *deadline)
+{
+    int rc;
+    while ((rc = pthread_mutex_trylock(mutex)) == EBUSY) {
+        rc = timed_lock_wait(deadline);
+        if (rc)
+            break;
+    }
+    return rc;
+}
 
 static int
 rwlock_timed_common(pthread_rwlock_t *rwlock,
-                    const struct timespec *abs_timeout,
+                    const struct timespec *deadline,
                     int (*try_lock)(pthread_rwlock_t *))
 {
-    int rv;
-    struct timespec now;
-    const long poll_ns = 10L * 1000 * 1000;  /* 10ms */
-
-    if (abs_timeout == NULL)
-        return EINVAL;
-
-    for (;;) {
-        rv = try_lock(rwlock);
-        if (rv != EBUSY)
-            return rv;
-        if (clock_gettime(CLOCK_REALTIME, &now) != 0)
-            return errno;
-        if (now.tv_sec > abs_timeout->tv_sec ||
-            (now.tv_sec == abs_timeout->tv_sec && now.tv_nsec >= abs_timeout->tv_nsec))
-            return ETIMEDOUT;
-        /* Use poll() for the 10ms wait instead of nanosleep() so the
-           object file doesn't carry an unresolved nanosleep@@SUNW_0.7
-           reference that requires -lrt at final link. poll() lives in
-           Solaris 7 libc; millisecond precision is sufficient here. */
-        {
-            poll(NULL, 0, (int)(poll_ns / 1000000L));
-        }
+    int rc;
+    while ((rc = try_lock(rwlock)) == EBUSY) {
+        rc = timed_lock_wait(deadline);
+        if (rc)
+            break;
     }
+    return rc;
 }
 
 int
