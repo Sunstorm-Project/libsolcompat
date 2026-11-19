@@ -34,13 +34,7 @@ int dup3(int oldfd, int newfd, int flags);
 
 int mkostemp(char *tmpl, int flags);
 
-/*
- * execvpe — execute a program, searching PATH from the provided environment.
- *
- * Like execvp() but uses envp for the child's environment AND searches PATH
- * within envp (not the caller's PATH).  Solaris 7 has execve() and execvp()
- * but not execvpe().
- */
+/* GNU execvpe searches the caller's PATH and passes envp to the program. */
 int execvpe(const char *filename, char *const argv[], char *const envp[]);
 
 /* posix_spawn attribute flags -- always provide these constants

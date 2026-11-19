@@ -499,17 +499,53 @@ spawn_actions(const posix_spawn_file_actions_t *fact)
     return 0;
 }
 
-/* POSIX spawnp searches the caller's PATH, independently of child envp. */
+/* GNU execvpe invokes the shell for executable text without a shebang.
+ * The POSIX spawn path leaves ENOEXEC for its caller. */
 static void
-spawn_search_exec(const char *file, const char *path,
-    char *const argv[], char *const envp[])
+exec_candidate(const char *path, char *const argv[], char *const envp[], int shell_fallback)
+{
+    size_t n = 0, tail;
+    char **args;
+    int error;
+
+    execve(path, argv, envp);
+    if (!shell_fallback || errno != ENOEXEC)
+        return;
+    while (argv[n])
+        ++n;
+    tail = n ? n - 1 : 0;
+    if (tail > (size_t)-1 / sizeof(*args) - 3) {
+        errno = E2BIG;
+        return;
+    }
+    args = malloc((tail + 3) * sizeof(*args));
+    if (!args)
+        return;
+    args[0] = "/bin/sh";
+    args[1] = (char *)path;
+    if (tail)
+        memcpy(args + 2, argv + 1, tail * sizeof(*args));
+    args[tail + 2] = NULL;
+    execve(args[0], args, envp);
+    error = errno;
+    free(args);
+    errno = error;
+}
+
+static void
+search_exec(const char *file, const char *path, char *const argv[],
+    char *const envp[], int shell_fallback)
 {
     const char *start, *end;
     char candidate[PATH_MAX];
     size_t dirlen, filelen = strlen(file);
     int access_error = 0;
+    if (!filelen) {
+        errno = ENOENT;
+        return;
+    }
     if (strchr(file, '/')) {
-        execve(file, argv, envp);
+        exec_candidate(file, argv, envp, shell_fallback);
         return;
     }
     if (!path)
@@ -524,7 +560,7 @@ spawn_search_exec(const char *file, const char *path,
                 candidate[dirlen++] = '/';
             }
             memcpy(candidate+dirlen, file, filelen+1);
-            execve(candidate, argv, envp);
+            exec_candidate(candidate, argv, envp, shell_fallback);
             if (errno == EACCES)
                 access_error = EACCES;
             else if (errno != ENOENT && errno != ENOTDIR)
@@ -597,7 +633,7 @@ spawn_common(pid_t *pid, const char *path,
             error = spawn_actions(fact);
         if (!error) {
             if (search) {
-                spawn_search_exec(path, caller_path, argv, envp);
+                search_exec(path, caller_path, argv, envp, 0);
             } else
                 execve(path, argv, envp);
             error = errno;
@@ -641,100 +677,10 @@ posix_spawn(pid_t *pid, const char *path,
     return spawn_common(pid, path, fact, attr, argv, envp, 0);
 }
 
-/* -----------------------------------------------------------------------
- * execvpe — execute a program, searching PATH from the provided environment.
- *
- * Solaris 7 has execve() (direct path, explicit environment) and execvp()
- * (PATH search, inherits environment) but not execvpe() (PATH search with
- * an explicit environment).  GNU tools increasingly depend on execvpe() to
- * spawn children in a clean, known environment.
- *
- * Algorithm:
- *   1. If filename contains a '/', execute directly via execve() — no search.
- *   2. Otherwise, find PATH in envp (the child's environment, not the
- *      caller's), falling back to the caller's PATH and then the default.
- *   3. Walk each colon-separated directory component, build a candidate
- *      path, and attempt execve().  EACCES is remembered but the search
- *      continues; any other non-ENOENT/ENOTDIR error terminates the loop.
- * ----------------------------------------------------------------------- */
 int
 execvpe(const char *filename, char *const argv[], char *const envp[])
 {
-    const char *search_path;
-    const char *path_env_value;
-    const char *component_start;
-    const char *component_end;
-    size_t      filename_length;
-    size_t      dir_length;
-    char        candidate_path[PATH_MAX];
-    int         saved_errno;
-    int         env_index;
-
-    /* If filename contains a slash, execute directly without PATH search */
-    if (strchr(filename, '/') != NULL)
-        return execve(filename, argv, envp);
-
-    filename_length = strlen(filename);
-
-    /* Search for PATH in the provided environment (envp), not the caller's */
-    path_env_value = NULL;
-    if (envp != NULL) {
-        for (env_index = 0; envp[env_index] != NULL; env_index++) {
-            if (strncmp(envp[env_index], "PATH=", 5) == 0) {
-                path_env_value = envp[env_index] + 5;
-                break;
-            }
-        }
-    }
-
-    /* Fall back to caller's PATH, then a sensible built-in default */
-    if (path_env_value != NULL)
-        search_path = path_env_value;
-    else
-        search_path = getenv("PATH");
-
-    if (search_path == NULL || search_path[0] == '\0')
-        search_path = "/usr/bin:/bin";
-
-    saved_errno     = 0;
-    component_start = search_path;
-
-    while (component_start != NULL) {
-        component_end = strchr(component_start, ':');
-        dir_length    = (component_end != NULL)
-                        ? (size_t)(component_end - component_start)
-                        : strlen(component_start);
-
-        if (dir_length == 0) {
-            /* Empty component means the current working directory */
-            if (filename_length + 3 <= sizeof(candidate_path)) {
-                candidate_path[0] = '.';
-                candidate_path[1] = '/';
-                memcpy(candidate_path + 2, filename, filename_length + 1);
-                execve(candidate_path, argv, envp);
-                if (errno == EACCES)
-                    saved_errno = EACCES;
-                else if (errno != ENOENT && errno != ENOTDIR)
-                    break;
-            }
-        } else if (dir_length + 1 + filename_length + 1 <= sizeof(candidate_path)) {
-            memcpy(candidate_path, component_start, dir_length);
-            candidate_path[dir_length] = '/';
-            memcpy(candidate_path + dir_length + 1, filename, filename_length + 1);
-            execve(candidate_path, argv, envp);
-            if (errno == EACCES)
-                saved_errno = EACCES;
-            else if (errno != ENOENT && errno != ENOTDIR)
-                break;
-        }
-
-        component_start = (component_end != NULL) ? component_end + 1 : NULL;
-    }
-
-    /* Report EACCES if that was the only kind of failure encountered */
-    if (saved_errno != 0)
-        errno = saved_errno;
-
+    search_exec(filename, getenv("PATH"), argv, envp, 1);
     return -1;
 }
 
