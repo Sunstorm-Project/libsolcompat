@@ -214,7 +214,7 @@ posix_spawnattr_destroy(posix_spawnattr_t *attr)
 }
 
 /* Private representation; the public file-actions structure is unchanged. */
-enum spawn_action_kind { SPAWN_OPEN, SPAWN_CLOSE, SPAWN_DUP2 };
+enum spawn_action_kind { SPAWN_OPEN, SPAWN_CLOSE, SPAWN_DUP2, SPAWN_CHDIR, SPAWN_FCHDIR };
 struct spawn_action {
     enum spawn_action_kind kind;
     int fd, newfd, oflag;
@@ -342,6 +342,33 @@ posix_spawn_file_actions_addopen(posix_spawn_file_actions_t *fact,
 }
 
 int
+posix_spawn_file_actions_addchdir(posix_spawn_file_actions_t *fact, const char *path)
+{
+    struct spawn_action action = { .kind = SPAWN_CHDIR, .fd = -1 };
+    int error;
+
+    if (!path)
+        return EINVAL;
+    action.path = strdup(path);
+    if (!action.path)
+        return ENOMEM;
+    error = spawn_add_action(fact, action);
+    if (error)
+        free(action.path);
+    return error;
+}
+
+int
+posix_spawn_file_actions_addfchdir(posix_spawn_file_actions_t *fact, int fd)
+{
+    struct spawn_action action = { .kind = SPAWN_FCHDIR, .fd = fd };
+
+    if (fd < 0)
+        return EBADF;
+    return spawn_add_action(fact, action);
+}
+
+int
 posix_spawn_file_actions_addclose(posix_spawn_file_actions_t *fact, int fildes)
 {
     struct spawn_action action;
@@ -410,6 +437,14 @@ spawn_actions(const posix_spawn_file_actions_t *fact)
     for (i = 0; i < fact->__used; ++i) {
         const struct spawn_action *a = &actions[i];
         switch (a->kind) {
+        case SPAWN_CHDIR:
+            if (chdir(a->path) < 0)
+                return errno;
+            break;
+        case SPAWN_FCHDIR:
+            if (fchdir(a->fd) < 0)
+                return errno;
+            break;
         case SPAWN_CLOSE:
             if (close(a->fd) < 0)
                 return errno;
@@ -883,28 +918,6 @@ copy_file_range(int fd_in, off_t *off_in,
     (void)len; (void)flags;
     errno = ENOSYS;
     return -1;
-}
-
-/* ==================================================================
- * posix_spawn_file_actions_addchdir / _addfchdir — POSIX 2018. Stubs
- * returning ENOSYS; gnulib's execute.c and other callers fall back to
- * fork+chdir+exec when unavailable. A real implementation would need
- * to extend the __actions list format with a chdir op; defer until a
- * consumer actually breaks on the fallback.
- * ================================================================== */
-
-int
-posix_spawn_file_actions_addchdir(posix_spawn_file_actions_t *fact, const char *path)
-{
-    (void)fact; (void)path;
-    return ENOSYS;
-}
-
-int
-posix_spawn_file_actions_addfchdir(posix_spawn_file_actions_t *fact, int fildes)
-{
-    (void)fact; (void)fildes;
-    return ENOSYS;
 }
 
 /* ==================================================================

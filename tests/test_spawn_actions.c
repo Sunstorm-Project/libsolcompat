@@ -43,6 +43,29 @@ int main(int argc, char **argv) {
         return n==11 && !memcmp(b,"spawn bytes",11) && write(1,b,n)==n ? 0:2;
     }
     snprintf(path,sizeof(path),"/tmp/solcompat-spawn-%ld",(long)getpid());
+    /* Actions are ordered and change only the child's working directory. */
+    {
+        char tmp[] = "/tmp/spawn-dir-XXXXXX";
+        char rel[] = ".";
+        char marker[128];
+        char *shell[] = {"/bin/sh", "-c", "echo ok > marker", NULL};
+        CHECK(mkdtemp(tmp) != NULL);
+        fd = open(tmp, O_RDONLY);
+        CHECK(fd >= 0);
+        CHECK(posix_spawn_file_actions_init(&a) == 0);
+        CHECK(posix_spawn_file_actions_addchdir(&a, "/") == 0);
+        CHECK(posix_spawn_file_actions_addfchdir(&a, fd) == 0);
+        CHECK(posix_spawn_file_actions_addchdir(&a, rel) == 0);
+        rel[0] = 'x';
+        CHECK(posix_spawn(&pid, shell[0], &a, NULL, shell, environ) == 0);
+        CHECK(wait_ok(pid));
+        snprintf(marker, sizeof(marker), "%s/marker", tmp);
+        CHECK(unlink(marker) == 0);
+        CHECK(close(fd) == 0);
+        CHECK(posix_spawn(&pid, shell[0], &a, NULL, shell, environ) == EBADF);
+        CHECK(posix_spawn_file_actions_destroy(&a) == 0);
+        CHECK(rmdir(tmp) == 0);
+    }
     CHECK(pipe(p)==0);
     CHECK(write(p[1],"spawn bytes",11)==11); CHECK(close(p[1])==0);
     CHECK(posix_spawn_file_actions_init(&a)==0);

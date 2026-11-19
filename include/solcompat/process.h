@@ -98,6 +98,11 @@ int posix_spawn_file_actions_addclose(posix_spawn_file_actions_t *fact, int fild
 int posix_spawn_file_actions_adddup2(posix_spawn_file_actions_t *fact,
     int fildes, int newfildes);
 
+int posix_spawn_file_actions_addchdir(posix_spawn_file_actions_t *fact,
+    const char *path);
+int posix_spawn_file_actions_addfchdir(posix_spawn_file_actions_t *fact,
+    int fildes);
+
 /*
  * getgrouplist — enumerate a user's group memberships.
  * BSD/POSIX.1-2008 function, not in Solaris 7.
