@@ -320,7 +320,14 @@ long double erfl(long double x)   { return (long double)erf((double)x); }
 long double erfcl(long double x)  { return (long double)erfc((double)x); }
 long double lgammal(long double x){ return (long double)lgamma((double)x); }
 long double tgammal(long double x){ return (long double)tgamma((double)x); }
-int         ilogbl(long double x) { return ilogb((double)x); }
+int ilogbl(long double x)
+{
+    int exponent;
+    if (!__builtin_isfinite(x) || x == 0)
+        return ilogb((double)x);
+    frexpl(x, &exponent);
+    return exponent - 1;
+}
 long double nanl(const char *tagp){ (void)tagp; return (long double)(0.0 / 0.0); }
 
 /* Binary long double */
@@ -416,11 +423,6 @@ long double modfl(long double x, long double *iptr) {
     double r = modf((double)x, &di);
     *iptr = (long double)di;
     return (long double)r;
-}
-
-/* Ternary long double */
-long double fmal(long double x, long double y, long double z) {
-    return (long double)((double)x * (double)y + (double)z);
 }
 
 /* Rounding / integer conversion */

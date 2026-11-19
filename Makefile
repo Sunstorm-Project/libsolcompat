@@ -50,6 +50,7 @@ SRCS = src/snprintf.c \
        src/network.c \
        src/socket_flags.c \
        src/clock.c \
+       src/fmal.c \
        src/fmaf.c \
        src/fma.c \
        src/math.c \
@@ -132,7 +133,7 @@ check: libsolcompat.a
 # bare `call roundf@plt` that loops forever under LD_PRELOAD ordering.
 # Also covers the earlier fma/fmaf/fmal conflict with GCC 15's implicit
 # inline declarations.
-src/fma.o src/fma.lo src/fmaf.o src/fmaf.lo: override CFLAGS += -ffp-contract=off -fno-builtin -frounding-math
+src/fma.o src/fma.lo src/fmaf.o src/fmaf.lo src/fmal.o src/fmal.lo: override CFLAGS += -ffp-contract=off -fno-builtin -frounding-math
 
 src/math.o: src/math.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fno-builtin -c -o $@ $<
