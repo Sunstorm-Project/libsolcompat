@@ -135,8 +135,8 @@ PREAMBLE
     done
     cat <<'BODY'
 
-void link_smoke_use(void *p);
-void link_smoke_use(void *p) { (void)p; }
+/* A volatile store keeps each address reference in optimized builds. */
+static void *volatile referenced_symbol;
 
 int main(void) {
 BODY
@@ -150,7 +150,7 @@ BODY
         done
     } | sort -u | while read -r function_name; do
         [ -n "$function_name" ] || continue
-        printf '    link_smoke_use((void *)&%s);\n' "$function_name"
+        printf '    referenced_symbol = (void *)&%s;\n' "$function_name"
     done
     cat <<'TAIL'
     return 0;
@@ -158,7 +158,7 @@ BODY
 TAIL
 } > "$GEN_C"
 
-reference_count=$(grep -c 'link_smoke_use((void' "$GEN_C" || true)
+reference_count=$(grep -c 'referenced_symbol = (void' "$GEN_C" || true)
 printf '  generated %s symbol references\n' "$reference_count"
 
 LINK_BIN="$GEN/link_smoke"

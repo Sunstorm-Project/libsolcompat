@@ -119,7 +119,8 @@ int __fpclassifyd(double x);
 #define isnormal(x) __builtin_isnormal(0.0 + (x))
 #endif
 #ifndef signbit
-#define signbit(x)  __builtin_signbit(0.0 + (x))
+/* The conditional promotes integer arguments without adding positive zero. */
+#define signbit(x)  __builtin_signbit(1 ? (x) : 0.0)
 #endif
 
 /* C99 quiet ordering predicates (also probed by libstdc++ in both
