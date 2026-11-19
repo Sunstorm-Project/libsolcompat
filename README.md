@@ -20,7 +20,7 @@ Part of the [Sunstorm Project](https://github.com/Sunstorm-Project). Installed a
 | **math** | 100+ C99 functions: single-, double-, and binary128 fused multiply-add, full-width long-double scaling and adjacent values, plus legacy long-double transcendental wrappers that calculate in double precision, `round`, `trunc`, `log2`, `exp2`, `fdim`, `fmin`, `fmax`, `tgamma`, `nearbyint`, `lrint`/`llrint`, `lround`/`llround`, `nan`/`nanf`/`nanl`, `fpclassify`, `NAN`, `INFINITY`, `cexp` |
 | **fenv** | Full C99 `<fenv.h>`: `fegetround`/`fesetround`, `feclearexcept`/`feraiseexcept`/`fetestexcept`, `fegetenv`/`fesetenv`, `feholdexcept`/`feupdateenv` — real SPARC FSR implementation |
 | **memory** | `posix_memalign`, `aligned_alloc`, `reallocarray`, `posix_madvise`, `MAP_ANONYMOUS` wrapper (redirects through `/dev/zero`) |
-| **filesystem** | `utimes`, `futimens`, `utimensat`, `flock`, `scandir`/`alphasort`, `fdopendir`, `dirfd`, `posix_fadvise`, `posix_fallocate` |
+| **filesystem** | `utimes`, `futimens`, `utimensat`, `flock`, `scandir`/`alphasort`, `fdopendir`, `dirfd`, `posix_fadvise`, `posix_fallocate` (reports unsupported reservation on Solaris 7 UFS) |
 | **at_funcs** | `openat`, `mkdirat`, `renameat`, `unlinkat`, `fstatat`, `fchownat`, `fchmodat`, `readlinkat`, `symlinkat`, `linkat`, `faccessat` (mutex-protected `fchdir` emulation) |
 | **pty** | `posix_openpt`, `openpty`, `forkpty`, `login_tty`, `cfmakeraw` |
 | **process** | `daemon`, `err`/`warn`/`errx`/`warnx`, `posix_spawn`/`posix_spawnp` (full file_actions + spawnattr), `pipe2`, `dup3`, `mkostemp`, `execvpe`, `getgrouplist` |

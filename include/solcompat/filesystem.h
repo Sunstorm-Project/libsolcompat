@@ -78,9 +78,14 @@ int dirfd(DIR *dir_stream);
 #define POSIX_FADV_WILLNEED   3
 #define POSIX_FADV_DONTNEED   4
 #endif
+/* Historical bare symbols take 64-bit offsets. */
+#if defined(__sun) && !defined(_LP64) && (!defined(_FILE_OFFSET_BITS) || _FILE_OFFSET_BITS != 64)
+#define posix_fallocate solcompat_posix_fallocate32
+#define posix_fadvise solcompat_posix_fadvise32
+#endif
 int posix_fadvise(int fd, off_t offset, off_t len, int advice);
 
-/* --- posix_fallocate (emulated via ftruncate) --- */
+/* Solaris 7 UFS reports unsupported space reservation with EINVAL. */
 int posix_fallocate(int fd, off_t offset, off_t len);
 
 #ifdef __cplusplus

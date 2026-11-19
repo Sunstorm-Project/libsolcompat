@@ -21,6 +21,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <stdint.h>
+#include <limits.h>
 #include <utime.h>
 
 /* Forward declarations for our own functions */
@@ -402,46 +404,61 @@ dirfd(DIR *dir_stream)
 int
 posix_fadvise(int fd, off_t offset, off_t len, int advice)
 {
-    /* No-op on Solaris 7 — no kernel support for file advice */
-    (void)fd;
-    (void)offset;
-    (void)len;
-    (void)advice;
-    return 0;
+    struct stat st;
+    int saved = errno;
+    if (offset < 0 || len < 0 || advice < POSIX_FADV_NORMAL || advice > POSIX_FADV_NOREUSE)
+        return EINVAL;
+    if (fstat(fd, &st) < 0) {
+        int error = errno;
+        errno = saved;
+        return error;
+    }
+    /* Solaris can disregard a valid access-pattern hint. */
+    return S_ISFIFO(st.st_mode) ? ESPIPE : 0;
 }
 
-/*
- * posix_fallocate — ensure disk space is allocated for a file region.
- *
- * Solaris 7 has no fallocate or posix_fallocate.  We emulate by extending
- * the file with ftruncate if needed.  This doesn't guarantee contiguous
- * allocation, but it does reserve the space (which is what callers care about).
- *
- * Returns 0 on success, or an error number (not -1).
- */
-int
-posix_fallocate(int fd, off_t offset, off_t len)
+static int allocation_status(int fd, off_t offset, off_t len, off_t maximum)
 {
-    struct stat file_stat;
-    off_t required_size;
-
+    struct stat st;
+    int flags;
     if (offset < 0 || len <= 0)
         return EINVAL;
-
-    required_size = offset + len;
-
-    if (fstat(fd, &file_stat) < 0)
+    if (offset > maximum - len)
+        return EFBIG;
+    flags = fcntl(fd, F_GETFL);
+    if (flags < 0 || fstat(fd, &st) < 0)
         return errno;
+    if ((flags & O_ACCMODE) == O_RDONLY)
+        return EBADF;
+    if (S_ISFIFO(st.st_mode))
+        return ESPIPE;
+    if (!S_ISREG(st.st_mode))
+        return ENODEV;
+    /* Solaris 7 reserves F_ALLOCSP, but UFS rejects it. ftruncate creates
+     * holes and cannot guarantee future writes against ENOSPC. GCC's module
+     * writer understands EINVAL as the unsupported-filesystem result. */
+    return EINVAL;
+}
 
-    /* Already large enough — nothing to do */
-    if (file_stat.st_size >= required_size)
-        return 0;
+int posix_fallocate(int fd, off_t offset, off_t len)
+{
+    int saved = errno;
+    int result = allocation_status(fd, offset, len, INT64_MAX);
+    errno = saved;
+    return result;
+}
 
-    /* Extend the file; ftruncate zero-fills the gap */
-    if (ftruncate(fd, required_size) < 0)
-        return errno;
+int solcompat_posix_fallocate32(int fd, int32_t offset, int32_t len)
+{
+    int saved = errno;
+    int result = allocation_status(fd, offset, len, INT32_MAX);
+    errno = saved;
+    return result;
+}
 
-    return 0;
+int solcompat_posix_fadvise32(int fd, int32_t offset, int32_t len, int advice)
+{
+    return posix_fadvise(fd, offset, len, advice);
 }
 
 /*
@@ -492,6 +509,8 @@ futimesat(int dirfd, const char *pathname, const struct timeval times[2])
  * instead of a link error.
  */
 #include <errno.h>
+#include <stdint.h>
+#include <limits.h>
 #include <sys/types.h>
 /* Don't #include <sys/xattr.h> — libsolcompat compiles itself before its
    own sysroot-overlay headers are staged. Re-declare the prototypes here
