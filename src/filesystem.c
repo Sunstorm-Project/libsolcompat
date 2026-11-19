@@ -23,7 +23,8 @@
 #include <errno.h>
 #include <stdint.h>
 #include <limits.h>
-#include <utime.h>
+#include <sys/syscall.h>
+#include "dirfd_internal.h"
 
 /* Forward declarations for our own functions */
 extern int solcompat_snprintf(char *, size_t, const char *, ...);
@@ -44,116 +45,80 @@ extern size_t strlcpy(char *, const char *, size_t);
 #define AT_FDCWD_LINUX (-100)
 #define IS_AT_FDCWD(fd) ((fd) == AT_FDCWD || (fd) == AT_FDCWD_LINUX)
 
-int
-utimes(const char *path, const struct timeval tv[2])
+int utimes(const char *path, const struct timeval tv[2])
 {
-    if (tv == NULL) {
-        /* Set to current time */
-        return utime(path, NULL);
-    } else {
-        struct utimbuf ut;
-        ut.actime = tv[0].tv_sec;
-        ut.modtime = tv[1].tv_sec;
-        return utime(path, &ut);
-    }
+    /* Keep the historical libsolcompat symbol while using the Solaris 7
+     * syscall, which accepts microseconds and validates the timeval. */
+    return syscall(SYS_utimes, path, tv);
 }
 
-int
-futimens(int fd, const struct timespec times[2])
+static int valid_times(const struct timespec times[2])
 {
-    /*
-     * Solaris 7 has no futimens or futimes.
-     *
-     * Strategy: try multiple approaches to set timestamps via fd.
-     *
-     * 1. Try utime() directly on /proc/self/fd/N path (Solaris 7 has
-     *    /proc/self/fd/ entries but they are NOT symlinks — readlink
-     *    fails with EINVAL.  However, utime() on the /proc path may
-     *    still work because the kernel follows the fd to the inode.)
-     *
-     * 2. If that fails, try /proc/<pid>/fd/N (older Solaris style).
-     *
-     * 3. If neither path is supported, report ENOSYS so callers that
-     *    also know the pathname can use their pathname fallback.
-     */
-    char procpath[64];
-    int result;
-    struct stat fd_stat;
-
-    /* Validate the descriptor before constructing a /proc pathname. */
-    if (fstat(fd, &fd_stat) < 0)
-        return -1;
-    if (times != NULL) {
-        int i;
-        for (i = 0; i < 2; ++i) {
+    if (times)
+        for (int i = 0; i < 2; ++i) {
             long ns = times[i].tv_nsec;
-            if (ns != UTIME_NOW && ns != UTIME_OMIT
-                && (ns < 0 || ns >= 1000000000L)) {
+            if (ns != UTIME_NOW && ns != UTIME_OMIT && (ns < 0 || ns >= 1000000000L)) {
                 errno = EINVAL;
-                return -1;
+                return 0;
             }
         }
-        if (times[0].tv_nsec == UTIME_OMIT
-            && times[1].tv_nsec == UTIME_OMIT)
-            return 0;
+    return 1;
+}
+
+static int set_times(const char *path, const struct timespec times[2], const struct stat *original)
+{
+    struct timeval tv[2], now;
+    struct stat st;
+    if (!times || (times[0].tv_nsec == UTIME_NOW && times[1].tv_nsec == UTIME_NOW))
+        return utimes(path, NULL);
+    if (times[0].tv_nsec == UTIME_OMIT && times[1].tv_nsec == UTIME_OMIT)
+        return 0;
+    if (!original && (times[0].tv_nsec == UTIME_OMIT || times[1].tv_nsec == UTIME_OMIT)) {
+        if (stat(path, &st) < 0)
+            return -1;
+        original = &st;
     }
-
-    /* UTIME_NOW / UTIME_OMIT handling */
-    struct utimbuf ut;
-    struct utimbuf *ut_ptr = NULL;
-
-    if (times != NULL) {
-        struct stat st;
-        time_t now_time = time(NULL);
-
-        if (times[0].tv_nsec == UTIME_OMIT || times[1].tv_nsec == UTIME_OMIT) {
-            if (fstat(fd, &st) < 0)
-                return -1;
+    if ((times[0].tv_nsec == UTIME_NOW || times[1].tv_nsec == UTIME_NOW) &&
+        gettimeofday(&now, NULL) < 0)
+        return -1;
+    for (int i = 0; i < 2; ++i) {
+        if (times[i].tv_nsec == UTIME_NOW) {
+            tv[i] = now;
+        } else if (times[i].tv_nsec == UTIME_OMIT) {
+            tv[i].tv_sec = i ? original->st_mtim.tv_sec : original->st_atim.tv_sec;
+            tv[i].tv_usec = (i ? original->st_mtim.tv_nsec : original->st_atim.tv_nsec) / 1000;
+        } else {
+            tv[i].tv_sec = times[i].tv_sec;
+            tv[i].tv_usec = times[i].tv_nsec / 1000;
         }
-
-        ut.actime = (times[0].tv_nsec == UTIME_NOW) ? now_time :
-                    (times[0].tv_nsec == UTIME_OMIT) ? st.st_atime :
-                    times[0].tv_sec;
-        ut.modtime = (times[1].tv_nsec == UTIME_NOW) ? now_time :
-                     (times[1].tv_nsec == UTIME_OMIT) ? st.st_mtime :
-                     times[1].tv_sec;
-        ut_ptr = &ut;
     }
+    return utimes(path, tv);
+}
 
-    /* Try /proc/self/fd/N path directly */
-    solcompat_snprintf(procpath, sizeof(procpath), "/proc/self/fd/%d", fd);
-    result = utime(procpath, ut_ptr);
-    if (result == 0)
+int futimens(int fd, const struct timespec times[2])
+{
+    struct stat st;
+    char path[64];
+    if (fstat(fd, &st) < 0 || !valid_times(times))
+        return -1;
+    solcompat_snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);
+    if (set_times(path, times, &st) == 0)
         return 0;
-
-    /* Try /proc/<pid>/fd/N */
-    solcompat_snprintf(procpath, sizeof(procpath), "/proc/%d/fd/%d",
-                       (int)getpid(), fd);
-    result = utime(procpath, ut_ptr);
-    if (result == 0)
+    solcompat_snprintf(path, sizeof(path), "/proc/%d/fd/%d", (int)getpid(), fd);
+    if (set_times(path, times, &st) == 0)
         return 0;
-
-    /* Solaris procfs does not necessarily permit changing an open file's
-     * timestamps through these paths.  ENOSYS is the unavailable-operation
-     * protocol used by gnulib's fdutimens pathname fallback.  Never claim
-     * success when neither kernel operation changed the timestamp. */
+    /* gnulib uses this result to retry using a known pathname. */
     errno = ENOSYS;
     return -1;
 }
 
-int
-utimensat(int dirfd, const char *pathname,
-          const struct timespec times[2], int flags)
+static int path_times(const char *path, void *argument)
 {
-    char fullpath[1024];
-    struct stat st;
-    struct utimbuf ut;
-    time_t now_time;
-    int saved_fd = -1;
-    int result;
+    return set_times(path, argument, NULL);
+}
 
-    /* utime cannot update a symlink itself. Never follow its target when
-     * the caller explicitly requested no-follow semantics. */
+int utimensat(int dirfd, const char *pathname, const struct timespec times[2], int flags)
+{
     if (flags & ~AT_SYMLINK_NOFOLLOW) {
         errno = EINVAL;
         return -1;
@@ -162,67 +127,13 @@ utimensat(int dirfd, const char *pathname,
         errno = ENOSYS;
         return -1;
     }
-    if (pathname == NULL) {
+    if (!pathname) {
         errno = EFAULT;
         return -1;
     }
-    if (times != NULL) {
-        int i;
-        for (i = 0; i < 2; ++i) {
-            long ns = times[i].tv_nsec;
-            if (ns != UTIME_NOW && ns != UTIME_OMIT
-                && (ns < 0 || ns >= 1000000000L)) {
-                errno = EINVAL;
-                return -1;
-            }
-        }
-    }
-
-    /* Resolve path relative to dirfd */
-    if (pathname[0] == '/' || IS_AT_FDCWD(dirfd)) {
-        strlcpy(fullpath, pathname, sizeof(fullpath));
-    } else {
-        /*
-         * Non-AT_FDCWD case: use fchdir dance (same as at_funcs.c)
-         * because Solaris 7 /proc/self/fd/N is not a symlink.
-         */
-        char cwd[1024];
-        saved_fd = open(".", O_RDONLY);
-        if (saved_fd < 0) return -1;
-        if (fchdir(dirfd) < 0) {
-            close(saved_fd);
-            return -1;
-        }
-        if (getcwd(cwd, sizeof(cwd)) == NULL) {
-            fchdir(saved_fd);
-            close(saved_fd);
-            return -1;
-        }
-        fchdir(saved_fd);
-        close(saved_fd);
-        saved_fd = -1;
-        solcompat_snprintf(fullpath, sizeof(fullpath), "%s/%s", cwd, pathname);
-    }
-
-    if (times == NULL)
-        return utime(fullpath, NULL);
-
-    now_time = time(NULL);
-
-    /* Handle UTIME_NOW / UTIME_OMIT */
-    if (times[0].tv_nsec == UTIME_OMIT || times[1].tv_nsec == UTIME_OMIT) {
-        if (stat(fullpath, &st) < 0)
-            return -1;
-    }
-
-    ut.actime = (times[0].tv_nsec == UTIME_NOW) ? now_time :
-                (times[0].tv_nsec == UTIME_OMIT) ? st.st_atime :
-                times[0].tv_sec;
-    ut.modtime = (times[1].tv_nsec == UTIME_NOW) ? now_time :
-                 (times[1].tv_nsec == UTIME_OMIT) ? st.st_mtime :
-                 times[1].tv_sec;
-
-    return utime(fullpath, &ut);
+    if (!valid_times(times))
+        return -1;
+    return solcompat_with_dirfd(dirfd, pathname, path_times, (void *)times);
 }
 
 /*

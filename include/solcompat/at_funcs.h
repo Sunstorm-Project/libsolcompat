@@ -44,6 +44,8 @@ extern "C" {
 int openat(int dirfd, const char *pathname, int flags, ...);
 
 int mkdirat(int dirfd, const char *pathname, mode_t mode);
+int mkfifoat(int dirfd, const char *pathname, mode_t mode);
+int mknodat(int dirfd, const char *pathname, mode_t mode, dev_t device);
 
 int renameat(int olddirfd, const char *oldpath,
              int newdirfd, const char *newpath);

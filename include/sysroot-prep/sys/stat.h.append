@@ -54,6 +54,8 @@ extern int futimens(int fd, const struct timespec times[2]);
 extern int fstatat(int dirfd, const char *pathname,
                    struct stat *statbuf, int flags);
 extern int mkdirat(int dirfd, const char *pathname, mode_t mode);
+int mkfifoat(int dirfd, const char *pathname, mode_t mode);
+int mknodat(int dirfd, const char *pathname, mode_t mode, dev_t device);
 extern int fchmodat(int dirfd, const char *pathname,
                     mode_t mode, int flags);
 

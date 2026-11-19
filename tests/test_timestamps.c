@@ -57,6 +57,13 @@ int main(void) {
         errno=0;
         if (utimensat(-100,NULL,ts,0) != -1 || errno != EFAULT) return 17;
     }
+    ts[0].tv_sec=1200000000; ts[0].tv_nsec=123456789;
+    ts[1].tv_sec=1200000001; ts[1].tv_nsec=654321987;
+    if (utimensat(-100,"timestamp-target",ts,0) || fstat(fd,&after) ||
+        after.st_atim.tv_nsec!=123456000 || after.st_mtim.tv_nsec!=654321000) return 18;
+    ts[0].tv_nsec=UTIME_OMIT; ts[1].tv_nsec=456789123;
+    if (utimensat(-100,"timestamp-target",ts,0) || fstat(fd,&after) ||
+        after.st_atim.tv_nsec!=123456000 || after.st_mtim.tv_nsec!=456789000) return 19;
     close(fd); unlink("timestamp-link"); unlink("timestamp-target");
     puts("timestamp arguments, no-follow preservation, and fallback protocol passed");
     return 0;
