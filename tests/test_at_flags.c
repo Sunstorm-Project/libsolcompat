@@ -17,6 +17,12 @@ int main(void)
     fd = open("target", O_CREAT | O_EXCL | O_WRONLY, 0600);
     if (fd < 0 || close(fd) || symlink("target", "link"))
         goto done;
+    fd = openat(dirfd, "target", O_RDONLY | O_CLOEXEC);
+    if (fd < 0 || fcntl(fd, F_GETFD) != FD_CLOEXEC || close(fd))
+        goto done;
+    fd = openat(dirfd, ".", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (fd < 0 || fcntl(fd, F_GETFD) != FD_CLOEXEC || close(fd))
+        goto done;
     if (fchmodat(dirfd, "link", 0777, AT_SYMLINK_NOFOLLOW) != -1 ||
         errno != ENOTSUP || stat("target", &st) || (st.st_mode & 0777) != 0600)
         goto done;

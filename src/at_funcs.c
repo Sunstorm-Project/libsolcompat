@@ -46,6 +46,9 @@ extern size_t strlcpy(char *, const char *, size_t);
 #endif
 #define AT_FDCWD_LINUX (-100)
 /* Public Solaris 7 sysroot ABI, also needed with original system headers. */
+#ifndef O_CLOEXEC
+#define O_CLOEXEC 0x800000
+#endif
 #ifndef O_DIRECTORY
 #define O_DIRECTORY 0x1000000
 #endif
@@ -145,6 +148,9 @@ openat(int dirfd, const char *pathname, int flags, ...)
     int saved, result;
     mode_t mode = 0;
 
+    int cloexec = flags & O_CLOEXEC;
+    flags &= ~O_CLOEXEC;
+
     if (flags & O_CREAT) {
         va_list ap;
         va_start(ap, flags);
@@ -193,6 +199,13 @@ openat(int dirfd, const char *pathname, int flags, ...)
         }
     } else {
         result = open(pathname, flags, mode);
+    }
+
+    if (result >= 0 && cloexec && fcntl(result, F_SETFD, FD_CLOEXEC) < 0) {
+        int error = errno;
+        close(result);
+        result = -1;
+        errno = error;
     }
 
     {
