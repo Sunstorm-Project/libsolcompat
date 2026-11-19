@@ -36,7 +36,7 @@ jobs:
       SPARC_BUILD_HOST: ${{ vars.SPARC_BUILD_HOST || '/opt/sparc/sparc-build-host' }}
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Build static library
         # Use docker create + docker cp instead of bind mounts.
@@ -89,10 +89,10 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Check out sst-build-pipeline (for QEMU scripts)
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: Sunstorm-Project/sst-build-pipeline
           token: ${{ secrets.SPARC_BUILD_HOST_TOKEN }}
@@ -203,7 +203,7 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Pull build artifacts from registry
         run: |
