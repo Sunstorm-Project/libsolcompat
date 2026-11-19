@@ -102,25 +102,23 @@ int __fpclassifyd(double x);
  * src/c++17/floating_to_chars.cc.  Expose them in both modes — the
  * C++ probe needs the symbol callable from <math.h> alone, and end
  * users including <cmath> still get the std::* names cleanly. */
-/* The `0.0 + (x)` cast forces an int literal (0) up to double so
- * libstdc++'s Configure probe `isnan(0);` compiles — without it,
- * __builtin_isnan rejects non-FP arguments.  For float/double/long-double
- * args this is identity (NaN-ness is preserved across promotion). */
+/* Integer arguments occur in libstdc++ configure checks. A float
+ * alternative promotes integers while preserving each floating type,
+ * signed zero, and the classification of subnormal floats. */
 #ifndef isfinite
-#define isfinite(x) __builtin_isfinite(0.0 + (x))
+#define isfinite(x) __builtin_isfinite(1 ? (x) : 0.0f)
 #endif
 #ifndef isinf
-#define isinf(x)    __builtin_isinf(0.0 + (x))
+#define isinf(x)    __builtin_isinf(1 ? (x) : 0.0f)
 #endif
 #ifndef isnan
-#define isnan(x)    __builtin_isnan(0.0 + (x))
+#define isnan(x)    __builtin_isnan(1 ? (x) : 0.0f)
 #endif
 #ifndef isnormal
-#define isnormal(x) __builtin_isnormal(0.0 + (x))
+#define isnormal(x) __builtin_isnormal(1 ? (x) : 0.0f)
 #endif
 #ifndef signbit
-/* The conditional promotes integer arguments without adding positive zero. */
-#define signbit(x)  __builtin_signbit(1 ? (x) : 0.0)
+#define signbit(x)  __builtin_signbit(1 ? (x) : 0.0f)
 #endif
 
 /* C99 quiet ordering predicates (also probed by libstdc++ in both
