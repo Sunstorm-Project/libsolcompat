@@ -140,19 +140,37 @@ getprogname(void)
 int
 pipe2(int pipefd[2], int flags)
 {
-    if (pipe(pipefd) < 0)
+    int ends[2], i, error;
+
+    if (flags & ~(O_NONBLOCK | O_CLOEXEC)) {
+        errno = EINVAL;
         return -1;
-
-    if (flags & O_NONBLOCK) {
-        fcntl(pipefd[0], F_SETFL, fcntl(pipefd[0], F_GETFL) | O_NONBLOCK);
-        fcntl(pipefd[1], F_SETFL, fcntl(pipefd[1], F_GETFL) | O_NONBLOCK);
     }
-    if (flags & O_CLOEXEC) {
-        fcntl(pipefd[0], F_SETFD, FD_CLOEXEC);
-        fcntl(pipefd[1], F_SETFD, FD_CLOEXEC);
+    if (!pipefd) {
+        errno = EFAULT;
+        return -1;
     }
-
+    if (pipe(ends) < 0)
+        return -1;
+    for (i = 0; i < 2; ++i) {
+        if (flags & O_NONBLOCK) {
+            int status = fcntl(ends[i], F_GETFL);
+            if (status < 0 || fcntl(ends[i], F_SETFL, status | O_NONBLOCK) < 0)
+                goto fail;
+        }
+        if ((flags & O_CLOEXEC) && fcntl(ends[i], F_SETFD, FD_CLOEXEC) < 0)
+            goto fail;
+    }
+    pipefd[0] = ends[0];
+    pipefd[1] = ends[1];
     return 0;
+
+fail:
+    error = errno;
+    close(ends[0]);
+    close(ends[1]);
+    errno = error;
+    return -1;
 }
 
 int
@@ -160,7 +178,7 @@ dup3(int oldfd, int newfd, int flags)
 {
     int ret;
 
-    if (oldfd == newfd) {
+    if (oldfd == newfd || (flags & ~O_CLOEXEC)) {
         errno = EINVAL;
         return -1;
     }
@@ -169,8 +187,12 @@ dup3(int oldfd, int newfd, int flags)
     if (ret < 0)
         return -1;
 
-    if (flags & O_CLOEXEC)
-        fcntl(newfd, F_SETFD, FD_CLOEXEC);
+    if ((flags & O_CLOEXEC) && fcntl(newfd, F_SETFD, FD_CLOEXEC) < 0) {
+        int error = errno;
+        close(newfd);
+        errno = error;
+        return -1;
+    }
 
     return ret;
 }
