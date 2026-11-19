@@ -151,3 +151,13 @@ cfmakeraw(struct termios *t)
     t->c_cc[VMIN] = 1;
     t->c_cc[VTIME] = 0;
 }
+
+int tcgetwinsize(int fd, struct winsize *size)
+{
+    return ioctl(fd, TIOCGWINSZ, size);
+}
+
+int tcsetwinsize(int fd, const struct winsize *size)
+{
+    return ioctl(fd, TIOCSWINSZ, size);
+}

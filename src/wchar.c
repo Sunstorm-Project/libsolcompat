@@ -6,8 +6,11 @@
  */
 
 #include <wchar.h>
+#include <wctype.h>
 #include <string.h>
 #include <stdlib.h>
+#include <limits.h>
+#include <errno.h>
 
 /* ================================================================
  * Wide memory operations
@@ -79,12 +82,92 @@ wcsstr(const wchar_t *haystack, const wchar_t *needle)
 /* wcrtomb, wcsrtombs, mbsrtowcs: provided by Solaris 7's libc.
  * Do NOT reimplement — the system versions handle the locale correctly. */
 
+/* A size query converts a private copy of the state and leaves *src alone. */
+size_t
+mbsnrtowcs(wchar_t *dst, const char **src, size_t bytes, size_t limit,
+          mbstate_t *state)
+{
+    static mbstate_t internal;
+    mbstate_t copy;
+    const char *p = *src;
+    size_t count = 0;
+    if (!state) state = &internal;
+    if (!dst) {
+        copy = *state;
+        state = &copy;
+    }
+    while (bytes && (!dst || count < limit)) {
+        wchar_t wc;
+        size_t n = mbrtowc(&wc, p, bytes, state);
+        if (n == (size_t)-1) {
+            if (dst) *src = p;
+            return n;
+        }
+        if (n == (size_t)-2) {
+            p += bytes;
+            break;
+        }
+        if (dst) dst[count] = wc;
+        if (!n) {
+            p = NULL;
+            break;
+        }
+        p += n;
+        bytes -= n;
+        ++count;
+    }
+    if (dst) *src = p;
+    return count;
+}
+
+size_t
+wcsnrtombs(char *dst, const wchar_t **src, size_t chars, size_t limit,
+          mbstate_t *state)
+{
+    static mbstate_t internal;
+    mbstate_t copy;
+    const wchar_t *p = *src;
+    size_t count = 0;
+    if (!state) state = &internal;
+    if (!dst) {
+        copy = *state;
+        state = &copy;
+    }
+    while (chars && (!dst || count < limit)) {
+        char bytes[MB_LEN_MAX];
+        mbstate_t next = *state;
+        size_t n = wcrtomb(bytes, *p, &next);
+        if (n == (size_t)-1) {
+            if (dst) *src = p;
+            return n;
+        }
+        if (dst && n > limit - count) break;
+        if (dst) memcpy(dst + count, bytes, n);
+        *state = next;
+        count += n;
+        if (!*p) {
+            --count;  /* Exclude the terminating byte, retaining any shift bytes. */
+            p = NULL;
+            break;
+        }
+        ++p;
+        --chars;
+    }
+    if (dst) *src = p;
+    return count;
+}
+
 int
 wctob(wint_t c)
 {
-    if (c >= 0 && c < 256)
-        return (int)c;
-    return -1;  /* EOF */
+    mbstate_t state = {0};
+    char bytes[MB_LEN_MAX];
+    int saved_errno = errno;
+    if (c == WEOF)
+        return -1;
+    size_t count = wcrtomb(bytes, (wchar_t)c, &state);
+    errno = saved_errno;
+    return count == 1 ? (unsigned char)bytes[0] : -1;
 }
 
 /*
@@ -264,4 +347,55 @@ c16rtomb(char *s, _sol_char16_t c16, mbstate_t *ps)
         return (size_t)-1;  /* low without high — encoding error */
     }
     return wcrtomb(s, (wchar_t)c16, state);
+}
+
+wchar_t *wcpcpy(wchar_t *dst, const wchar_t *src)
+{
+    while ((*dst = *src++) != L'\0')
+        ++dst;
+    return dst;
+}
+
+wchar_t *wcpncpy(wchar_t *dst, const wchar_t *src, size_t n)
+{
+    size_t count = wcsnlen(src, n);
+    wmemcpy(dst, src, count);
+    wmemset(dst + count, L'\0', n - count);
+    return dst + count;
+}
+
+size_t wcslcpy(wchar_t *dst, const wchar_t *src, size_t size)
+{
+    size_t length = wcslen(src);
+    if (size) {
+        size_t copy = length < size ? length : size - 1;
+        wmemcpy(dst, src, copy);
+        dst[copy] = L'\0';
+    }
+    return length;
+}
+
+size_t wcslcat(wchar_t *dst, const wchar_t *src, size_t size)
+{
+    size_t used = wcsnlen(dst, size);
+    if (used == size)
+        return size + wcslen(src);
+    return used + wcslcpy(dst + used, src, size - used);
+}
+
+int wcsncasecmp(const wchar_t *a, const wchar_t *b, size_t n)
+{
+    while (n--) {
+        wint_t x = towlower(*a++), y = towlower(*b++);
+        if (x != y)
+            return x < y ? -1 : 1;
+        if (!x)
+            break;
+    }
+    return 0;
+}
+
+int wcscasecmp(const wchar_t *a, const wchar_t *b)
+{
+    return wcsncasecmp(a, b, (size_t)-1);
 }

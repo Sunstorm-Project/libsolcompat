@@ -18,6 +18,7 @@ int vasprintf(char **strp, const char *fmt, va_list ap);
 int asprintf(char **strp, const char *fmt, ...);
 
 int dprintf(int fd, const char *fmt, ...);
+int vdprintf(int fd, const char *fmt, va_list ap);
 
 ssize_t getline(char **lineptr, size_t *n, FILE *stream);
 

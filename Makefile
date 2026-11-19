@@ -8,6 +8,7 @@
 #
 # Install targets:
 #   make install                     — traditional install to PREFIX
+#   make install-native-headers NATIVE_INCLUDE_DIR= — fill native GCC header gaps (host Python3)
 #   make install-headers SYSROOT=    — headers only (for bootstrap / fixincludes timing)
 #   make install-runtime SYSROOT=    — libsolcompat.so.1 + symlinks (target runtime)
 #   make install-dev     SYSROOT=    — libsolcompat.a + headers (build-system dev)
@@ -23,12 +24,13 @@ CC       ?= gcc
 AR       ?= ar
 RANLIB   ?= ranlib
 NM       ?= nm
+PYTHON   ?= python3
 CFLAGS   ?= -O2 -Wall -Wextra -Wno-unused-parameter
 CPPFLAGS ?= -D_REENTRANT -I$(CURDIR)/include
 LDFLAGS  ?=
 PICFLAGS  = -fPIC
 
-PREFIX   ?= /usr/tgcware
+PREFIX   ?= /opt/sst
 LIBDIR    = $(PREFIX)/lib
 INCDIR    = $(PREFIX)/include/solcompat
 DOCDIR    = $(PREFIX)/share/doc/solcompat
@@ -38,18 +40,28 @@ SOVERSION = 1.0.0
 
 # Source files
 SRCS = src/snprintf.c \
+       src/getcwd.c \
+       src/mntent.c \
        src/string.c \
        src/stdio.c \
        src/memstream.c \
        src/stdlib.c \
        src/c99_types.c \
        src/network.c \
+       src/socket_flags.c \
        src/clock.c \
+       src/fmal.c \
+       src/fmaf.c \
+       src/fma.c \
        src/math.c \
+       src/frexpl.c \
        src/memory.c \
        src/filesystem.c \
        src/at_funcs.c \
+       src/scandir.c \
+       src/statat32.c \
        src/pty.c \
+       src/threads.c \
        src/process.c \
        src/poll.c \
        src/random.c \
@@ -67,8 +79,8 @@ SRCS = src/snprintf.c \
        src/complex_math.c \
        src/ssp.c
 
-OBJS     = $(SRCS:.c=.o)
-PIC_OBJS = $(SRCS:.c=.lo)
+OBJS     = $(SRCS:.c=.o) src/scandir32.o
+PIC_OBJS = $(SRCS:.c=.lo) src/scandir32.lo
 
 # ====================================================================
 # Build targets — always produce both static and shared
@@ -123,6 +135,13 @@ check: libsolcompat.a
 # bare `call roundf@plt` that loops forever under LD_PRELOAD ordering.
 # Also covers the earlier fma/fmaf/fmal conflict with GCC 15's implicit
 # inline declarations.
+src/scandir32.o: src/scandir.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -DSOLCOMPAT_SMALL_DIRENT -c -o $@ $<
+src/scandir32.lo: src/scandir.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(PICFLAGS) -DSOLCOMPAT_SMALL_DIRENT -c -o $@ $<
+
+src/fma.o src/fma.lo src/fmaf.o src/fmaf.lo src/fmal.o src/fmal.lo: override CFLAGS += -ffp-contract=off -fno-builtin -frounding-math
+
 src/math.o: src/math.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fno-builtin -c -o $@ $<
 src/math.lo: src/math.c
@@ -148,6 +167,12 @@ src/atomic_ops.o: src/atomic_ops.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -fno-builtin -c -o $@ $<
 src/atomic_ops.lo: src/atomic_ops.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(PICFLAGS) -fno-builtin -c -o $@ $<
+
+# Generate source-authored forwarding wrappers only at GCC's private fixed-
+# header root; no native vendor system header is modified or copied.
+install-native-headers:
+	@test -n "$(NATIVE_INCLUDE_DIR)" || { echo "NATIVE_INCLUDE_DIR is required" >&2; exit 1; }
+	$(PYTHON) tools/materialize-native-headers.py "$(NATIVE_INCLUDE_DIR)"
 
 # ====================================================================
 # install-headers — patch sysroot to look GNU-standard
@@ -255,11 +280,18 @@ install-headers:
 			if [ -n "$$guard" ] && grep -q "$$guard" "$${target}" 2>/dev/null; then \
 				: ; \
 			else \
-				awk -v content="$$(cat $$prepend_file)" ' \
-					/^#define [_A-Za-z0-9]+_H/ && !inserted { print; print ""; print content; inserted=1; next } \
+				if awk -v source="$$prepend_file" ' \
+					BEGIN { while ((getline line < source) > 0) content=content line "\n"; close(source) } \
+					/^[[:space:]]*#[[:space:]]*define[[:space:]]+[_A-Za-z0-9]+_H([[:space:]]|$$)/ && !inserted { print; print ""; print content; inserted=1; next } \
 					{ print } \
-				' "$${target}" > "$${target}.tmp" && mv "$${target}.tmp" "$${target}"; \
-				echo "  Prepended $${hdr}"; \
+					END { if (!inserted) exit 1 } \
+				' "$${target}" > "$${target}.tmp"; then \
+					mv "$${target}.tmp" "$${target}"; \
+					echo "  Prepended $${hdr}"; \
+				else \
+					rm -f "$${target}.tmp"; \
+					echo "ERROR: cannot locate include guard for $${target}" >&2; exit 1; \
+				fi; \
 			fi; \
 		fi; \
 	done
@@ -334,8 +366,8 @@ install-toolchain: install-runtime install-dev
 # BEFORE the sysroot's /usr/include — so the libsolcompat overrides
 # at sysroot-overlay/usr/include/cmath, cstdlib never get consulted
 # under their default `make install-headers` placement.  This target
-# copies them into the libstdc++ include tree as override-shadows
-# that #include_next the original libstdc++ header after pre-defining
+# retains the original headers under .solcompat-upstream, then installs
+# wrappers with explicit relative includes after pre-defining
 # the _GLIBCXX_HAVE_* / _GLIBCXX_USE_C99_MATH* macros that Solaris 7
 # Configure probes can't detect on their own.
 #
@@ -343,8 +375,10 @@ install-toolchain: install-runtime install-dev
 #   CXX_INCLUDE_DIR — libstdc++ include root (no trailing slash)
 #                     e.g. /opt/cross/sparc-sun-solaris2.7/include/c++/15.2.0
 #
-# Idempotent: a sentinel guard `_SOLCOMPAT_OVERRIDE_CMATH` etc. inside
-# the override file lets a re-install detect a prior install and skip.
+# Generated build-header symlinks require CXX_SOURCE_ROOT; their source
+# bytes are retained without writing through the symlink.
+# Idempotent refresh preserves the original header bytes. An old wrapper
+# without a retained original is rejected and requires a fresh compiler install.
 install-cxx-overlay:
 	@echo ""
 	@echo "=== libsolcompat install-cxx-overlay ==="
@@ -355,16 +389,7 @@ install-cxx-overlay:
 	@if [ ! -d "$(CXX_INCLUDE_DIR)" ]; then \
 		echo "ERROR: $(CXX_INCLUDE_DIR) does not exist"; exit 1; \
 	fi
-	@for hdr in cmath cstdlib; do \
-		src="sysroot-overlay/usr/include/$$hdr"; \
-		dst="$(CXX_INCLUDE_DIR)/$$hdr"; \
-		[ -f "$$src" ] || continue; \
-		if [ -f "$$dst" ] && grep -q "_SOLCOMPAT_OVERRIDE_" "$$dst" 2>/dev/null; then \
-			echo "  $$hdr: override already installed, refreshing"; \
-		fi; \
-		cp "$$src" "$$dst"; \
-		echo "  installed override → $$dst"; \
-	done
+	$(PYTHON) tools/materialize-cxx-overlays.py sysroot-overlay/usr/include "$(CXX_INCLUDE_DIR)" --upstream-source-root "$(CXX_SOURCE_ROOT)"
 
 # ====================================================================
 # install — traditional PREFIX-based install (for manual/native builds)
@@ -401,13 +426,39 @@ test-snprintf-bounds: all
 		tests/test_snprintf_bounds.c ./libsolcompat.a -lrt -lsocket -lnsl -lresolv -lm -ldl
 	./tests/test_snprintf_bounds_static
 
+# Build with the prepared Solaris SDK; execute only on a Solaris target.
+COMPAT_TESTS = $(addprefix tests/test_,printf_compat mntent_compat mnttab_native \
+    long_double snprintf_bounds dl_iterate_phdr timestamps getcwd_compat \
+    socket_flags socket_flag_failures spawn_actions at_flags fstatat_layout \
+    pipe_flags execvpe_env clock_deadline timegm_utc semaphore_deadline \
+    fma fmal scalblnl neighbors math_classify inet_text interfaces nameinfo addrinfo fdopendir scandir_layout file_space issue8_io relative_nodes wide_strings c11_threads timed_locks)
+
+compat-tests: $(COMPAT_TESTS)
+$(COMPAT_TESTS): %: %.c $(SONAME)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -fno-builtin -Isysroot-overlay/usr/include \
+	    -o $@ $< $(CURDIR)/$(SONAME) -lm -ldl $(TEST_LIBS)
+
+tests/test_interfaces tests/test_socket_flags: TEST_LIBS = -lsocket -lnsl
+tests/test_spawn_actions: TEST_LIBS = -lpthread -lrt -Wl,-z,origin -Wl,-R,'$$ORIGIN/..'
+tests/test_timed_locks tests/test_c11_threads: TEST_LIBS = -lpthread -lrt
+tests/test_clock_deadline tests/test_semaphore_deadline: TEST_LIBS = -lrt
+tests/test_socket_flag_failures: src/socket_flags.c
+
+test-compat: compat-tests
+	@for test in $(COMPAT_TESTS); do \
+	    LD_LIBRARY_PATH="$(CURDIR)" ./$$test || exit $$?; \
+	done
+
 # ====================================================================
 # Clean
 # ====================================================================
 clean:
 	rm -f $(OBJS) $(PIC_OBJS) libsolcompat.a $(SONAME)
-	rm -f tests/test_all tests/test_snprintf_bounds tests/test_snprintf_bounds_libc_first tests/test_snprintf_bounds_static
+	rm -f tests/test_all $(COMPAT_TESTS) tests/test_snprintf_bounds tests/test_snprintf_bounds_libc_first tests/test_snprintf_bounds_static
 	rm -rf tests/gen
 
-.PHONY: all check install install-headers install-runtime install-dev install-toolchain install-cxx-overlay test test-snprintf-bounds clean
+test-mman-linkage:
+	$(PYTHON) tests/test_mman_cpp_linkage.py
+
+.PHONY: all check compat-tests test-compat install install-native-headers install-headers install-runtime install-dev install-toolchain install-cxx-overlay test test-snprintf-bounds test-mman-linkage clean
 # cache-bust: 2026-04-17 — force sysroot rebuild after OCI cache poisoning with awk patch

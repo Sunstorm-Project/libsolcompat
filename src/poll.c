@@ -16,6 +16,7 @@
 #include <signal.h>
 #include <time.h>
 #include <errno.h>
+#include <limits.h>
 
 int
 ppoll(struct pollfd *fds, nfds_t nfds,
@@ -25,22 +26,28 @@ ppoll(struct pollfd *fds, nfds_t nfds,
     int timeout_ms;
     int ret;
 
-    /* Convert timespec to milliseconds for poll() */
-    if (tmo_p == NULL) {
-        timeout_ms = -1; /* infinite */
-    } else {
-        timeout_ms = (int)(tmo_p->tv_sec * 1000 + tmo_p->tv_nsec / 1000000);
-        if (timeout_ms < 0)
-            timeout_ms = 0;
+    if (tmo_p && (tmo_p->tv_sec < 0 || tmo_p->tv_nsec < 0 ||
+                  tmo_p->tv_nsec >= 1000000000L)) {
+        errno = EINVAL;
+        return -1;
     }
+    long long remaining = tmo_p ? (long long)tmo_p->tv_sec * 1000 +
+        (tmo_p->tv_nsec + 999999L) / 1000000L : -1;
 
-    if (sigmask)
-        sigprocmask(SIG_SETMASK, sigmask, &origmask);
+    if (sigmask && sigprocmask(SIG_SETMASK, sigmask, &origmask) < 0)
+        return -1;
 
-    ret = poll(fds, nfds, timeout_ms);
+    do {
+        timeout_ms = remaining > INT_MAX ? INT_MAX : (int)remaining;
+        ret = poll(fds, nfds, timeout_ms);
+        remaining -= timeout_ms;
+    } while (ret == 0 && remaining > 0);
 
-    if (sigmask)
+    if (sigmask) {
+        int saved = errno;
         sigprocmask(SIG_SETMASK, &origmask, NULL);
+        errno = saved;
+    }
 
     return ret;
 }
@@ -55,20 +62,36 @@ pselect(int nfds, fd_set *readfds, fd_set *writefds,
     int ret;
 
     if (timeout) {
+        if (timeout->tv_sec < 0 || timeout->tv_nsec < 0 ||
+            timeout->tv_nsec >= 1000000000L) {
+            errno = EINVAL;
+            return -1;
+        }
         tv.tv_sec = timeout->tv_sec;
-        tv.tv_usec = timeout->tv_nsec / 1000;
+        tv.tv_usec = (timeout->tv_nsec + 999L) / 1000L;
+        if (tv.tv_usec == 1000000L) {
+            if (tv.tv_sec < LONG_MAX) {
+                ++tv.tv_sec;
+                tv.tv_usec = 0;
+            } else {
+                tv.tv_usec = 999999;
+            }
+        }
         tvp = &tv;
     } else {
         tvp = NULL;
     }
 
-    if (sigmask)
-        sigprocmask(SIG_SETMASK, sigmask, &origmask);
+    if (sigmask && sigprocmask(SIG_SETMASK, sigmask, &origmask) < 0)
+        return -1;
 
     ret = select(nfds, readfds, writefds, exceptfds, tvp);
 
-    if (sigmask)
+    if (sigmask) {
+        int saved = errno;
         sigprocmask(SIG_SETMASK, &origmask, NULL);
+        errno = saved;
+    }
 
     return ret;
 }

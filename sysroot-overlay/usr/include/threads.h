@@ -1,16 +1,8 @@
 /*
  * threads.h — C11 threading library mapped onto POSIX threads for Solaris 7
  *
- * GCC 15 does not ship <threads.h> for this target. gnulib's
- * glthread/lock.c and a few packages include it unconditionally.
- * When configure correctly detects pthreads and sets USE_POSIX_THREADS,
- * the C11-threads code path is dead. But packages that include
- * <threads.h> unconditionally still need the header to parse.
- *
- * This header provides the C11 thread/mutex/condition-variable types
- * and function thunks mapped to pthread_*. Full emulation is not
- * provided; packages relying on USE_ISOC_THREADS will fail link with
- * undefined references — that's correct behavior (signals misuse).
+ * libsolcompat supplies these functions through the Solaris pthread ABI.
+ * Link threaded programs with -pthread to select the native thread library.
  *
  * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
  */
@@ -20,6 +12,7 @@
 
 #include <pthread.h>
 #include <time.h>
+#include <limits.h>
 
 /* _Noreturn fallback. GCC 15 accepts the C11 keyword only in C11+ C
    mode. C++ never accepts it (C++11 uses [[noreturn]] attribute
@@ -60,11 +53,9 @@ enum {
     thrd_timedout = 4
 };
 
+#define TSS_DTOR_ITERATIONS PTHREAD_DESTRUCTOR_ITERATIONS
 #define ONCE_FLAG_INIT PTHREAD_ONCE_INIT
 
-/* Declarations only — no inline implementations to avoid ABI pinning.
- * If USE_ISOC_THREADS is selected at configure time, link will fail;
- * the project should select USE_POSIX_THREADS instead. */
 int   thrd_create(thrd_t *thr, thrd_start_t func, void *arg);
 int   thrd_equal(thrd_t a, thrd_t b);
 thrd_t thrd_current(void);

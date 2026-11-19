@@ -134,7 +134,7 @@ duplocale(locale_t locobj)
  *
  * Solaris 7 has sem_wait() and sem_trywait() (POSIX.1b real-time) but
  * not sem_timedwait() (POSIX.1-2001).  We emulate by polling sem_trywait()
- * with nanosleep() intervals.
+ * with bounded poll() intervals.
  *
  * This is not efficient for long waits, but Python's usage is primarily
  * for thread synchronization with short timeouts.  For the single-CPU
@@ -158,18 +158,22 @@ sem_timedwait(sem_t *sem, const struct timespec *abs_timeout)
         if (errno != EAGAIN)
             return -1; /* Real error, not just "would block" */
 
-        /* Check if we've exceeded the deadline */
-        gettimeofday(&now, NULL);
-        if (now.tv_sec > abs_timeout->tv_sec ||
-            (now.tv_sec == abs_timeout->tv_sec &&
-             now.tv_usec * 1000L >= abs_timeout->tv_nsec)) {
+        /* POSIX permits immediate acquisition without inspecting the deadline. */
+        if (abs_timeout->tv_nsec < 0 || abs_timeout->tv_nsec >= 1000000000L) {
+            errno = EINVAL;
+            return -1;
+        }
+        if (gettimeofday(&now, NULL) < 0)
+            return -1;
+        long long remaining = ((long long)abs_timeout->tv_sec - now.tv_sec) *
+            1000000000LL + abs_timeout->tv_nsec - now.tv_usec * 1000L;
+        if (remaining <= 0) {
             errno = ETIMEDOUT;
             return -1;
         }
-
-        /* 10ms poll via poll() — avoids the nanosleep@@SUNW_0.7
-           versioned symbol that would require -lrt at link time. */
-        poll(NULL, 0, 10);
+        int delay = remaining >= 10000000 ? 10 : (int)((remaining + 999999) / 1000000);
+        if (poll(NULL, 0, delay) < 0)
+            return -1;
     }
 }
 #endif /* HAVE_SEM_TIMEDWAIT */
@@ -191,12 +195,6 @@ sem_timedwait(sem_t *sem, const struct timespec *abs_timeout)
 extern int ioctl(int, int, ...);
 
 #include <langinfo.h>
-
-/* Solaris 7 net/if.h lacks struct if_nameindex — define it here */
-struct if_nameindex {
-    unsigned int if_index;
-    char        *if_name;
-};
 
 /*
  * sockatmark — test whether socket is at out-of-band mark.
@@ -359,31 +357,6 @@ pthread_attr_setstack(pthread_attr_t *attribute,
     return pthread_attr_setstacksize(attribute, stack_size);
 }
 #endif
-
-/*
- * if_nameindex / if_freenameindex — enumerate network interfaces.
- * POSIX.1-2001. Solaris 7 has SIOCGIFCONF but not this wrapper.
- */
-struct if_nameindex *
-if_nameindex(void)
-{
-    /* Minimal implementation: return empty list.
-     * A full implementation would use SIOCGIFCONF + SIOCGIFINDEX. */
-    struct if_nameindex *name_index_list;
-    name_index_list = (struct if_nameindex *)calloc(1, sizeof(struct if_nameindex));
-    if (name_index_list) {
-        name_index_list[0].if_index = 0;
-        name_index_list[0].if_name = NULL;
-    }
-    return name_index_list;
-}
-
-void
-if_freenameindex(struct if_nameindex *name_index_list)
-{
-    /* A full implementation would free each if_name string */
-    free(name_index_list);
-}
 
 /*
  * mq_timedreceive / mq_timedsend — timed message queue operations.

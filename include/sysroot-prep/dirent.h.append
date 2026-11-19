@@ -5,7 +5,7 @@
  * alphasort.  Modern software (coreutils, findutils, cmake, Python,
  * etc.) expects these in <dirent.h>.
  *
- * The implementations live in libsolcompat src/filesystem.c.
+ * The implementations live in libsolcompat src/filesystem.c and src/scandir.c.
  *
  * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
  */
@@ -21,6 +21,11 @@ int dirfd(DIR *dir_stream);
 
 DIR *fdopendir(int fd);
 
+/* The original bare symbols operate on the large-file dirent layout. */
+#if defined(__sun) && !defined(_LP64) && (!defined(_FILE_OFFSET_BITS) || _FILE_OFFSET_BITS != 64)
+#define scandir solcompat_scandir32
+#define alphasort solcompat_alphasort32
+#endif
 int scandir(const char *dirp, struct dirent ***namelist,
             int (*filter)(const struct dirent *),
             int (*compar)(const struct dirent **, const struct dirent **));

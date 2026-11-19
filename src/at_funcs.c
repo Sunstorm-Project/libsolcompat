@@ -45,8 +45,18 @@ extern size_t strlcpy(char *, const char *, size_t);
 #define AT_FDCWD (-3041965)
 #endif
 #define AT_FDCWD_LINUX (-100)
+/* Public Solaris 7 sysroot ABI, also needed with original system headers. */
+#ifndef O_CLOEXEC
+#define O_CLOEXEC 0x800000
+#endif
+#ifndef O_DIRECTORY
+#define O_DIRECTORY 0x1000000
+#endif
 #ifndef AT_SYMLINK_NOFOLLOW
 #define AT_SYMLINK_NOFOLLOW 0x100
+#endif
+#ifndef AT_EACCESS
+#define AT_EACCESS 0x0010
 #endif
 #ifndef AT_REMOVEDIR
 #define AT_REMOVEDIR 0x200
@@ -101,6 +111,25 @@ at_leave(int saved_fd)
     pthread_mutex_unlock(&at_mutex);
 }
 
+#include "dirfd_internal.h"
+
+int solcompat_with_dirfd(int fd, const char *path,
+                        int (*operation)(const char *, void *), void *argument)
+{
+    if (!path) {
+        errno = EFAULT;
+        return -1;
+    }
+    int saved = at_enter(fd, path);
+    if (saved < 0)
+        return -1;
+    int result = operation(path, argument);
+    int error = errno;
+    at_leave(saved);
+    errno = error;
+    return result;
+}
+
 /*
  * Resolve a dirfd to a directory path string.
  * Solaris 7 /proc/self/fd/N entries are NOT symlinks (readlink fails),
@@ -138,6 +167,9 @@ openat(int dirfd, const char *pathname, int flags, ...)
     int saved, result;
     mode_t mode = 0;
 
+    int cloexec = flags & O_CLOEXEC;
+    flags &= ~O_CLOEXEC;
+
     if (flags & O_CREAT) {
         va_list ap;
         va_start(ap, flags);
@@ -149,79 +181,151 @@ openat(int dirfd, const char *pathname, int flags, ...)
     if (saved < 0)
         return -1;
 
-    result = open(pathname, flags, mode);
+    if (flags & O_DIRECTORY) {
+        struct stat st;
+        /* Solaris 7 ignores the compatibility bit. Check before open so a
+         * FIFO cannot block and an ordinary file cannot be truncated. */
+        if (flags & O_CREAT) {
+            errno = EINVAL;
+            result = -1;
+        } else if (stat(pathname, &st) < 0) {
+            result = -1;
+        } else if (!S_ISDIR(st.st_mode)) {
+            errno = ENOTDIR;
+            result = -1;
+        } else if ((flags & O_ACCMODE) != O_RDONLY || (flags & O_TRUNC)) {
+            errno = EISDIR;
+            result = -1;
+        } else {
+            result = open(pathname, (flags & ~O_DIRECTORY) | O_NONBLOCK);
+            if (result >= 0) {
+                int error = 0;
+                if (fstat(result, &st) < 0)
+                    error = errno;
+                else if (!S_ISDIR(st.st_mode))
+                    error = ENOTDIR;
+                else if (!(flags & O_NONBLOCK)) {
+                    int status = fcntl(result, F_GETFL);
+                    if (status < 0 || fcntl(result, F_SETFL, status & ~O_NONBLOCK) < 0)
+                        error = errno;
+                }
+                if (error) {
+                    close(result);
+                    result = -1;
+                    errno = error;
+                }
+            }
+        }
+    } else {
+        result = open(pathname, flags, mode);
+    }
 
-    at_leave(saved);
+    if (result >= 0 && cloexec && fcntl(result, F_SETFD, FD_CLOEXEC) < 0) {
+        int error = errno;
+        close(result);
+        result = -1;
+        errno = error;
+    }
+
+    {
+        int error = errno;
+        at_leave(saved);
+        errno = error;
+    }
     return result;
 }
 
-int
-mkdirat(int dirfd, const char *pathname, mode_t mode)
+static int make_directory(const char *path, void *arg)
 {
-    int saved, result;
-
-    saved = at_enter(dirfd, pathname);
-    if (saved < 0)
-        return -1;
-
-    result = mkdir(pathname, mode);
-
-    at_leave(saved);
-    return result;
+    return mkdir(path, *(mode_t *)arg);
 }
 
-int
-renameat(int olddirfd, const char *oldpath,
-         int newdirfd, const char *newpath)
+int mkdirat(int fd, const char *path, mode_t mode)
 {
-    /*
-     * This is harder — we need both paths resolved.
-     * Strategy: resolve oldpath first, then chdir for newpath.
-     * If both are relative to different dirfds, we need full paths.
-     */
-    char old_full[1024], new_full[1024];
-    int result;
+    return solcompat_with_dirfd(fd, path, make_directory, &mode);
+}
 
-    /* Simple case: both AT_FDCWD */
-    if (IS_AT_FDCWD(olddirfd) && IS_AT_FDCWD(newdirfd))
-        return rename(oldpath, newpath);
+static int make_fifo(const char *path, void *arg)
+{
+    return mkfifo(path, *(mode_t *)arg);
+}
 
+int mkfifoat(int fd, const char *path, mode_t mode)
+{
+    return solcompat_with_dirfd(fd, path, make_fifo, &mode);
+}
+
+struct node_args { mode_t mode; dev_t device; };
+
+static int make_node(const char *path, void *arg)
+{
+    struct node_args *node = arg;
+    return mknod(path, node->mode, node->device);
+}
+
+int mknodat(int fd, const char *path, mode_t mode, dev_t device)
+{
+    struct node_args node = {mode, device};
+    return solcompat_with_dirfd(fd, path, make_node, &node);
+}
+
+/* Caller holds at_mutex while resolving both operands. Never operate on a
+ * truncated prefix if a path cannot be represented by Solaris. */
+static const char *at_operand(int fd, const char *path, char *buf, size_t size)
+{
+    char directory[1024];
+    if (!path) {
+        errno = EFAULT;
+        return NULL;
+    }
+    if (!*path) {
+        errno = ENOENT;
+        return NULL;
+    }
+    if (*path == '/' || IS_AT_FDCWD(fd))
+        return path;
+    if (resolve_dirfd_path(fd, directory, sizeof(directory)) < 0)
+        return NULL;
+    int n = solcompat_snprintf(buf, size, "%s/%s", directory, path);
+    if (n < 0 || (size_t)n >= size) {
+        errno = ENAMETOOLONG;
+        return NULL;
+    }
+    return buf;
+}
+
+static int two_paths(int oldfd, const char *oldpath, int newfd, const char *newpath,
+                     int (*operation)(const char *, const char *))
+{
+    char oldbuf[1024], newbuf[1024];
+    int result = -1;
     pthread_mutex_lock(&at_mutex);
-
-    /* Resolve old path */
-    if (oldpath[0] == '/' || IS_AT_FDCWD(olddirfd)) {
-        strlcpy(old_full, oldpath, sizeof(old_full));
-    } else {
-        char dirpath[1024];
-        if (resolve_dirfd_path(olddirfd, dirpath, sizeof(dirpath)) < 0) {
-            pthread_mutex_unlock(&at_mutex);
-            return -1;
-        }
-        solcompat_snprintf(old_full, sizeof(old_full), "%s/%s", dirpath, oldpath);
+    oldpath = at_operand(oldfd, oldpath, oldbuf, sizeof(oldbuf));
+    if (oldpath) {
+        newpath = at_operand(newfd, newpath, newbuf, sizeof(newbuf));
+        if (newpath)
+            result = operation(oldpath, newpath);
     }
-
-    /* Resolve new path */
-    if (newpath[0] == '/' || IS_AT_FDCWD(newdirfd)) {
-        strlcpy(new_full, newpath, sizeof(new_full));
-    } else {
-        char dirpath[1024];
-        if (resolve_dirfd_path(newdirfd, dirpath, sizeof(dirpath)) < 0) {
-            pthread_mutex_unlock(&at_mutex);
-            return -1;
-        }
-        solcompat_snprintf(new_full, sizeof(new_full), "%s/%s", dirpath, newpath);
-    }
-
-    result = rename(old_full, new_full);
+    int error = errno;
     pthread_mutex_unlock(&at_mutex);
-
+    errno = error;
     return result;
+}
+
+int renameat(int oldfd, const char *oldpath, int newfd, const char *newpath)
+{
+    return two_paths(oldfd, oldpath, newfd, newpath, rename);
 }
 
 int
 unlinkat(int dirfd, const char *pathname, int flags)
 {
     int saved, result;
+
+    if (flags & ~AT_REMOVEDIR) {
+        errno = EINVAL;
+        return -1;
+    }
 
     saved = at_enter(dirfd, pathname);
     if (saved < 0)
@@ -236,22 +340,37 @@ unlinkat(int dirfd, const char *pathname, int flags)
     return result;
 }
 
-int
-fstatat(int dirfd, const char *pathname, struct stat *buf, int flags)
-{
-    int saved, result;
+#include "statat_internal.h"
 
+static int
+stat_large(const char *pathname, void *buf, int flags)
+{
+    return flags & AT_SYMLINK_NOFOLLOW ? lstat(pathname, buf) : stat(pathname, buf);
+}
+
+int
+solcompat_statat_with(int dirfd, const char *pathname, void *buf, int flags,
+                      solcompat_stat_fn query)
+{
+    int saved, result, error;
+    if (flags & ~AT_SYMLINK_NOFOLLOW) {
+        errno = EINVAL;
+        return -1;
+    }
     saved = at_enter(dirfd, pathname);
     if (saved < 0)
         return -1;
-
-    if (flags & AT_SYMLINK_NOFOLLOW)
-        result = lstat(pathname, buf);
-    else
-        result = stat(pathname, buf);
-
+    result = query(pathname, buf, flags);
+    error = errno;
     at_leave(saved);
+    errno = error;
     return result;
+}
+
+int
+fstatat(int dirfd, const char *pathname, struct stat *buf, int flags)
+{
+    return solcompat_statat_with(dirfd, pathname, buf, flags, stat_large);
 }
 
 int
@@ -259,6 +378,11 @@ fchownat(int dirfd, const char *pathname,
           uid_t owner, gid_t group, int flags)
 {
     int saved, result;
+
+    if (flags & ~AT_SYMLINK_NOFOLLOW) {
+        errno = EINVAL;
+        return -1;
+    }
 
     saved = at_enter(dirfd, pathname);
     if (saved < 0)
@@ -277,7 +401,16 @@ int
 fchmodat(int dirfd, const char *pathname, mode_t mode, int flags)
 {
     int saved, result;
-    (void)flags;  /* AT_SYMLINK_NOFOLLOW not possible with chmod on Solaris 7 */
+
+    if (flags & ~AT_SYMLINK_NOFOLLOW) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (flags & AT_SYMLINK_NOFOLLOW) {
+        /* Solaris 7 chmod follows links and cannot apply this constraint. */
+        errno = ENOTSUP;
+        return -1;
+    }
 
     saved = at_enter(dirfd, pathname);
     if (saved < 0)
@@ -320,52 +453,34 @@ symlinkat(const char *target, int newdirfd, const char *linkpath)
     return result;
 }
 
-int
-linkat(int olddirfd, const char *oldpath,
-       int newdirfd, const char *newpath, int flags)
+int linkat(int oldfd, const char *oldpath, int newfd, const char *newpath, int flags)
 {
-    char old_full[1024], new_full[1024];
-    int result;
-
-    (void)flags;
-
-    pthread_mutex_lock(&at_mutex);
-
-    /* Resolve old path */
-    if (oldpath[0] == '/' || IS_AT_FDCWD(olddirfd)) {
-        strlcpy(old_full, oldpath, sizeof(old_full));
-    } else {
-        char dirpath[1024];
-        if (resolve_dirfd_path(olddirfd, dirpath, sizeof(dirpath)) < 0) {
-            pthread_mutex_unlock(&at_mutex);
-            return -1;
-        }
-        solcompat_snprintf(old_full, sizeof(old_full), "%s/%s", dirpath, oldpath);
+    if (flags & ~AT_SYMLINK_FOLLOW) {
+        errno = EINVAL;
+        return -1;
     }
-
-    /* Resolve new path */
-    if (newpath[0] == '/' || IS_AT_FDCWD(newdirfd)) {
-        strlcpy(new_full, newpath, sizeof(new_full));
-    } else {
-        char dirpath[1024];
-        if (resolve_dirfd_path(newdirfd, dirpath, sizeof(dirpath)) < 0) {
-            pthread_mutex_unlock(&at_mutex);
-            return -1;
-        }
-        solcompat_snprintf(new_full, sizeof(new_full), "%s/%s", dirpath, newpath);
+    if (flags & AT_SYMLINK_FOLLOW) {
+        errno = ENOTSUP;
+        return -1;
     }
-
-    result = link(old_full, new_full);
-    pthread_mutex_unlock(&at_mutex);
-
-    return result;
+    return two_paths(oldfd, oldpath, newfd, newpath, link);
 }
 
 int
 faccessat(int dirfd, const char *pathname, int mode, int flags)
 {
     int saved, result;
-    (void)flags;  /* AT_EACCESS not supportable */
+    if (flags & ~(AT_EACCESS | AT_SYMLINK_NOFOLLOW)) {
+        errno = EINVAL;
+        return -1;
+    }
+    /* access() uses the real IDs and follows the final symlink. */
+    if ((flags & AT_SYMLINK_NOFOLLOW) ||
+        ((flags & AT_EACCESS) &&
+         (getuid() != geteuid() || getgid() != getegid()))) {
+        errno = ENOTSUP;
+        return -1;
+    }
 
     saved = at_enter(dirfd, pathname);
     if (saved < 0)

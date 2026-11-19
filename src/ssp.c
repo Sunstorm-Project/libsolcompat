@@ -32,13 +32,11 @@ void *__stack_chk_guard = 0;
  * read libsolcompat can hardcode the guard bytes and trivially bypass
  * -fstack-protector.
  *
- * This fallback mixes gethrtime (nanosecond wall clock), getpid,
- * time(NULL), and the address of a local variable (ASLR-ish heap
- * layout) into a 4-byte canary. Still NOT cryptographic — the goal
- * is per-process variation, not guessing resistance. A real SPARC
- * Solaris 7 box should run prngd (or ship SUNWski) and get
- * /dev/urandom-backed entropy above; this is the "fell through"
- * safety net.
+ * This fallback mixes gethrtime (high-resolution monotonic time), getpid,
+ * time(NULL), and a stack address into a 4-byte canary. This provides
+ * weak per-process variation, not cryptographic guessing resistance.
+ * SUNWski can provide the kernel random device. prngd provides a separate
+ * EGD socket; running it does not create /dev/urandom.
  */
 static void
 mix_weak_canary_bytes(unsigned char *out)
@@ -49,7 +47,7 @@ mix_weak_canary_bytes(unsigned char *out)
 
     hrt = gethrtime();
     mix = (unsigned long)hrt;
-    mix ^= ((unsigned long)hrt >> 32);
+    mix ^= (unsigned long)((unsigned long long)hrt >> 32);
     mix ^= (unsigned long)getpid() * 2654435761UL;    /* Knuth mul */
     mix ^= (unsigned long)time(NULL) * 16777619UL;    /* FNV prime */
     mix ^= (unsigned long)(uintptr_t)&local;
@@ -68,17 +66,14 @@ static void __attribute__((constructor))
 __stack_chk_guard_init(void)
 {
     int fd;
-    /* Try /dev/urandom first (if prngd is running) */
+    /* Try the kernel random device first, when available. */
     fd = open("/dev/urandom", O_RDONLY);
     if (fd >= 0) {
-        if (read(fd, &__stack_chk_guard, sizeof(__stack_chk_guard))
-            == (ssize_t)sizeof(__stack_chk_guard)) {
-            close(fd);
-            /* Ensure at least one byte is nonzero to catch string overflows */
-            if (__stack_chk_guard != 0)
-                return;
-        }
+        ssize_t got = read(fd, &__stack_chk_guard, sizeof(__stack_chk_guard));
         close(fd);
+        /* Zero or short reads use the fallback, after closing exactly once. */
+        if (got == (ssize_t)sizeof(__stack_chk_guard) && __stack_chk_guard != 0)
+            return;
     }
     /* Fallback: per-process weak canary. Better than the fixed
      * 0x00,0x00,'\n',0xff pattern (which was identical across every

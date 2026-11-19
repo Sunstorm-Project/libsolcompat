@@ -489,28 +489,28 @@ struct ifaddrs {
 int  getifaddrs(struct ifaddrs **ifap);
 void freeifaddrs(struct ifaddrs *ifa);
 
-/* --- if_nametoindex / if_indextoname (RFC 3493) --- */
-/*
- * Needed for IPv6 scope IDs and modern socket code.
- * Implementation uses SIOCGIFINDEX/SIOCGIFCONF ioctls.
- */
-unsigned int if_nametoindex(const char *ifname);
-char        *if_indextoname(unsigned int ifindex, char *ifname);
-
-/* IF_NAMESIZE — POSIX constant for max interface name length */
-#ifndef IF_NAMESIZE
-#define IF_NAMESIZE 16
-#endif
+#include "interfaces.h"
 #ifndef IFNAMSIZ
 #define IFNAMSIZ IF_NAMESIZE
 #endif
 
-/* --- SOCK_CLOEXEC / SOCK_NONBLOCK flags for accept4 --- */
+/* --- SOCK_CLOEXEC / SOCK_NONBLOCK creation flags --- */
 #ifndef SOCK_CLOEXEC
 #define SOCK_CLOEXEC  0x80000
 #endif
 #ifndef SOCK_NONBLOCK
 #define SOCK_NONBLOCK 0x800
+#endif
+
+/* Modern creation flags are emulated for rebuilt callers. Native Solaris
+ * socket/socketpair remain available by defining SOLCOMPAT_NATIVE_SOCKET. */
+int solcompat_socket(int domain, int type, int protocol);
+int solcompat_socketpair(int domain, int type, int protocol, int pair[2]);
+#ifndef SOLCOMPAT_NATIVE_SOCKET
+#undef socket
+#undef socketpair
+#define socket solcompat_socket
+#define socketpair solcompat_socketpair
 #endif
 
 /* --- accept4 --- */

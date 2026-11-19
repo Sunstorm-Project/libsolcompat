@@ -11,14 +11,33 @@
 #define SOLCOMPAT_SNPRINTF_H
 
 #include <stdarg.h>
+#include <stdio.h>
 #include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int solcompat_snprintf(char *str, size_t size, const char *fmt, ...);
-int solcompat_vsnprintf(char *str, size_t size, const char *fmt, va_list ap);
+
+/* All formatted-output entry points share the C99-compatible engine. */
+#ifndef SOLCOMPAT_PRINTF_FORMAT
+# if defined(__clang__)
+#  define SOLCOMPAT_PRINTF_FORMAT(fmt, args) __attribute__((format(printf, fmt, args)))
+# elif defined(__GNUC__)
+#  define SOLCOMPAT_PRINTF_FORMAT(fmt, args) __attribute__((format(gnu_printf, fmt, args)))
+# else
+#  define SOLCOMPAT_PRINTF_FORMAT(fmt, args)
+# endif
+#endif
+int solcompat_printf(const char *fmt, ...) SOLCOMPAT_PRINTF_FORMAT(1, 2);
+int solcompat_vprintf(const char *fmt, va_list ap) SOLCOMPAT_PRINTF_FORMAT(1, 0);
+int solcompat_fprintf(FILE *stream, const char *fmt, ...) SOLCOMPAT_PRINTF_FORMAT(2, 3);
+int solcompat_vfprintf(FILE *stream, const char *fmt, va_list ap) SOLCOMPAT_PRINTF_FORMAT(2, 0);
+int solcompat_sprintf(char *str, const char *fmt, ...) SOLCOMPAT_PRINTF_FORMAT(2, 3);
+int solcompat_vsprintf(char *str, const char *fmt, va_list ap) SOLCOMPAT_PRINTF_FORMAT(2, 0);
+
+int solcompat_snprintf(char *str, size_t size, const char *fmt, ...) SOLCOMPAT_PRINTF_FORMAT(3, 4);
+int solcompat_vsnprintf(char *str, size_t size, const char *fmt, va_list ap) SOLCOMPAT_PRINTF_FORMAT(3, 0);
 
 #ifdef __cplusplus
 }
@@ -37,6 +56,13 @@ int solcompat_vsnprintf(char *str, size_t size, const char *fmt, va_list ap);
 extern "C" int snprintf(char *str, size_t size, const char *fmt, ...);
 extern "C" int vsnprintf(char *str, size_t size, const char *fmt, va_list ap);
 #else
+
+#define printf solcompat_printf
+#define vprintf solcompat_vprintf
+#define fprintf solcompat_fprintf
+#define vfprintf solcompat_vfprintf
+#define sprintf solcompat_sprintf
+#define vsprintf solcompat_vsprintf
 #define snprintf  solcompat_snprintf
 #define vsnprintf solcompat_vsnprintf
 #endif

@@ -60,34 +60,38 @@ asprintf(char **strp, const char *fmt, ...)
 }
 
 int
-dprintf(int fd, const char *fmt, ...)
+vdprintf(int fd, const char *fmt, va_list ap)
 {
-    va_list ap;
     char *buf;
-    int len;
-    ssize_t written, total;
-
-    va_start(ap, fmt);
-    len = vasprintf(&buf, fmt, ap);
-    va_end(ap);
-
+    int len = vasprintf(&buf, fmt, ap);
+    ssize_t total = 0;
     if (len < 0)
         return -1;
-
-    total = 0;
     while (total < len) {
-        written = write(fd, buf + total, (size_t)(len - total));
-        if (written < 0) {
-            if (errno == EINTR)
+        ssize_t written = write(fd, buf + total, (size_t)(len - total));
+        if (written <= 0) {
+            int error = written == 0 ? EIO : errno;
+            if (written < 0 && error == EINTR)
                 continue;
             free(buf);
+            errno = error;
             return -1;
         }
         total += written;
     }
-
     free(buf);
     return len;
+}
+
+int
+dprintf(int fd, const char *fmt, ...)
+{
+    va_list ap;
+    int result;
+    va_start(ap, fmt);
+    result = vdprintf(fd, fmt, ap);
+    va_end(ap);
+    return result;
 }
 
 #define GETDELIM_INITIAL_SIZE 128

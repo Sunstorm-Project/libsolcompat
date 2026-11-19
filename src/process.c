@@ -7,6 +7,7 @@
 #include <stdarg.h>   /* __gnuc_va_list used by Solaris 7 stdio.h prototypes */
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -140,19 +141,37 @@ getprogname(void)
 int
 pipe2(int pipefd[2], int flags)
 {
-    if (pipe(pipefd) < 0)
+    int ends[2], i, error;
+
+    if (flags & ~(O_NONBLOCK | O_CLOEXEC)) {
+        errno = EINVAL;
         return -1;
-
-    if (flags & O_NONBLOCK) {
-        fcntl(pipefd[0], F_SETFL, fcntl(pipefd[0], F_GETFL) | O_NONBLOCK);
-        fcntl(pipefd[1], F_SETFL, fcntl(pipefd[1], F_GETFL) | O_NONBLOCK);
     }
-    if (flags & O_CLOEXEC) {
-        fcntl(pipefd[0], F_SETFD, FD_CLOEXEC);
-        fcntl(pipefd[1], F_SETFD, FD_CLOEXEC);
+    if (!pipefd) {
+        errno = EFAULT;
+        return -1;
     }
-
+    if (pipe(ends) < 0)
+        return -1;
+    for (i = 0; i < 2; ++i) {
+        if (flags & O_NONBLOCK) {
+            int status = fcntl(ends[i], F_GETFL);
+            if (status < 0 || fcntl(ends[i], F_SETFL, status | O_NONBLOCK) < 0)
+                goto fail;
+        }
+        if ((flags & O_CLOEXEC) && fcntl(ends[i], F_SETFD, FD_CLOEXEC) < 0)
+            goto fail;
+    }
+    pipefd[0] = ends[0];
+    pipefd[1] = ends[1];
     return 0;
+
+fail:
+    error = errno;
+    close(ends[0]);
+    close(ends[1]);
+    errno = error;
+    return -1;
 }
 
 int
@@ -160,7 +179,7 @@ dup3(int oldfd, int newfd, int flags)
 {
     int ret;
 
-    if (oldfd == newfd) {
+    if (oldfd == newfd || (flags & ~O_CLOEXEC)) {
         errno = EINVAL;
         return -1;
     }
@@ -169,8 +188,12 @@ dup3(int oldfd, int newfd, int flags)
     if (ret < 0)
         return -1;
 
-    if (flags & O_CLOEXEC)
-        fcntl(newfd, F_SETFD, FD_CLOEXEC);
+    if ((flags & O_CLOEXEC) && fcntl(newfd, F_SETFD, FD_CLOEXEC) < 0) {
+        int error = errno;
+        close(newfd);
+        errno = error;
+        return -1;
+    }
 
     return ret;
 }
@@ -191,9 +214,8 @@ mkostemp(char *tmpl, int flags)
 }
 
 /*
- * Minimal posix_spawn implementation using fork/exec.
- * This doesn't handle all file_actions or spawn attributes,
- * but covers the common case.
+ * fork/exec spawn with ordered file actions and supported attributes.
+ * Unsupported attribute flags fail explicitly before creating a child.
  */
 
 /* undef posix_spawn macros if present, so we can define the actual functions */
@@ -214,6 +236,15 @@ posix_spawnattr_destroy(posix_spawnattr_t *attr)
     return 0;
 }
 
+/* Private representation; the public file-actions structure is unchanged. */
+enum spawn_action_kind { SPAWN_OPEN, SPAWN_CLOSE, SPAWN_DUP2, SPAWN_CHDIR, SPAWN_FCHDIR };
+struct spawn_action {
+    enum spawn_action_kind kind;
+    int fd, newfd, oflag;
+    mode_t mode;
+    char *path;
+};
+
 int
 posix_spawn_file_actions_init(posix_spawn_file_actions_t *fact)
 {
@@ -224,8 +255,11 @@ posix_spawn_file_actions_init(posix_spawn_file_actions_t *fact)
 int
 posix_spawn_file_actions_destroy(posix_spawn_file_actions_t *fact)
 {
-    if (fact->__actions)
-        free(fact->__actions);
+    int i;
+    struct spawn_action *actions = fact->__actions;
+    for (i = 0; i < fact->__used; ++i)
+        free(actions[i].path);
+    free(actions);
     memset(fact, 0, sizeof(*fact));
     return 0;
 }
@@ -286,183 +320,388 @@ posix_spawnattr_getpgroup(const posix_spawnattr_t *attr, pid_t *pgroup)
     return 0;
 }
 
+static int
+spawn_add_action(posix_spawn_file_actions_t *fact, struct spawn_action action)
+{
+    struct spawn_action *actions;
+    int allocated;
+    if (fact->__used == fact->__allocated) {
+        if (fact->__allocated > INT_MAX / 2 / (int)sizeof(*actions))
+            return ENOMEM;
+        allocated = fact->__allocated ? fact->__allocated * 2 : 8;
+        actions = realloc(fact->__actions, (size_t)allocated * sizeof(*actions));
+        if (!actions)
+            return ENOMEM;
+        fact->__actions = actions;
+        fact->__allocated = allocated;
+    }
+    actions = fact->__actions;
+    actions[fact->__used++] = action;
+    return 0;
+}
+
 int
 posix_spawn_file_actions_addopen(posix_spawn_file_actions_t *fact,
     int fildes, const char *path, int oflag, mode_t mode)
 {
-    (void)fact; (void)fildes; (void)path; (void)oflag; (void)mode;
-    /* Stub — not fully implemented but satisfies link-time dependency */
-    return 0;
+    struct spawn_action action;
+    int error;
+    if (fildes < 0)
+        return EBADF;
+    if (!path)
+        return EINVAL;
+    memset(&action, 0, sizeof(action));
+    action.kind = SPAWN_OPEN;
+    action.fd = fildes;
+    action.oflag = oflag;
+    action.mode = mode;
+    action.path = strdup(path);
+    if (!action.path)
+        return ENOMEM;
+    error = spawn_add_action(fact, action);
+    if (error)
+        free(action.path);
+    return error;
+}
+
+int
+posix_spawn_file_actions_addchdir(posix_spawn_file_actions_t *fact, const char *path)
+{
+    struct spawn_action action = { .kind = SPAWN_CHDIR, .fd = -1 };
+    int error;
+
+    if (!path)
+        return EINVAL;
+    action.path = strdup(path);
+    if (!action.path)
+        return ENOMEM;
+    error = spawn_add_action(fact, action);
+    if (error)
+        free(action.path);
+    return error;
+}
+
+int
+posix_spawn_file_actions_addfchdir(posix_spawn_file_actions_t *fact, int fd)
+{
+    struct spawn_action action = { .kind = SPAWN_FCHDIR, .fd = fd };
+
+    if (fd < 0)
+        return EBADF;
+    return spawn_add_action(fact, action);
 }
 
 int
 posix_spawn_file_actions_addclose(posix_spawn_file_actions_t *fact, int fildes)
 {
-    (void)fact; (void)fildes;
-    return 0;
+    struct spawn_action action;
+    if (fildes < 0)
+        return EBADF;
+    memset(&action, 0, sizeof(action));
+    action.kind = SPAWN_CLOSE;
+    action.fd = fildes;
+    return spawn_add_action(fact, action);
 }
 
 int
 posix_spawn_file_actions_adddup2(posix_spawn_file_actions_t *fact,
     int fildes, int newfildes)
 {
-    (void)fact; (void)fildes; (void)newfildes;
+    struct spawn_action action;
+    if (fildes < 0 || newfildes < 0)
+        return EBADF;
+    memset(&action, 0, sizeof(action));
+    action.kind = SPAWN_DUP2;
+    action.fd = fildes;
+    action.newfd = newfildes;
+    return spawn_add_action(fact, action);
+}
+
+static int
+spawn_attributes(const posix_spawnattr_t *attr)
+{
+    int sig;
+    struct sigaction sa;
+    if (!attr)
+        return 0;
+    if (attr->__flags & POSIX_SPAWN_RESETIDS) {
+        if (setegid(getgid()) < 0 || seteuid(getuid()) < 0)
+            return errno;
+    }
+    if ((attr->__flags & POSIX_SPAWN_SETPGROUP) &&
+        setpgid(0, attr->__pgrp) < 0)
+        return errno;
+    if (attr->__flags & POSIX_SPAWN_SETSIGDEF) {
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = SIG_DFL;
+        sigemptyset(&sa.sa_mask);
+        for (sig = 1; sig < NSIG; ++sig) {
+            if (sig == SIGKILL || sig == SIGSTOP || sigismember(&attr->__sd, sig) != 1)
+                continue;
+            if (sigaction(sig, &sa, NULL) < 0) {
+                /* Solaris libthread reserves these even in a forked child. */
+                if (errno == EINVAL &&
+                    (sig == SIGWAITING || sig == SIGLWP || sig == SIGCANCEL))
+                    continue;
+                return errno;
+            }
+        }
+    }
+    if (attr->__flags & POSIX_SPAWN_SETSIGMASK) {
+        sigset_t mask;
+        if (sigprocmask(SIG_SETMASK, &attr->__ss, NULL) < 0 ||
+            sigprocmask(SIG_BLOCK, NULL, &mask) < 0)
+            return errno;
+        /* Solaris libthread maintains a user-level mask. The new image
+         * inherits the calling LWP's kernel mask across exec. */
+        if (syscall(SYS_sigprocmask, SIG_SETMASK, &mask, NULL) < 0)
+            return errno;
+    }
+    return 0;
+}
+
+static int
+spawn_actions(const posix_spawn_file_actions_t *fact)
+{
+    int i, fd, flags;
+    const struct spawn_action *actions;
+    if (!fact)
+        return 0;
+    actions = fact->__actions;
+    for (i = 0; i < fact->__used; ++i) {
+        const struct spawn_action *a = &actions[i];
+        switch (a->kind) {
+        case SPAWN_CHDIR:
+            if (chdir(a->path) < 0)
+                return errno;
+            break;
+        case SPAWN_FCHDIR:
+            if (fchdir(a->fd) < 0)
+                return errno;
+            break;
+        case SPAWN_CLOSE:
+            if (close(a->fd) < 0)
+                return errno;
+            break;
+        case SPAWN_DUP2:
+            if (a->fd == a->newfd) {
+                flags = fcntl(a->fd, F_GETFD);
+                if (flags < 0 || fcntl(a->fd, F_SETFD, flags & ~FD_CLOEXEC) < 0)
+                    return errno;
+            } else if (dup2(a->fd, a->newfd) < 0)
+                return errno;
+            break;
+        case SPAWN_OPEN:
+            /* POSIX open action closes the destination before opening. */
+            close(a->fd);
+            fd = open(a->path, a->oflag, a->mode);
+            if (fd < 0)
+                return errno;
+            if (fd != a->fd) {
+                if (dup2(fd, a->fd) < 0) {
+                    int error = errno;
+                    close(fd);
+                    return error;
+                }
+                close(fd);
+            }
+            break;
+        }
+    }
+    return 0;
+}
+
+/* GNU execvpe invokes the shell for executable text without a shebang.
+ * The POSIX spawn path leaves ENOEXEC for its caller. */
+static void
+exec_candidate(const char *path, char *const argv[], char *const envp[], int shell_fallback)
+{
+    size_t n = 0, tail;
+    char **args;
+    int error;
+
+    execve(path, argv, envp);
+    if (!shell_fallback || errno != ENOEXEC)
+        return;
+    while (argv[n])
+        ++n;
+    tail = n ? n - 1 : 0;
+    if (tail > (size_t)-1 / sizeof(*args) - 3) {
+        errno = E2BIG;
+        return;
+    }
+    args = malloc((tail + 3) * sizeof(*args));
+    if (!args)
+        return;
+    args[0] = "/bin/sh";
+    args[1] = (char *)path;
+    if (tail)
+        memcpy(args + 2, argv + 1, tail * sizeof(*args));
+    args[tail + 2] = NULL;
+    execve(args[0], args, envp);
+    error = errno;
+    free(args);
+    errno = error;
+}
+
+static void
+search_exec(const char *file, const char *path, char *const argv[],
+    char *const envp[], int shell_fallback)
+{
+    const char *start, *end;
+    char candidate[PATH_MAX];
+    size_t dirlen, filelen = strlen(file);
+    int access_error = 0;
+    if (!filelen) {
+        errno = ENOENT;
+        return;
+    }
+    if (strchr(file, '/')) {
+        exec_candidate(file, argv, envp, shell_fallback);
+        return;
+    }
+    if (!path)
+        path = "/usr/bin:/bin";
+    start = path;
+    for (;;) {
+        end = strchr(start, ':');
+        dirlen = end ? (size_t)(end-start) : strlen(start);
+        if (dirlen + (dirlen ? 1 : 0) + filelen + 1 <= sizeof(candidate)) {
+            if (dirlen) {
+                memcpy(candidate, start, dirlen);
+                candidate[dirlen++] = '/';
+            }
+            memcpy(candidate+dirlen, file, filelen+1);
+            exec_candidate(candidate, argv, envp, shell_fallback);
+            if (errno == EACCES)
+                access_error = EACCES;
+            else if (errno != ENOENT && errno != ENOTDIR)
+                return;
+        }
+        if (!end)
+            break;
+        start = end+1;
+    }
+    errno = access_error ? access_error : ENOENT;
+}
+
+static int
+spawn_common(pid_t *pid, const char *path,
+    const posix_spawn_file_actions_t *fact, const posix_spawnattr_t *attr,
+    char *const argv[], char *const envp[], int search)
+{
+    int pipefd[2], error, minimum = 3, fd, status, saved_errno = errno;
+    int i;
+    size_t received;
+    ssize_t count;
+    pid_t child;
+    const struct spawn_action *actions = fact ? fact->__actions : NULL;
+    const char *caller_path = search ? getenv("PATH") : NULL;
+    const short supported = POSIX_SPAWN_RESETIDS | POSIX_SPAWN_SETPGROUP |
+        POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK;
+    if (attr && (attr->__flags & ~supported))
+        return ENOTSUP;
+    if (pipe(pipefd) < 0)
+        return errno;
+    /* Reserve an unused descriptor not named by any action.  A valid action
+     * may name OPEN_MAX-1: placing the channel above the maximum is invalid. */
+    for (;;) {
+        fd = fcntl(pipefd[1], F_DUPFD, minimum);
+        if (fd < 0) {
+            error = errno;
+            close(pipefd[0]); close(pipefd[1]);
+            return error;
+        }
+        for (i = 0; fact && i < fact->__used; ++i)
+            if (fd == actions[i].fd ||
+                (actions[i].kind == SPAWN_DUP2 && fd == actions[i].newfd))
+                break;
+        if (!fact || i == fact->__used)
+            break;
+        close(fd);
+        if (fd == INT_MAX) {
+            close(pipefd[0]); close(pipefd[1]);
+            return EMFILE;
+        }
+        minimum = fd + 1;
+    }
+    close(pipefd[1]);
+    pipefd[1] = fd;
+    if (fcntl(fd, F_SETFD, FD_CLOEXEC) < 0) {
+        error = errno;
+        close(pipefd[0]); close(fd);
+        return error;
+    }
+    child = fork();
+    if (child < 0) {
+        error = errno;
+        close(pipefd[0]); close(fd);
+        return error;
+    }
+    if (child == 0) {
+        close(pipefd[0]);
+        error = spawn_attributes(attr);
+        if (!error)
+            error = spawn_actions(fact);
+        if (!error) {
+            if (search) {
+                search_exec(path, caller_path, argv, envp, 0);
+            } else
+                execve(path, argv, envp);
+            error = errno;
+        }
+        received = 0;
+        while (received < sizeof(error)) {
+            count = write(fd, (char *)&error + received, sizeof(error) - received);
+            if (count > 0) received += (size_t)count;
+            else if (count < 0 && errno == EINTR) continue;
+            else break;
+        }
+        _exit(127);
+    }
+    close(fd);
+    received = 0;
+    error = 0;
+    while (received < sizeof(error)) {
+        count = read(pipefd[0], (char *)&error + received, sizeof(error) - received);
+        if (count > 0) received += (size_t)count;
+        else if (count < 0 && errno == EINTR) continue;
+        else if (count < 0) { error = errno; received = sizeof(error); break; }
+        else break;
+    }
+    close(pipefd[0]);
+    if (received) {
+        while (waitpid(child, &status, 0) < 0 && errno == EINTR) ;
+        errno = saved_errno;
+        return received == sizeof(error) ? error : EIO;
+    }
+    if (pid)
+        *pid = child;
+    errno = saved_errno;
     return 0;
 }
 
 int
 posix_spawn(pid_t *pid, const char *path,
-            const posix_spawn_file_actions_t *file_actions,
-            const posix_spawnattr_t *attrp,
-            char *const argv[], char *const envp[])
+    const posix_spawn_file_actions_t *fact, const posix_spawnattr_t *attr,
+    char *const argv[], char *const envp[])
 {
-    pid_t child;
-
-    (void)file_actions;  /* Not fully implemented */
-    (void)attrp;
-
-    child = fork();
-    if (child < 0)
-        return errno;
-
-    if (child == 0) {
-        /* Child */
-        execve(path, argv, envp);
-        _exit(127);
-    }
-
-    /* Parent */
-    if (pid)
-        *pid = child;
-    return 0;
+    return spawn_common(pid, path, fact, attr, argv, envp, 0);
 }
 
-/* -----------------------------------------------------------------------
- * execvpe — execute a program, searching PATH from the provided environment.
- *
- * Solaris 7 has execve() (direct path, explicit environment) and execvp()
- * (PATH search, inherits environment) but not execvpe() (PATH search with
- * an explicit environment).  GNU tools increasingly depend on execvpe() to
- * spawn children in a clean, known environment.
- *
- * Algorithm:
- *   1. If filename contains a '/', execute directly via execve() — no search.
- *   2. Otherwise, find PATH in envp (the child's environment, not the
- *      caller's), falling back to the caller's PATH and then the default.
- *   3. Walk each colon-separated directory component, build a candidate
- *      path, and attempt execve().  EACCES is remembered but the search
- *      continues; any other non-ENOENT/ENOTDIR error terminates the loop.
- * ----------------------------------------------------------------------- */
 int
 execvpe(const char *filename, char *const argv[], char *const envp[])
 {
-    const char *search_path;
-    const char *path_env_value;
-    const char *component_start;
-    const char *component_end;
-    size_t      filename_length;
-    size_t      dir_length;
-    char        candidate_path[PATH_MAX];
-    int         saved_errno;
-    int         env_index;
-
-    /* If filename contains a slash, execute directly without PATH search */
-    if (strchr(filename, '/') != NULL)
-        return execve(filename, argv, envp);
-
-    filename_length = strlen(filename);
-
-    /* Search for PATH in the provided environment (envp), not the caller's */
-    path_env_value = NULL;
-    if (envp != NULL) {
-        for (env_index = 0; envp[env_index] != NULL; env_index++) {
-            if (strncmp(envp[env_index], "PATH=", 5) == 0) {
-                path_env_value = envp[env_index] + 5;
-                break;
-            }
-        }
-    }
-
-    /* Fall back to caller's PATH, then a sensible built-in default */
-    if (path_env_value != NULL)
-        search_path = path_env_value;
-    else
-        search_path = getenv("PATH");
-
-    if (search_path == NULL || search_path[0] == '\0')
-        search_path = "/usr/bin:/bin";
-
-    saved_errno     = 0;
-    component_start = search_path;
-
-    while (component_start != NULL) {
-        component_end = strchr(component_start, ':');
-        dir_length    = (component_end != NULL)
-                        ? (size_t)(component_end - component_start)
-                        : strlen(component_start);
-
-        if (dir_length == 0) {
-            /* Empty component means the current working directory */
-            if (filename_length + 3 <= sizeof(candidate_path)) {
-                candidate_path[0] = '.';
-                candidate_path[1] = '/';
-                memcpy(candidate_path + 2, filename, filename_length + 1);
-                execve(candidate_path, argv, envp);
-                if (errno == EACCES)
-                    saved_errno = EACCES;
-                else if (errno != ENOENT && errno != ENOTDIR)
-                    break;
-            }
-        } else if (dir_length + 1 + filename_length + 1 <= sizeof(candidate_path)) {
-            memcpy(candidate_path, component_start, dir_length);
-            candidate_path[dir_length] = '/';
-            memcpy(candidate_path + dir_length + 1, filename, filename_length + 1);
-            execve(candidate_path, argv, envp);
-            if (errno == EACCES)
-                saved_errno = EACCES;
-            else if (errno != ENOENT && errno != ENOTDIR)
-                break;
-        }
-
-        component_start = (component_end != NULL) ? component_end + 1 : NULL;
-    }
-
-    /* Report EACCES if that was the only kind of failure encountered */
-    if (saved_errno != 0)
-        errno = saved_errno;
-
+    search_exec(filename, getenv("PATH"), argv, envp, 1);
     return -1;
 }
 
 int
 posix_spawnp(pid_t *pid, const char *file,
-             const posix_spawn_file_actions_t *file_actions,
-             const posix_spawnattr_t *attrp,
-             char *const argv[], char *const envp[])
+    const posix_spawn_file_actions_t *fact, const posix_spawnattr_t *attr,
+    char *const argv[], char *const envp[])
 {
-    pid_t child;
-
-    (void)file_actions;
-    (void)attrp;
-
-    child = fork();
-    if (child < 0)
-        return errno;
-
-    if (child == 0) {
-        /* Child — use PATH lookup.  environ is ignored in execvp,
-         * but we set it before execvp */
-        if (envp) {
-            extern char **environ;
-            environ = (char **)envp;
-        }
-        execvp(file, argv);
-        _exit(127);
-    }
-
-    if (pid)
-        *pid = child;
-    return 0;
+    return spawn_common(pid, file, fact, attr, argv, envp, 1);
 }
 
 /*
@@ -558,42 +797,50 @@ int pthread_spin_lock(pthread_spinlock_t *lock)    { return pthread_mutex_lock(&
 int pthread_spin_trylock(pthread_spinlock_t *lock) { return pthread_mutex_trylock(&lock->_m); }
 int pthread_spin_unlock(pthread_spinlock_t *lock)  { return pthread_mutex_unlock(&lock->_m); }
 
-/* ==================================================================
- * pthread_rwlock_timed{rd,wr}lock — POSIX 2008 timed rwlock variants.
- * Solaris 7 has pthread_rwlock_{rd,wr}lock (blocking) and _try* (non-
- * blocking). We emulate the timed versions via a try-then-sleep loop
- * with 10ms polling granularity until the abs_timeout is reached.
- * ================================================================== */
+/* Timed locks are not cancellation points. Use the kernel poll directly
+ * for a short sleep and retry interrupted waits against CLOCK_REALTIME. */
+static int timed_lock_wait(const struct timespec *deadline)
+{
+    struct timespec now;
+    long long remaining;
+    int delay;
+    if (!deadline || deadline->tv_nsec < 0 || deadline->tv_nsec >= 1000000000L)
+        return EINVAL;
+    if (clock_gettime(CLOCK_REALTIME, &now) < 0)
+        return errno;
+    remaining = ((long long)deadline->tv_sec - now.tv_sec) * 1000000000LL +
+                deadline->tv_nsec - now.tv_nsec;
+    if (remaining <= 0)
+        return ETIMEDOUT;
+    delay = remaining >= 10000000 ? 10 : (int)((remaining + 999999) / 1000000);
+    if (syscall(SYS_poll, NULL, 0, delay) < 0 && errno != EINTR)
+        return errno;
+    return 0;
+}
+
+int pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *deadline)
+{
+    int rc;
+    while ((rc = pthread_mutex_trylock(mutex)) == EBUSY) {
+        rc = timed_lock_wait(deadline);
+        if (rc)
+            break;
+    }
+    return rc;
+}
 
 static int
 rwlock_timed_common(pthread_rwlock_t *rwlock,
-                    const struct timespec *abs_timeout,
+                    const struct timespec *deadline,
                     int (*try_lock)(pthread_rwlock_t *))
 {
-    int rv;
-    struct timespec now;
-    const long poll_ns = 10L * 1000 * 1000;  /* 10ms */
-
-    if (abs_timeout == NULL)
-        return EINVAL;
-
-    for (;;) {
-        rv = try_lock(rwlock);
-        if (rv != EBUSY)
-            return rv;
-        if (clock_gettime(CLOCK_REALTIME, &now) != 0)
-            return errno;
-        if (now.tv_sec > abs_timeout->tv_sec ||
-            (now.tv_sec == abs_timeout->tv_sec && now.tv_nsec >= abs_timeout->tv_nsec))
-            return ETIMEDOUT;
-        /* Use poll() for the 10ms wait instead of nanosleep() so the
-           object file doesn't carry an unresolved nanosleep@@SUNW_0.7
-           reference that requires -lrt at final link. poll() lives in
-           Solaris 7 libc; millisecond precision is sufficient here. */
-        {
-            poll(NULL, 0, (int)(poll_ns / 1000000L));
-        }
+    int rc;
+    while ((rc = try_lock(rwlock)) == EBUSY) {
+        rc = timed_lock_wait(deadline);
+        if (rc)
+            break;
     }
+    return rc;
 }
 
 int
@@ -610,15 +857,16 @@ pthread_rwlock_timedwrlock(pthread_rwlock_t *rwlock, const struct timespec *abs_
 
 /* ==================================================================
  * Robust-mutex stubs — libsolcompat has no real robust mutex support.
- * We accept attr-level configuration but silently map to stalled
- * (default) behavior. Matches gnulib's fallback expectation.
+ * Only the default stalled mode is available on Solaris 7.
  * ================================================================== */
 
 int
 pthread_mutexattr_setrobust(pthread_mutexattr_t *attr, int robustness)
 {
     (void)attr;
-    if (robustness != PTHREAD_MUTEX_STALLED && robustness != PTHREAD_MUTEX_ROBUST)
+    if (robustness == PTHREAD_MUTEX_ROBUST)
+        return ENOTSUP;
+    if (robustness != PTHREAD_MUTEX_STALLED)
         return EINVAL;
     return 0;
 }
@@ -658,28 +906,6 @@ copy_file_range(int fd_in, off_t *off_in,
     (void)len; (void)flags;
     errno = ENOSYS;
     return -1;
-}
-
-/* ==================================================================
- * posix_spawn_file_actions_addchdir / _addfchdir — POSIX 2018. Stubs
- * returning ENOSYS; gnulib's execute.c and other callers fall back to
- * fork+chdir+exec when unavailable. A real implementation would need
- * to extend the __actions list format with a chdir op; defer until a
- * consumer actually breaks on the fallback.
- * ================================================================== */
-
-int
-posix_spawn_file_actions_addchdir(posix_spawn_file_actions_t *fact, const char *path)
-{
-    (void)fact; (void)path;
-    return ENOSYS;
-}
-
-int
-posix_spawn_file_actions_addfchdir(posix_spawn_file_actions_t *fact, int fildes)
-{
-    (void)fact; (void)fildes;
-    return ENOSYS;
 }
 
 /* ==================================================================

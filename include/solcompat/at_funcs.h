@@ -35,7 +35,7 @@ extern "C" {
 #define AT_REMOVEDIR         0x200
 #endif
 #ifndef AT_EACCESS
-#define AT_EACCESS           0x200
+#define AT_EACCESS           0x0010
 #endif
 #ifndef AT_SYMLINK_FOLLOW
 #define AT_SYMLINK_FOLLOW    0x400
@@ -44,12 +44,18 @@ extern "C" {
 int openat(int dirfd, const char *pathname, int flags, ...);
 
 int mkdirat(int dirfd, const char *pathname, mode_t mode);
+int mkfifoat(int dirfd, const char *pathname, mode_t mode);
+int mknodat(int dirfd, const char *pathname, mode_t mode, dev_t device);
 
 int renameat(int olddirfd, const char *oldpath,
              int newdirfd, const char *newpath);
 
 int unlinkat(int dirfd, const char *pathname, int flags);
 
+/* The original bare symbol uses the large-file layout. */
+#if defined(__sun) && !defined(_LP64) && (!defined(_FILE_OFFSET_BITS) || _FILE_OFFSET_BITS != 64)
+#define fstatat solcompat_fstatat32
+#endif
 int fstatat(int dirfd, const char *pathname,
             struct stat *buf, int flags);
 

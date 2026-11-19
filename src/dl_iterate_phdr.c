@@ -87,7 +87,10 @@ dl_iterate_phdr(int (*callback)(struct dl_phdr_info *, size_t, void *),
             continue;
 
         /* Populate the dl_phdr_info structure */
-        phdr_info.dlpi_addr = current_map->l_addr;
+        /* Solaris reports the mapped ELF address for ET_EXEC as well.
+         * GNU dlpi_addr is the load bias: ET_EXEC p_vaddr values already
+         * contain their preferred addresses and must not be added twice. */
+        phdr_info.dlpi_addr = elf_header->e_type == ET_EXEC ? 0 : current_map->l_addr;
         phdr_info.dlpi_name = current_map->l_name ? current_map->l_name : "";
         phdr_info.dlpi_phdr = (const Elf32_Phdr *)
             (current_map->l_addr + elf_header->e_phoff);

@@ -21,7 +21,10 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
-#include <utime.h>
+#include <stdint.h>
+#include <limits.h>
+#include <sys/syscall.h>
+#include "dirfd_internal.h"
 
 /* Forward declarations for our own functions */
 extern int solcompat_snprintf(char *, size_t, const char *, ...);
@@ -36,149 +39,101 @@ extern size_t strlcpy(char *, const char *, size_t);
 #ifndef AT_FDCWD
 #define AT_FDCWD (-3041965)
 #endif
+#ifndef AT_SYMLINK_NOFOLLOW
+#define AT_SYMLINK_NOFOLLOW 0x100
+#endif
 #define AT_FDCWD_LINUX (-100)
 #define IS_AT_FDCWD(fd) ((fd) == AT_FDCWD || (fd) == AT_FDCWD_LINUX)
 
-int
-utimes(const char *path, const struct timeval tv[2])
+int utimes(const char *path, const struct timeval tv[2])
 {
-    if (tv == NULL) {
-        /* Set to current time */
-        return utime(path, NULL);
-    } else {
-        struct utimbuf ut;
-        ut.actime = tv[0].tv_sec;
-        ut.modtime = tv[1].tv_sec;
-        return utime(path, &ut);
-    }
+    /* Keep the historical libsolcompat symbol while using the Solaris 7
+     * syscall, which accepts microseconds and validates the timeval. */
+    return syscall(SYS_utimes, path, tv);
 }
 
-int
-futimens(int fd, const struct timespec times[2])
+static int valid_times(const struct timespec times[2])
 {
-    /*
-     * Solaris 7 has no futimens or futimes.
-     *
-     * Strategy: try multiple approaches to set timestamps via fd.
-     *
-     * 1. Try utime() directly on /proc/self/fd/N path (Solaris 7 has
-     *    /proc/self/fd/ entries but they are NOT symlinks — readlink
-     *    fails with EINVAL.  However, utime() on the /proc path may
-     *    still work because the kernel follows the fd to the inode.)
-     *
-     * 2. If that fails, try /proc/<pid>/fd/N (older Solaris style).
-     *
-     * 3. If nothing works, silently succeed — setting timestamps is
-     *    non-critical for most callers (touch, cp, tar) and the file
-     *    has already been created/modified with the right content.
-     */
-    char procpath[64];
-    int result;
-
-    /* UTIME_NOW / UTIME_OMIT handling */
-    struct utimbuf ut;
-    struct utimbuf *ut_ptr = NULL;
-
-    if (times != NULL) {
-        struct stat st;
-        time_t now_time = time(NULL);
-
-        if (times[0].tv_nsec == UTIME_OMIT || times[1].tv_nsec == UTIME_OMIT) {
-            if (fstat(fd, &st) < 0)
-                return -1;
+    if (times)
+        for (int i = 0; i < 2; ++i) {
+            long ns = times[i].tv_nsec;
+            if (ns != UTIME_NOW && ns != UTIME_OMIT && (ns < 0 || ns >= 1000000000L)) {
+                errno = EINVAL;
+                return 0;
+            }
         }
+    return 1;
+}
 
-        ut.actime = (times[0].tv_nsec == UTIME_NOW) ? now_time :
-                    (times[0].tv_nsec == UTIME_OMIT) ? st.st_atime :
-                    times[0].tv_sec;
-        ut.modtime = (times[1].tv_nsec == UTIME_NOW) ? now_time :
-                     (times[1].tv_nsec == UTIME_OMIT) ? st.st_mtime :
-                     times[1].tv_sec;
-        ut_ptr = &ut;
+static int set_times(const char *path, const struct timespec times[2], const struct stat *original)
+{
+    struct timeval tv[2], now;
+    struct stat st;
+    if (!times || (times[0].tv_nsec == UTIME_NOW && times[1].tv_nsec == UTIME_NOW))
+        return utimes(path, NULL);
+    if (times[0].tv_nsec == UTIME_OMIT && times[1].tv_nsec == UTIME_OMIT)
+        return 0;
+    if (!original && (times[0].tv_nsec == UTIME_OMIT || times[1].tv_nsec == UTIME_OMIT)) {
+        if (stat(path, &st) < 0)
+            return -1;
+        original = &st;
     }
+    if ((times[0].tv_nsec == UTIME_NOW || times[1].tv_nsec == UTIME_NOW) &&
+        gettimeofday(&now, NULL) < 0)
+        return -1;
+    for (int i = 0; i < 2; ++i) {
+        if (times[i].tv_nsec == UTIME_NOW) {
+            tv[i] = now;
+        } else if (times[i].tv_nsec == UTIME_OMIT) {
+            tv[i].tv_sec = i ? original->st_mtim.tv_sec : original->st_atim.tv_sec;
+            tv[i].tv_usec = (i ? original->st_mtim.tv_nsec : original->st_atim.tv_nsec) / 1000;
+        } else {
+            tv[i].tv_sec = times[i].tv_sec;
+            tv[i].tv_usec = times[i].tv_nsec / 1000;
+        }
+    }
+    return utimes(path, tv);
+}
 
-    /* Try /proc/self/fd/N path directly */
-    solcompat_snprintf(procpath, sizeof(procpath), "/proc/self/fd/%d", fd);
-    result = utime(procpath, ut_ptr);
-    if (result == 0)
+int futimens(int fd, const struct timespec times[2])
+{
+    struct stat st;
+    char path[64];
+    if (fstat(fd, &st) < 0 || !valid_times(times))
+        return -1;
+    solcompat_snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);
+    if (set_times(path, times, &st) == 0)
         return 0;
-
-    /* Try /proc/<pid>/fd/N */
-    solcompat_snprintf(procpath, sizeof(procpath), "/proc/%d/fd/%d",
-                       (int)getpid(), fd);
-    result = utime(procpath, ut_ptr);
-    if (result == 0)
+    solcompat_snprintf(path, sizeof(path), "/proc/%d/fd/%d", (int)getpid(), fd);
+    if (set_times(path, times, &st) == 0)
         return 0;
-
-    /* Both /proc paths failed — return -1 + ENOTSUP so callers can
-     * react. Returning 0 silently was a correctness bug: make, tar,
-     * cp, rsync, and gnulib's utimecmp use futimens to preserve or
-     * update mtime. A silent "success" leaves the kernel mtime
-     * unchanged, and subsequent `make` runs skip rebuilding a file
-     * that was supposedly touched. If a specific caller wants to
-     * ignore timestamp failure, that's the caller's responsibility. */
-    errno = ENOTSUP;
+    /* gnulib uses this result to retry using a known pathname. */
+    errno = ENOSYS;
     return -1;
 }
 
-int
-utimensat(int dirfd, const char *pathname,
-          const struct timespec times[2], int flags)
+static int path_times(const char *path, void *argument)
 {
-    char fullpath[1024];
-    struct stat st;
-    struct utimbuf ut;
-    time_t now_time;
-    int saved_fd = -1;
-    int result;
+    return set_times(path, argument, NULL);
+}
 
-    (void)flags;  /* AT_SYMLINK_NOFOLLOW not supportable via utime */
-
-    /* Resolve path relative to dirfd */
-    if (pathname[0] == '/' || IS_AT_FDCWD(dirfd)) {
-        strlcpy(fullpath, pathname, sizeof(fullpath));
-    } else {
-        /*
-         * Non-AT_FDCWD case: use fchdir dance (same as at_funcs.c)
-         * because Solaris 7 /proc/self/fd/N is not a symlink.
-         */
-        char cwd[1024];
-        saved_fd = open(".", O_RDONLY);
-        if (saved_fd < 0) return -1;
-        if (fchdir(dirfd) < 0) {
-            close(saved_fd);
-            return -1;
-        }
-        if (getcwd(cwd, sizeof(cwd)) == NULL) {
-            fchdir(saved_fd);
-            close(saved_fd);
-            return -1;
-        }
-        fchdir(saved_fd);
-        close(saved_fd);
-        saved_fd = -1;
-        solcompat_snprintf(fullpath, sizeof(fullpath), "%s/%s", cwd, pathname);
+int utimensat(int dirfd, const char *pathname, const struct timespec times[2], int flags)
+{
+    if (flags & ~AT_SYMLINK_NOFOLLOW) {
+        errno = EINVAL;
+        return -1;
     }
-
-    if (times == NULL)
-        return utime(fullpath, NULL);
-
-    now_time = time(NULL);
-
-    /* Handle UTIME_NOW / UTIME_OMIT */
-    if (times[0].tv_nsec == UTIME_OMIT || times[1].tv_nsec == UTIME_OMIT) {
-        if (stat(fullpath, &st) < 0)
-            return -1;
+    if (flags & AT_SYMLINK_NOFOLLOW) {
+        errno = ENOSYS;
+        return -1;
     }
-
-    ut.actime = (times[0].tv_nsec == UTIME_NOW) ? now_time :
-                (times[0].tv_nsec == UTIME_OMIT) ? st.st_atime :
-                times[0].tv_sec;
-    ut.modtime = (times[1].tv_nsec == UTIME_NOW) ? now_time :
-                 (times[1].tv_nsec == UTIME_OMIT) ? st.st_mtime :
-                 times[1].tv_sec;
-
-    return utime(fullpath, &ut);
+    if (!pathname) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (!valid_times(times))
+        return -1;
+    return solcompat_with_dirfd(dirfd, pathname, path_times, (void *)times);
 }
 
 /*
@@ -224,123 +179,36 @@ flock(int fd, int operation)
     return 0;
 }
 
-int
-scandir(const char *dirp, struct dirent ***namelist,
-        int (*filter)(const struct dirent *),
-        int (*compar)(const struct dirent **, const struct dirent **))
-{
-    DIR *d;
-    struct dirent *entry;
-    struct dirent **list = NULL;
-    size_t count = 0;
-    size_t allocated = 32;
-
-    d = opendir(dirp);
-    if (!d)
-        return -1;
-
-    list = (struct dirent **)malloc(allocated * sizeof(*list));
-    if (!list) {
-        closedir(d);
-        return -1;
-    }
-
-    while ((entry = readdir(d)) != NULL) {
-        if (filter && !filter(entry))
-            continue;
-
-        if (count >= allocated) {
-            struct dirent **newlist;
-            allocated *= 2;
-            newlist = (struct dirent **)realloc(list, allocated * sizeof(*list));
-            if (!newlist) {
-                /* Free what we have */
-                size_t i;
-                for (i = 0; i < count; i++)
-                    free(list[i]);
-                free(list);
-                closedir(d);
-                return -1;
-            }
-            list = newlist;
-        }
-
-        /* Duplicate the dirent. Solaris 7 declares d_name as a flexible
-         * array (char d_name[1]) with the real filename packed immediately
-         * after. Using sizeof(struct dirent) copies only the struct prefix
-         * plus one byte of d_name — anything past the first character is
-         * truncated garbage. Size the allocation to offsetof(d_name) +
-         * strlen + NUL so the whole filename comes along. */
-        {
-            size_t entsize = offsetof(struct dirent, d_name) +
-                             strlen(entry->d_name) + 1;
-            struct dirent *dup = (struct dirent *)malloc(entsize);
-            if (!dup) {
-                size_t i;
-                for (i = 0; i < count; i++)
-                    free(list[i]);
-                free(list);
-                closedir(d);
-                return -1;
-            }
-            memcpy(dup, entry, entsize);
-            list[count++] = dup;
-        }
-    }
-
-    closedir(d);
-
-    if (compar && count > 1) {
-        qsort(list, count, sizeof(*list),
-              (int (*)(const void *, const void *))compar);
-    }
-
-    *namelist = list;
-    return (int)count;
-}
-
-int
-alphasort(const struct dirent **a, const struct dirent **b)
-{
-    return strcoll((*a)->d_name, (*b)->d_name);
-}
-
 DIR *
 fdopendir(int fd)
 {
-    /*
-     * Solaris 7 has no fdopendir.  Approximate by using fchdir + getcwd
-     * to find the directory path, then opendir() on it.
-     * Solaris 7 /proc/self/fd/N entries are NOT symlinks so readlink
-     * does not work.
-     */
-    char dirpath[1024];
-    int saved;
-    char *p;
+    struct stat st;
+    DIR *stream;
+    int placeholder, flags;
 
-    saved = open(".", O_RDONLY);
-    if (saved < 0) {
+    if (fstat(fd, &st) < 0)
+        return NULL;
+    if (!S_ISDIR(st.st_mode)) {
+        errno = ENOTDIR;
+        return NULL;
+    }
+    flags = fcntl(fd, F_GETFL);
+    if (flags < 0)
+        return NULL;
+    if ((flags & O_ACCMODE) == O_WRONLY) {
         errno = EBADF;
         return NULL;
     }
-
-    if (fchdir(fd) < 0) {
-        close(saved);
-        errno = EBADF;
+    /* Let libc initialize its own stream buffer and private locking state.
+     * Its documented dd_fd is the descriptor read and closed by libc.
+     * No directory entries have been read from the placeholder. */
+    stream = opendir("/");
+    if (!stream)
         return NULL;
-    }
-
-    p = getcwd(dirpath, sizeof(dirpath));
-
-    fchdir(saved);
-    close(saved);
-
-    if (p == NULL) {
-        errno = EBADF;
-        return NULL;
-    }
-
-    return opendir(dirpath);
+    placeholder = stream->dd_fd;
+    stream->dd_fd = fd;
+    close(placeholder);
+    return stream;
 }
 
 /*
@@ -366,46 +234,61 @@ dirfd(DIR *dir_stream)
 int
 posix_fadvise(int fd, off_t offset, off_t len, int advice)
 {
-    /* No-op on Solaris 7 — no kernel support for file advice */
-    (void)fd;
-    (void)offset;
-    (void)len;
-    (void)advice;
-    return 0;
+    struct stat st;
+    int saved = errno;
+    if (offset < 0 || len < 0 || advice < POSIX_FADV_NORMAL || advice > POSIX_FADV_NOREUSE)
+        return EINVAL;
+    if (fstat(fd, &st) < 0) {
+        int error = errno;
+        errno = saved;
+        return error;
+    }
+    /* Solaris can disregard a valid access-pattern hint. */
+    return S_ISFIFO(st.st_mode) ? ESPIPE : 0;
 }
 
-/*
- * posix_fallocate — ensure disk space is allocated for a file region.
- *
- * Solaris 7 has no fallocate or posix_fallocate.  We emulate by extending
- * the file with ftruncate if needed.  This doesn't guarantee contiguous
- * allocation, but it does reserve the space (which is what callers care about).
- *
- * Returns 0 on success, or an error number (not -1).
- */
-int
-posix_fallocate(int fd, off_t offset, off_t len)
+static int allocation_status(int fd, off_t offset, off_t len, off_t maximum)
 {
-    struct stat file_stat;
-    off_t required_size;
-
+    struct stat st;
+    int flags;
     if (offset < 0 || len <= 0)
         return EINVAL;
-
-    required_size = offset + len;
-
-    if (fstat(fd, &file_stat) < 0)
+    if (offset > maximum - len)
+        return EFBIG;
+    flags = fcntl(fd, F_GETFL);
+    if (flags < 0 || fstat(fd, &st) < 0)
         return errno;
+    if ((flags & O_ACCMODE) == O_RDONLY)
+        return EBADF;
+    if (S_ISFIFO(st.st_mode))
+        return ESPIPE;
+    if (!S_ISREG(st.st_mode))
+        return ENODEV;
+    /* Solaris 7 reserves F_ALLOCSP, but UFS rejects it. ftruncate creates
+     * holes and cannot guarantee future writes against ENOSPC. GCC's module
+     * writer understands EINVAL as the unsupported-filesystem result. */
+    return EINVAL;
+}
 
-    /* Already large enough — nothing to do */
-    if (file_stat.st_size >= required_size)
-        return 0;
+int posix_fallocate(int fd, off_t offset, off_t len)
+{
+    int saved = errno;
+    int result = allocation_status(fd, offset, len, INT64_MAX);
+    errno = saved;
+    return result;
+}
 
-    /* Extend the file; ftruncate zero-fills the gap */
-    if (ftruncate(fd, required_size) < 0)
-        return errno;
+int solcompat_posix_fallocate32(int fd, int32_t offset, int32_t len)
+{
+    int saved = errno;
+    int result = allocation_status(fd, offset, len, INT32_MAX);
+    errno = saved;
+    return result;
+}
 
-    return 0;
+int solcompat_posix_fadvise32(int fd, int32_t offset, int32_t len, int advice)
+{
+    return posix_fadvise(fd, offset, len, advice);
 }
 
 /*
@@ -426,15 +309,26 @@ futimesat(int dirfd, const char *pathname, const struct timeval times[2])
 {
     struct timespec ts[2];
 
+    /* GNU/Solaris futimesat permits NULL to select dirfd itself.  Keep
+     * utimensat's NULL-path EFAULT contract separate; descriptor failure
+     * must preserve futimens' ENOSYS pathname-fallback protocol. */
     if (times == NULL)
-        return utimensat(dirfd, pathname, NULL, 0);
+        return pathname == NULL ? futimens(dirfd, NULL)
+                                : utimensat(dirfd, pathname, NULL, 0);
+
+    if (times[0].tv_usec < 0 || times[0].tv_usec > 999999
+        || times[1].tv_usec < 0 || times[1].tv_usec > 999999) {
+        errno = EINVAL;
+        return -1;
+    }
 
     ts[0].tv_sec  = times[0].tv_sec;
     ts[0].tv_nsec = (long)times[0].tv_usec * 1000L;
     ts[1].tv_sec  = times[1].tv_sec;
     ts[1].tv_nsec = (long)times[1].tv_usec * 1000L;
 
-    return utimensat(dirfd, pathname, ts, 0);
+    return pathname == NULL ? futimens(dirfd, ts)
+                            : utimensat(dirfd, pathname, ts, 0);
 }
 
 /*
@@ -445,6 +339,8 @@ futimesat(int dirfd, const char *pathname, const struct timeval times[2])
  * instead of a link error.
  */
 #include <errno.h>
+#include <stdint.h>
+#include <limits.h>
 #include <sys/types.h>
 /* Don't #include <sys/xattr.h> — libsolcompat compiles itself before its
    own sysroot-overlay headers are staged. Re-declare the prototypes here

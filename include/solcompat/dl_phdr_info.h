@@ -11,7 +11,7 @@
 #ifndef SOLCOMPAT_DL_PHDR_INFO_H
 #define SOLCOMPAT_DL_PHDR_INFO_H
 
-#ifdef __sun
+#if defined(__sun) && !defined(_SOLCOMPAT_SYS_LINK_H_APPEND)
 
 #include <sys/types.h>
 #include <sys/elf.h>

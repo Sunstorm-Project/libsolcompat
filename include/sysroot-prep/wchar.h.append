@@ -30,6 +30,15 @@ wchar_t *wmemcpy(wchar_t *dest, const wchar_t *src, size_t n);
 wchar_t *wmemmove(wchar_t *dest, const wchar_t *src, size_t n);
 wchar_t *wmemset(wchar_t *s, wchar_t c, size_t n);
 
+wchar_t *wcpcpy(wchar_t *, const wchar_t *);
+wchar_t *wcpncpy(wchar_t *, const wchar_t *, size_t);
+size_t mbsnrtowcs(wchar_t *, const char **, size_t, size_t, mbstate_t *);
+size_t wcsnrtombs(char *, const wchar_t **, size_t, size_t, mbstate_t *);
+size_t wcslcpy(wchar_t *, const wchar_t *, size_t);
+size_t wcslcat(wchar_t *, const wchar_t *, size_t);
+int wcscasecmp(const wchar_t *, const wchar_t *);
+int wcsncasecmp(const wchar_t *, const wchar_t *, size_t);
+
 /* Wide string search — libsolcompat provides this */
 wchar_t *wcsstr(const wchar_t *haystack, const wchar_t *needle);
 

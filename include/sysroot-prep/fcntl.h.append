@@ -52,10 +52,8 @@
 #define O_DIRECTORY 0x1000000
 #endif
 
-/* O_NOFOLLOW — fail if path is a symlink (POSIX 2008) */
-#ifndef O_NOFOLLOW
-#define O_NOFOLLOW 0x20000
-#endif
+/* Leave O_NOFOLLOW to the vendor header. Solaris 7 open() accepts and
+ * ignores the later flag value, so advertising it disables caller fallbacks. */
 
 /* POSIX 2008 file-control APIs declared in <fcntl.h> that Solaris 7
  * lacks. libsolcompat provides runtime implementations. Signatures
@@ -67,9 +65,11 @@ extern "C" {
 #endif
 int openat(int dirfd, const char *pathname, int flags, ...);
 
-/* posix_fallocate — POSIX 2008. GCC 15.2's gcc/cp/module.cc calls it
- * unconditionally. Solaris 7 lacks it; libsolcompat implements via
- * ftruncate + write-extension. */
+/* Historical bare symbols take 64-bit offsets. */
+#if defined(__sun) && !defined(_LP64) && (!defined(_FILE_OFFSET_BITS) || _FILE_OFFSET_BITS != 64)
+#define posix_fallocate solcompat_posix_fallocate32
+#define posix_fadvise solcompat_posix_fadvise32
+#endif
 int posix_fallocate(int fd, off_t offset, off_t len);
 
 /* posix_fadvise hints — POSIX 2008. Solaris 7 lacks them. xz

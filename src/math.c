@@ -7,12 +7,15 @@
  *     exp2, tgamma, nearbyint, lrint, lround, nan, remquo, scalbln, etc.)
  *   - ALL float-precision (f-suffix) wrappers
  *   - ALL long-double-precision (l-suffix) wrappers
- *     (Solaris 7 SPARC: long double == double, both 64-bit IEEE 754)
+ *     (Some legacy wrappers narrow to double; SPARC long double can be
+ *      IEEE binary128. frexpl preserves its full precision and range.)
  *   - fpclassify / __fpclassifyf / __fpclassifyd helpers
  */
 
 #include <math.h>
 #include <float.h>
+#include <fenv.h>
+#include <stdint.h>
 #include <string.h>
 #include <errno.h>
 #include <ieeefp.h>   /* Solaris: finite(), isnand(), fpclass(), signgam */
@@ -230,7 +233,27 @@ float powf(float x, float y)        { return (float)pow((double)x, (double)y); }
 float fmodf(float x, float y)       { return (float)fmod((double)x, (double)y); }
 float atan2f(float x, float y)      { return (float)atan2((double)x, (double)y); }
 float copysignf(float x, float y)   { return (float)copysign((double)x, (double)y); }
-float nextafterf(float x, float y)  { return (float)nextafter((double)x, (double)y); }
+float nextafterf(float x, float y)
+{
+    uint32_t bits;
+    if (__builtin_isnan(x) || __builtin_isnan(y))
+        return x + y;
+    if (x == y)
+        return y;
+    memcpy(&bits, &x, sizeof(bits));
+    if (x == 0)
+        bits = y < 0 ? 0x80000001U : 1U;
+    else if ((x < y) == (x > 0))
+        ++bits;
+    else
+        --bits;
+    memcpy(&x, &bits, sizeof(x));
+    if (__builtin_isinf(x) || (bits & 0x7f800000U) == 0) {
+        errno = ERANGE;
+        feraiseexcept((__builtin_isinf(x) ? FE_OVERFLOW : FE_UNDERFLOW) | FE_INEXACT);
+    }
+    return x;
+}
 float remainderf(float x, float y)  { return (float)remainder((double)x, (double)y); }
 float remquof(float x, float y, int *quo) { return (float)remquo((double)x, (double)y, quo); }
 float hypotf(float x, float y)      { return (float)hypot((double)x, (double)y); }
@@ -251,11 +274,6 @@ float modff(float x, float *iptr) {
     return (float)r;
 }
 
-/* Ternary float */
-float fmaf(float x, float y, float z) {
-    return (float)((double)x * (double)y + (double)z);
-}
-
 /* Rounding / integer conversion */
 long int      lrintf(float x)  { return lrint((double)x); }
 long int      lroundf(float x) { return lround((double)x); }
@@ -269,7 +287,7 @@ long long int llroundf(float x){ return llround((double)x); }
  * ================================================================ */
 
 /* Unary long double */
-long double fabsl(long double x)  { return (long double)fabs((double)x); }
+long double fabsl(long double x)  { return __builtin_fabsl(x); }
 long double sqrtl(long double x)  { return (long double)sqrt((double)x); }
 long double sinl(long double x)   { return (long double)sin((double)x); }
 long double cosl(long double x)   { return (long double)cos((double)x); }
@@ -302,38 +320,109 @@ long double erfl(long double x)   { return (long double)erf((double)x); }
 long double erfcl(long double x)  { return (long double)erfc((double)x); }
 long double lgammal(long double x){ return (long double)lgamma((double)x); }
 long double tgammal(long double x){ return (long double)tgamma((double)x); }
-int         ilogbl(long double x) { return ilogb((double)x); }
+int ilogbl(long double x)
+{
+    int exponent;
+    if (!__builtin_isfinite(x) || x == 0)
+        return ilogb((double)x);
+    frexpl(x, &exponent);
+    return exponent - 1;
+}
 long double nanl(const char *tagp){ (void)tagp; return (long double)(0.0 / 0.0); }
 
 /* Binary long double */
 long double powl(long double x, long double y)       { return (long double)pow((double)x, (double)y); }
 long double fmodl(long double x, long double y)      { return (long double)fmod((double)x, (double)y); }
 long double atan2l(long double x, long double y)     { return (long double)atan2((double)x, (double)y); }
-long double copysignl(long double x, long double y)  { return (long double)copysign((double)x, (double)y); }
-long double nextafterl(long double x, long double y) { return (long double)nextafter((double)x, (double)y); }
+long double copysignl(long double x, long double y)  { return __builtin_copysignl(x, y); }
+long double nextafterl(long double x, long double y)
+{
+    int exponent;
+    long double magnitude, fraction, step, result;
+    if (__builtin_isnan(x) || __builtin_isnan(y))
+        return x + y;
+    if (x == y)
+        return y;
+    if (__builtin_isinf(x))
+        return __builtin_copysignl(LDBL_MAX, x);
+    magnitude = __builtin_fabsl(x);
+    if (magnitude == LDBL_MAX && (x < y) == (x > 0)) {
+        errno = ERANGE;
+        feraiseexcept(FE_OVERFLOW | FE_INEXACT);
+        return __builtin_copysignl(__builtin_infl(), x);
+    }
+    if (magnitude <= LDBL_MIN) {
+        step = LDBL_MIN * LDBL_EPSILON;
+    } else {
+        fraction = frexpl(magnitude, &exponent);
+        if (fraction == 0.5L && (x < y) != (x > 0))
+            --exponent;
+        step = scalbnl(1.0L, exponent - LDBL_MANT_DIG);
+    }
+    result = x < y ? x + step : x - step;
+    if (result == 0)
+        result = __builtin_copysignl(0.0L, x);
+    if (__builtin_fabsl(result) < LDBL_MIN) {
+        errno = ERANGE;
+        feraiseexcept(FE_UNDERFLOW | FE_INEXACT);
+    }
+    return result;
+}
 long double remainderl(long double x, long double y) { return (long double)remainder((double)x, (double)y); }
 long double remquol(long double x, long double y, int *quo) { return (long double)remquo((double)x, (double)y, quo); }
 long double hypotl(long double x, long double y)     { return (long double)hypot((double)x, (double)y); }
 long double fdiml(long double x, long double y)      { return (long double)fdim((double)x, (double)y); }
 long double fminl(long double x, long double y)      { return (long double)fmin((double)x, (double)y); }
 long double fmaxl(long double x, long double y)      { return (long double)fmax((double)x, (double)y); }
-long double scalbnl(long double x, int n)            { return (long double)scalbn((double)x, n); }
-long double scalblnl(long double x, long int n)      { return (long double)scalbln((double)x, n); }
-/* fmal: provided by GCC builtin — see comment above fma */
+/* Keep intermediate powers normal. For a scale larger than the exponent
+ * range, the extra mantissa bits leave the subnormal rounding to the
+ * final multiplication. The bounds also handle LONG_MIN without negation. */
+long double scalblnl(long double x, long n)
+{
+    const int high = LDBL_MAX_EXP - 1;
+    const int low = LDBL_MIN_EXP - 1 + LDBL_MANT_DIG;
+    long double scale = 1.0L;
+    long double factor;
+    int i;
 
-/* Special long double */
-long double ldexpl(long double x, int e)    { return (long double)ldexp((double)x, e); }
-long double frexpl(long double x, int *e)   { return (long double)frexp((double)x, e); }
+    if (!__builtin_isfinite(x) || x == 0.0L)
+        return x;
+    for (i = 0; i < 2 && n > high; ++i) {
+        x *= LDBL_MAX / (2.0L - LDBL_EPSILON);
+        n -= high;
+    }
+    for (i = 0; i < 2 && n < LDBL_MIN_EXP - 1; ++i) {
+        x *= LDBL_MIN * (2.0L / LDBL_EPSILON);
+        n -= low;
+    }
+    if (n > high)
+        n = high;
+    if (n < LDBL_MIN_EXP - 1)
+        n = LDBL_MIN_EXP - 1;
+    factor = n < 0 ? 0.5L : 2.0L;
+    if (n < 0)
+        n = -n;
+    while (n) {
+        if (n & 1)
+            scale *= factor;
+        n >>= 1;
+        if (n)
+            factor *= factor;
+    }
+    x *= scale;
+    if (x == 0.0L || __builtin_isinf(x))
+        errno = ERANGE;
+    return x;
+}
+
+long double scalbnl(long double x, int n) { return scalblnl(x, n); }
+long double ldexpl(long double x, int n) { return scalblnl(x, n); }
+/* frexpl is implemented without narrowing in src/frexpl.c. */
 long double modfl(long double x, long double *iptr) {
     double di;
     double r = modf((double)x, &di);
     *iptr = (long double)di;
     return (long double)r;
-}
-
-/* Ternary long double */
-long double fmal(long double x, long double y, long double z) {
-    return (long double)((double)x * (double)y + (double)z);
 }
 
 /* Rounding / integer conversion */
@@ -342,12 +431,20 @@ long int      lroundl(long double x) { return lround((double)x); }
 long long int llrintl(long double x) { return llrint((double)x); }
 long long int llroundl(long double x){ return llround((double)x); }
 
-/* ================================================================
- * nexttoward family — Solaris 7 lacks these
- * On SPARC ILP32 long double == double, so they reduce to nextafter.
- * ================================================================ */
-double      nexttoward (double x,      long double y) { return nextafter(x, (double)y); }
-float       nexttowardf(float x,       long double y) { return nextafterf(x, (float)y); }
+/* Compare with the full-width direction before selecting a neighbor. */
+double nexttoward(double x, long double y)
+{
+    if (__builtin_isnan(x) || __builtin_isnan(y) || x == y)
+        return __builtin_isnan(x) ? x + (double)y : (double)y;
+    return nextafter(x, x < y ? __builtin_inf() : -__builtin_inf());
+}
+
+float nexttowardf(float x, long double y)
+{
+    if (__builtin_isnan(x) || __builtin_isnan(y) || x == y)
+        return __builtin_isnan(x) ? x + (float)y : (float)y;
+    return nextafterf(x, x < y ? __builtin_inff() : -__builtin_inff());
+}
 long double nexttowardl(long double x, long double y) { return nextafterl(x, y); }
 
 /* ================================================================

@@ -43,8 +43,9 @@ int pthread_spin_unlock(pthread_spinlock_t *lock);
 #define PTHREAD_PROCESS_SHARED  1
 #endif
 
-/* pthread_rwlock_timed{rd,wr}lock — POSIX 2008. Absent from Solaris 7.
- * libsolcompat emulates with pthread_rwlock_{rd,wr}lock + timed retry. */
+/* Timed mutex and read/write lock acquisition using absolute realtime. */
+int pthread_mutex_timedlock(pthread_mutex_t *mutex,
+                            const struct timespec *abs_timeout);
 int pthread_rwlock_timedrdlock(pthread_rwlock_t *rwlock,
                                const struct timespec *abs_timeout);
 int pthread_rwlock_timedwrlock(pthread_rwlock_t *rwlock,
@@ -52,8 +53,7 @@ int pthread_rwlock_timedwrlock(pthread_rwlock_t *rwlock,
 
 /* pthread_mutexattr_setrobust / pthread_mutex_consistent — POSIX 2008
  * robust-mutex API. Solaris 7 has no robust mutexes. libsolcompat
- * provides succeed-but-lie stubs (matching gnulib's fallback) so
- * configure probes compile; actual robust behavior is a no-op. */
+ * supports the default stalled mode and returns ENOTSUP for robust mode. */
 #ifndef PTHREAD_MUTEX_STALLED
 #define PTHREAD_MUTEX_STALLED 0
 #define PTHREAD_MUTEX_ROBUST  1

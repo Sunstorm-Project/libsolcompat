@@ -6,13 +6,20 @@
  * native math.h lacks C99 functions.  libsolcompat now provides them all.
  *
  * We define _GLIBCXX_USE_C99_MATH_FUNCS to unlock the C++11 overloads
- * (constexpr float hypot(float,float) etc.) and _GLIBCXX_HAVE_*F/*L to
+ * (constexpr float hypot(float,float) etc.) and _GLIBCXX_HAVE_*F and *L to
  * unlock the using::sinf etc. declarations in the C++98 section.
  *
  * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
  */
 #ifndef _SOLCOMPAT_OVERRIDE_CMATH
 #define _SOLCOMPAT_OVERRIDE_CMATH
+
+/* Configure can observe the bootstrap compiler's installed C++ facade.
+ * Solaris7's underlying C header still has no C++11 classifier overloads.
+ * Let upstream cmath generate them instead of trusting that facade probe. */
+#include <bits/c++config.h>
+#undef __CORRECT_ISO_CPP11_MATH_H_PROTO_FP
+#undef __CORRECT_ISO_CPP11_MATH_H_PROTO_INT
 
 extern "C" {
 /* C99 float variants */
@@ -319,7 +326,7 @@ double fma(double, double, double);
  *     lrint, lround, llrint, llround, remquo, scalbln  — libsolcompat src/math.c
  *   - fma  — GCC builtin (__builtin_fma); see math.c comment
  *   - all *f and *l variants  — libsolcompat src/math.c (cast wrappers)
- *   - acosh, asinh, atanh — Solaris 7 libm; *f/*l in libsolcompat */
+ *   - acosh, asinh, atanh — Solaris 7 libm; float/long-double variants in libsolcompat */
 
 /* gamma family */
 #ifndef _GLIBCXX_HAVE_LGAMMA

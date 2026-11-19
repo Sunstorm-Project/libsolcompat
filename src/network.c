@@ -4,9 +4,8 @@
  * getaddrinfo/freeaddrinfo/gai_strerror/getnameinfo, 
  * inet_ntop/inet_pton, getifaddrs/freeifaddrs
  *
- * getaddrinfo implementation is based on gethostbyname/getservbyname
- * which are available on Solaris 7.  IPv6 is not supported (Solaris 7
- * has experimental IPv6 but we don't rely on it).
+ * Solaris 7 resolves named IPv4 hosts through its native database.
+ * Numeric IPv6 addresses, including zones, are handled locally.
  */
 
 #include <stdarg.h>   /* __gnuc_va_list used by Solaris 7 stdio.h prototypes */
@@ -25,6 +24,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <ctype.h>
+#include <limits.h>
 
 /* SOCK_CLOEXEC / SOCK_NONBLOCK — Linux/BSD socket flags */
 #ifndef SOCK_CLOEXEC
@@ -62,185 +62,197 @@ const struct in6_addr in6addr_any      = IN6ADDR_ANY_INIT;
 const struct in6_addr in6addr_loopback = IN6ADDR_LOOPBACK_INIT;
 #endif
 
-/*
- * getaddrinfo — resolve hostname and service to socket addresses.
- * This is an IPv4-only implementation using gethostbyname/getservbyname.
- */
-int
-getaddrinfo(const char *node, const char *service,
-            const struct addrinfo *hints, struct addrinfo **res)
+/* Build the socket-type/service combinations independently. Services can
+ * have different port numbers for TCP and UDP in the Solaris database. */
+struct service_choice {
+    int type, protocol;
+    unsigned short port;
+};
+
+static int service_choices(const char *service, int flags, int type, int protocol,
+                           struct service_choice choices[2], int *count)
 {
-    struct hostent *he = NULL;
-    struct servent *se = NULL;
-    struct addrinfo *head = NULL, **tail = &head;
-    struct sockaddr_in *sin;
-    int port = 0;
-    int socktype = 0;
-    int protocol = 0;
-    int flags = 0;
-    int family = AF_UNSPEC;
-    int i;
-
-    if (!node && !service)
-        return EAI_NONAME;
-
-    if (hints) {
-        flags = hints->ai_flags;
-        family = hints->ai_family;
-        socktype = hints->ai_socktype;
-        protocol = hints->ai_protocol;
-
-        if (family != AF_UNSPEC && family != AF_INET && family != AF_INET6)
-            return EAI_FAMILY;
+    const int types[] = { SOCK_STREAM, SOCK_DGRAM };
+    const int protocols[] = { IPPROTO_TCP, IPPROTO_UDP };
+    const char *names[] = { "tcp", "udp" };
+    unsigned int port = 0;
+    int numeric = !service || (*service && strspn(service, "0123456789") == strlen(service));
+    if (type == SOCK_RAW) {
+        if (service)
+            return EAI_SERVICE;
+        choices[0] = (struct service_choice){SOCK_RAW, protocol, 0};
+        *count = 1;
+        return 0;
     }
-
-    /*
-     * IPv6: We cannot resolve AAAA records with gethostbyname().
-     * If the caller specifically asked for AF_INET6, we return
-     * EAI_NONAME (no addresses found) which is the honest answer
-     * on a system without IPv6 DNS resolution.  Callers like
-     * libcody handle this gracefully.
-     */
-    if (family == AF_INET6)
-        return EAI_NONAME;
-
-    /* Resolve service */
-    if (service) {
-        char *endptr;
-        long portnum = strtol(service, &endptr, 10);
-        if (*endptr == '\0' && portnum >= 0 && portnum <= 65535) {
-            port = htons((unsigned short)portnum);
-        } else {
-            /* AI_NUMERICSERV: reject non-numeric service names */
-            if (flags & AI_NUMERICSERV)
-                return EAI_NONAME;
-            const char *proto = NULL;
-            if (socktype == SOCK_STREAM) proto = "tcp";
-            else if (socktype == SOCK_DGRAM) proto = "udp";
-            se = getservbyname(service, proto);
-            if (!se)
+    if (type && type != SOCK_STREAM && type != SOCK_DGRAM)
+        return EAI_SOCKTYPE;
+    if ((protocol && protocol != IPPROTO_TCP && protocol != IPPROTO_UDP) ||
+        (type == SOCK_STREAM && protocol == IPPROTO_UDP) ||
+        (type == SOCK_DGRAM && protocol == IPPROTO_TCP))
+        return EAI_SERVICE;
+    if (service && numeric) {
+        for (const char *p = service; *p; ++p) {
+            port = port * 10 + (*p - '0');
+            if (port > 65535)
                 return EAI_SERVICE;
-            port = se->s_port;
         }
+    } else if (!numeric && (flags & AI_NUMERICSERV)) {
+        return EAI_NONAME;
     }
 
-    /* Resolve hostname */
-    if (node) {
-        if (flags & AI_NUMERICHOST) {
-            struct in_addr addr;
-            if (inet_aton(node, &addr) == 0)
+    *count = 0;
+    for (int i = 0; i < 2; ++i) {
+        struct servent entry;
+        char scratch[4096];
+        if ((type && types[i] != type) || (protocol && protocols[i] != protocol))
+            continue;
+        unsigned short netport = htons((unsigned short)port);
+        if (!numeric) {
+            if (!getservbyname_r(service, names[i], &entry, scratch, sizeof(scratch)))
+                continue;
+            netport = entry.s_port;
+        }
+        choices[(*count)++] = (struct service_choice){types[i], protocols[i], netport};
+    }
+    return *count ? 0 : EAI_SERVICE;
+}
+
+static int numeric_ipv6(const char *node, struct in6_addr *addr, unsigned int *scope)
+{
+    const char *zone = strchr(node, '%');
+    if (!zone)
+        return inet_pton(AF_INET6, node, addr) == 1;
+    char host[INET6_ADDRSTRLEN];
+    size_t len = zone - node;
+    if (len >= sizeof(host) || !zone[1])
+        return 0;
+    memcpy(host, node, len);
+    host[len] = 0;
+    if (inet_pton(AF_INET6, host, addr) != 1)
+        return 0;
+    ++zone;
+    if (strspn(zone, "0123456789") == strlen(zone)) {
+        unsigned int n = 0;
+        while (*zone) {
+            unsigned int digit = *zone++ - '0';
+            if (n > (UINT_MAX-digit)/10)
+                return 0;
+            n = n*10 + digit;
+        }
+        *scope = n;
+    } else if ((*scope = if_nametoindex(zone)) == 0) {
+        return 0;
+    }
+    return 1;
+}
+
+int getaddrinfo(const char *node, const char *service,
+                const struct addrinfo *hints, struct addrinfo **res)
+{
+    int flags = hints ? hints->ai_flags : 0;
+    int family = hints ? hints->ai_family : AF_UNSPEC;
+    struct service_choice choices[2];
+    int count, error, herr = 0;
+    struct addrinfo *head = NULL, **tail = &head;
+    struct hostent entry;
+    char scratch[8192];
+    struct in_addr v4;
+    struct in6_addr v6;
+    char *local[] = { NULL, NULL }, **addresses = local;
+    const char *canonical = node;
+    unsigned int scope = 0;
+
+    if (!res || (!node && !service))
+        return EAI_NONAME;
+    *res = NULL;
+    if (family != AF_INET && family != AF_INET6 && family != AF_UNSPEC)
+        return EAI_FAMILY;
+    if (flags & ~(AI_PASSIVE | AI_CANONNAME | AI_NUMERICHOST | AI_NUMERICSERV | AI_ADDRCONFIG))
+        return EAI_BADFLAGS;
+    error = service_choices(service, flags, hints ? hints->ai_socktype : 0,
+                            hints ? hints->ai_protocol : 0, choices, &count);
+    if (error)
+        return error;
+
+    if (node && family != AF_INET && numeric_ipv6(node, &v6, &scope)) {
+        family = AF_INET6;
+        local[0] = (char *)&v6;
+    } else if (!node && family == AF_INET6) {
+        v6 = flags & AI_PASSIVE ? in6addr_any : in6addr_loopback;
+        local[0] = (char *)&v6;
+    } else if (family == AF_INET6) {
+        /* Solaris 7's legacy host database returns IPv4 records. */
+        return EAI_NONAME;
+    } else {
+        family = AF_INET;
+        local[0] = (char *)&v4;
+        if (!node) {
+            v4.s_addr = flags & AI_PASSIVE ? INADDR_ANY : htonl(INADDR_LOOPBACK);
+        } else if (!inet_aton(node, &v4)) {
+            if (flags & AI_NUMERICHOST)
                 return EAI_NONAME;
-
-            /* Create single result */
-            struct addrinfo *ai = (struct addrinfo *)calloc(1, sizeof(*ai) + sizeof(struct sockaddr_in));
-            if (!ai)
-                return EAI_MEMORY;
-
-            sin = (struct sockaddr_in *)(ai + 1);
-            sin->sin_family = AF_INET;
-            sin->sin_port = port;
-            sin->sin_addr = addr;
-
-            ai->ai_family = AF_INET;
-            ai->ai_socktype = socktype ? socktype : SOCK_STREAM;
-            ai->ai_protocol = protocol;
-            ai->ai_addrlen = sizeof(struct sockaddr_in);
-            ai->ai_addr = (struct sockaddr *)sin;
-            ai->ai_next = NULL;
-
-            *res = ai;
-            return 0;
-        }
-
-        he = gethostbyname(node);
-        if (!he) {
-            switch (h_errno) {
-            case HOST_NOT_FOUND: return EAI_NONAME;
-            case TRY_AGAIN:      return EAI_AGAIN;
-            case NO_RECOVERY:    return EAI_FAIL;
-            default:             return EAI_NONAME;
-            }
+            if (!gethostbyname_r(node, &entry, scratch, sizeof(scratch), &herr))
+                return herr == TRY_AGAIN ? EAI_AGAIN : herr == NO_RECOVERY ? EAI_FAIL : EAI_NONAME;
+            if (entry.h_addrtype != AF_INET || entry.h_length != sizeof(v4))
+                return EAI_FAMILY;
+            addresses = entry.h_addr_list;
+            canonical = entry.h_name ? entry.h_name : node;
         }
     }
 
-    if (he) {
-        /* Create a result for each address */
-        for (i = 0; he->h_addr_list[i]; i++) {
-            struct addrinfo *ai = (struct addrinfo *)calloc(1, sizeof(*ai) + sizeof(struct sockaddr_in));
-            if (!ai) {
-                freeaddrinfo(head);
-                return EAI_MEMORY;
+    if (flags & AI_ADDRCONFIG) {
+        struct ifaddrs *ifs, *it;
+        int configured = 0;
+        if (getifaddrs(&ifs) < 0)
+            return EAI_SYSTEM;
+        for (it = ifs; it; it = it->ifa_next)
+            if (it->ifa_addr && it->ifa_addr->sa_family == family &&
+                !(it->ifa_flags & IFF_LOOPBACK)) {
+                configured = 1;
+                break;
             }
+        freeifaddrs(ifs);
+        if (!configured)
+            return EAI_NONAME;
+    }
 
-            sin = (struct sockaddr_in *)(ai + 1);
-            sin->sin_family = AF_INET;
-            sin->sin_port = port;
-            memcpy(&sin->sin_addr, he->h_addr_list[i], (size_t)he->h_length);
-
-            ai->ai_family = AF_INET;
-            ai->ai_socktype = socktype ? socktype : SOCK_STREAM;
-            ai->ai_protocol = protocol;
-            ai->ai_addrlen = sizeof(struct sockaddr_in);
-            ai->ai_addr = (struct sockaddr *)sin;
-            ai->ai_next = NULL;
-
-            if ((flags & AI_CANONNAME) && i == 0 && he->h_name) {
-                ai->ai_canonname = strdup(he->h_name);
-            }
-
+    for (int t = 0; t < count; ++t) {
+        for (char **addr = addresses; addr && *addr; ++addr) {
+            size_t len = family == AF_INET ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
+            struct addrinfo *ai = calloc(1, sizeof(*ai) + len);
+            if (!ai)
+                goto nomem;
             *tail = ai;
             tail = &ai->ai_next;
+            ai->ai_family = family;
+            ai->ai_socktype = choices[t].type;
+            ai->ai_protocol = choices[t].protocol;
+            ai->ai_addrlen = len;
+            ai->ai_addr = (struct sockaddr *)(ai + 1);
+            if (family == AF_INET) {
+                struct sockaddr_in *sin = (struct sockaddr_in *)ai->ai_addr;
+                sin->sin_family = family;
+                sin->sin_port = choices[t].port;
+                memcpy(&sin->sin_addr, *addr, sizeof(v4));
+            } else {
+                struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)ai->ai_addr;
+                sin6->sin6_family = family;
+                sin6->sin6_port = choices[t].port;
+                sin6->sin6_scope_id = scope;
+                memcpy(&sin6->sin6_addr, *addr, sizeof(v6));
+            }
+            if (ai == head && (flags & AI_CANONNAME) && canonical &&
+                !(ai->ai_canonname = strdup(canonical)))
+                goto nomem;
         }
-    } else {
-        /* No node specified — passive or loopback */
-        struct addrinfo *ai = (struct addrinfo *)calloc(1, sizeof(*ai) + sizeof(struct sockaddr_in));
-        if (!ai)
-            return EAI_MEMORY;
-
-        sin = (struct sockaddr_in *)(ai + 1);
-        sin->sin_family = AF_INET;
-        sin->sin_port = port;
-        sin->sin_addr.s_addr = (flags & AI_PASSIVE) ? INADDR_ANY : htonl(INADDR_LOOPBACK);
-
-        ai->ai_family = AF_INET;
-        ai->ai_socktype = socktype ? socktype : SOCK_STREAM;
-        ai->ai_protocol = protocol;
-        ai->ai_addrlen = sizeof(struct sockaddr_in);
-        ai->ai_addr = (struct sockaddr *)sin;
-        ai->ai_next = NULL;
-
-        *tail = ai;
     }
-
     if (!head)
         return EAI_NONAME;
-
-    /* If no socktype specified, duplicate results for TCP and UDP */
-    if (hints && hints->ai_socktype == 0) {
-        struct addrinfo *p;
-        struct addrinfo *udp_head = NULL, **udp_tail = &udp_head;
-        for (p = head; p; p = p->ai_next) {
-            struct addrinfo *dup = (struct addrinfo *)calloc(1, sizeof(*dup) + sizeof(struct sockaddr_in));
-            if (!dup) break;
-            memcpy(dup, p, sizeof(*dup));
-            sin = (struct sockaddr_in *)(dup + 1);
-            memcpy(sin, p->ai_addr, sizeof(struct sockaddr_in));
-            dup->ai_addr = (struct sockaddr *)sin;
-            dup->ai_socktype = SOCK_DGRAM;
-            dup->ai_protocol = IPPROTO_UDP;
-            dup->ai_canonname = NULL;
-            dup->ai_next = NULL;
-            *udp_tail = dup;
-            udp_tail = &dup->ai_next;
-        }
-        /* Append UDP results after TCP */
-        for (p = head; p->ai_next; p = p->ai_next)
-            ;
-        p->ai_next = udp_head;
-    }
-
     *res = head;
     return 0;
+nomem:
+    freeaddrinfo(head);
+    return EAI_MEMORY;
 }
 
 void
@@ -270,6 +282,7 @@ gai_strerror(int errcode)
     case EAI_SERVICE:  return "Servname not supported for ai_socktype";
     case EAI_SOCKTYPE: return "ai_socktype not supported";
     case EAI_SYSTEM:   return "System error";
+    case EAI_OVERFLOW: return "Output buffer too small";
     default:           return "Unknown error";
     }
 }
@@ -279,64 +292,70 @@ getnameinfo(const struct sockaddr *sa, socklen_t salen,
             char *host, socklen_t hostlen,
             char *serv, socklen_t servlen, int flags)
 {
-    struct hostent *he;
-    struct servent *se;
     unsigned short port;
+    const void *address;
+    const char *proto = flags & NI_DGRAM ? "udp" : "tcp";
+    unsigned int scope = 0;
 
-    if (sa->sa_family == AF_INET) {
+    if (!sa || salen < sizeof(sa->sa_family))
+        return EAI_FAMILY;
+    if (flags & ~(NI_NUMERICHOST | NI_NUMERICSERV | NI_NAMEREQD | NI_NOFQDN | NI_DGRAM))
+        return EAI_BADFLAGS;
+    if ((!host || !hostlen) && (!serv || !servlen))
+        return EAI_NONAME;
+    if (sa->sa_family == AF_INET && salen >= sizeof(struct sockaddr_in)) {
         const struct sockaddr_in *sin = (const struct sockaddr_in *)sa;
         port = sin->sin_port;
-
-        if (host && hostlen > 0) {
-            if (flags & NI_NUMERICHOST) {
-                char *ip = inet_ntoa(sin->sin_addr);
-                if (strlen(ip) >= hostlen)
-                    return EAI_OVERFLOW;
-                strcpy(host, ip);
-            } else {
-                he = gethostbyaddr((const char *)&sin->sin_addr,
-                                   sizeof(sin->sin_addr), AF_INET);
-                if (he) {
-                    if (strlen(he->h_name) >= hostlen)
-                        return EAI_OVERFLOW;
-                    strcpy(host, he->h_name);
-                } else {
-                    if (flags & NI_NAMEREQD)
-                        return EAI_NONAME;
-                    char *ip = inet_ntoa(sin->sin_addr);
-                    if (strlen(ip) >= hostlen)
-                        return EAI_OVERFLOW;
-                    strcpy(host, ip);
-                }
-            }
-        }
-    } else if (sa->sa_family == AF_INET6) {
+        address = &sin->sin_addr;
+    } else if (sa->sa_family == AF_INET6 && salen >= sizeof(struct sockaddr_in6)) {
         const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6 *)sa;
         port = sin6->sin6_port;
-
-        if (host && hostlen > 0) {
-            /* Always numeric for IPv6 — no reverse DNS on Solaris 7 */
-            if (!inet_ntop(AF_INET6, &sin6->sin6_addr, host, hostlen))
-                return EAI_OVERFLOW;
-        }
+        address = &sin6->sin6_addr;
+        scope = sin6->sin6_scope_id;
     } else {
         return EAI_FAMILY;
     }
 
-    if (serv && servlen > 0) {
-        if (flags & NI_NUMERICSERV) {
-            solcompat_snprintf(serv, servlen, "%d", ntohs(port));
+    if (host && hostlen) {
+        struct hostent entry, *found = NULL;
+        char scratch[8192], numeric[INET6_ADDRSTRLEN + 12];
+        const char *name;
+        int resolver_error = 0;
+        if (!(flags & NI_NUMERICHOST) && sa->sa_family == AF_INET)
+            found = gethostbyaddr_r((const char *)address, sizeof(struct in_addr),
+                                    AF_INET, &entry, scratch, sizeof(scratch), &resolver_error);
+        if (found && found->h_name) {
+            name = found->h_name;
         } else {
-            const char *proto = (flags & NI_DGRAM) ? "udp" : "tcp";
-            se = getservbyport(port, proto);
-            if (se) {
-                if (strlen(se->s_name) >= servlen)
-                    return EAI_OVERFLOW;
-                strcpy(serv, se->s_name);
-            } else {
-                solcompat_snprintf(serv, servlen, "%d", ntohs(port));
+            if (!(flags & NI_NUMERICHOST) && (flags & NI_NAMEREQD))
+                return resolver_error == TRY_AGAIN ? EAI_AGAIN : EAI_NONAME;
+            if (!inet_ntop(sa->sa_family, address, numeric, sizeof(numeric)))
+                return EAI_SYSTEM;
+            if (scope) {
+                size_t len = strlen(numeric);
+                solcompat_snprintf(numeric + len, sizeof(numeric) - len, "%%%u", scope);
             }
+            name = numeric;
         }
+        if (strlen(name) >= hostlen)
+            return EAI_OVERFLOW;
+        strcpy(host, name);
+    }
+    if (serv && servlen) {
+        struct servent entry, *found = NULL;
+        char scratch[4096], numeric[6];
+        const char *name;
+        if (!(flags & NI_NUMERICSERV))
+            found = getservbyport_r(port, proto, &entry, scratch, sizeof(scratch));
+        if (found && found->s_name) {
+            name = found->s_name;
+        } else {
+            solcompat_snprintf(numeric, sizeof(numeric), "%u", (unsigned int)ntohs(port));
+            name = numeric;
+        }
+        if (strlen(name) >= servlen)
+            return EAI_OVERFLOW;
+        strcpy(serv, name);
     }
 
     return 0;
@@ -392,6 +411,17 @@ inet_ntop(int af, const void *src, char *dst, socklen_t size)
             best_len = cur_len;
         }
 
+        if (best_start == 0 && best_len == 5 && words[5] == 0xffff) {
+            n = solcompat_snprintf(tmp, sizeof(tmp), "::ffff:%u.%u.%u.%u",
+                                   p[12], p[13], p[14], p[15]);
+            if ((socklen_t)n >= size) {
+                errno = ENOSPC;
+                return NULL;
+            }
+            memcpy(dst, tmp, n + 1);
+            return dst;
+        }
+
         /* Format with :: compression */
         for (i = 0; i < 8; i++) {
             if (i == best_start) {
@@ -419,101 +449,121 @@ inet_ntop(int af, const void *src, char *dst, socklen_t size)
     return NULL;
 }
 
-/*
- * inet_pton — convert presentation string to binary address
- */
-int
-inet_pton(int af, const char *src, void *dst)
+/* RFC 3493 dotted decimal. inet_aton also accepts legacy abbreviated,
+ * octal, and hexadecimal forms that inet_pton must reject. */
+static int decimal_address(const char *p, unsigned char out[4])
 {
+    for (int i = 0; i < 4; ++i) {
+        unsigned int n = 0;
+        if (*p < '0' || *p > '9' || (*p == '0' && p[1] >= '0' && p[1] <= '9'))
+            return 0;
+        do {
+            n = n * 10 + (*p++ - '0');
+            if (n > 255)
+                return 0;
+        } while (*p >= '0' && *p <= '9');
+        out[i] = n;
+        if (i < 3 && *p++ != '.')
+            return 0;
+    }
+    return *p == 0;
+}
+
+int inet_pton(int af, const char *src, void *dst)
+{
+    unsigned char buf[16];
+    int used = 0, gap = -1;
+    const char *p = src;
     if (af == AF_INET) {
-        struct in_addr addr;
-        if (inet_aton(src, &addr) == 0)
+        if (!decimal_address(p, buf))
             return 0;
-        memcpy(dst, &addr, sizeof(addr));
+        memcpy(dst, buf, 4);
         return 1;
     }
-    if (af == AF_INET6) {
-        /*
-         * Minimal IPv6 address parser: handles full 8-group hex
-         * notation (a:b:c:d:e:f:g:h) and the :: abbreviation.
-         * Does NOT handle embedded IPv4 (::ffff:1.2.3.4).
-         */
-        unsigned char buf[16];
-        unsigned int groups[8];
-        int ngroups = 0, dcolon = -1;
-        const char *p = src;
-        int i;
-
-        memset(buf, 0, sizeof(buf));
-        memset(groups, 0, sizeof(groups));
-
-        /* Handle leading :: */
-        if (p[0] == ':' && p[1] == ':') {
-            dcolon = 0;
-            p += 2;
-            if (*p == '\0') {
-                /* :: = all zeros */
-                memcpy(dst, buf, 16);
-                return 1;
-            }
-        }
-
-        while (*p && ngroups < 8) {
-            char *endptr;
-            unsigned long val;
-
-            if (!isxdigit((unsigned char)*p))
-                return 0;
-
-            val = strtoul(p, &endptr, 16);
-            if (val > 0xFFFF)
-                return 0;
-            groups[ngroups++] = (unsigned int)val;
-            p = endptr;
-
-            if (*p == ':') {
-                p++;
-                if (*p == ':') {
-                    if (dcolon >= 0)
-                        return 0; /* only one :: allowed */
-                    dcolon = ngroups;
-                    p++;
-                    if (*p == '\0')
-                        break;
-                }
-            } else if (*p != '\0') {
-                return 0;
-            }
-        }
-
-        if (*p != '\0')
-            return 0;
-
-        if (dcolon >= 0) {
-            /* Expand :: by shifting groups right */
-            int tail = ngroups - dcolon;
-            int fill = 8 - ngroups;
-            if (fill < 0)
-                return 0;
-            for (i = tail - 1; i >= 0; i--)
-                groups[dcolon + fill + i] = groups[dcolon + i];
-            for (i = 0; i < fill; i++)
-                groups[dcolon + i] = 0;
-            ngroups = 8;
-        }
-
-        if (ngroups != 8)
-            return 0;
-
-        for (i = 0; i < 8; i++) {
-            buf[i * 2]     = (unsigned char)(groups[i] >> 8);
-            buf[i * 2 + 1] = (unsigned char)(groups[i] & 0xFF);
-        }
-        memcpy(dst, buf, 16);
-        return 1;
+    if (af != AF_INET6) {
+        errno = EAFNOSUPPORT;
+        return -1;
     }
-    errno = EAFNOSUPPORT;
-    return -1;
+    if (*p == ':') {
+        if (p[1] != ':')
+            return 0;
+        gap = 0;
+        p += 2;
+    }
+    while (*p) {
+        const char *start = p;
+        unsigned int value = 0;
+        if (used >= 16)
+            return 0;
+        while (isxdigit((unsigned char)*p)) {
+            unsigned char c = *p++;
+            if (p - start > 4)
+                return 0;
+            value = value * 16 + (c <= '9' ? c - '0' : (c | 32) - 'a' + 10);
+        }
+        if (*p == '.') {
+            if (used > 12 || !decimal_address(start, buf + used))
+                return 0;
+            used += 4;
+            break;
+        }
+        if (p == start)
+            return 0;
+        buf[used++] = value >> 8;
+        buf[used++] = value;
+        if (!*p)
+            break;
+        if (*p++ != ':' || !*p)
+            return 0;
+        if (*p == ':') {
+            if (gap >= 0)
+                return 0;
+            gap = used;
+            ++p;
+        }
+    }
+    if (gap >= 0 && used < 16) {
+        int missing = 16 - used;
+        memmove(buf + gap + missing, buf + gap, used - gap);
+        memset(buf + gap, 0, missing);
+    } else if (used != 16 || gap >= 0) {
+        return 0;
+    }
+    memcpy(dst, buf, sizeof(buf));
+    return 1;
+}
+
+/* Leave room for an interface added between the count and list ioctls.
+ * If the returned buffer is full, grow and enumerate again. */
+static struct ifreq *interface_list(int sock, int *count)
+{
+    int capacity;
+    struct ifconf conf;
+    struct ifreq *buf;
+    if (ioctl(sock, SIOCGIFNUM, &capacity) < 0)
+        return NULL;
+    if (capacity < 8)
+        capacity = 8;
+    for (;;) {
+        if (capacity > INT_MAX / (2 * (int)sizeof(*buf))) {
+            errno = ENOBUFS;
+            return NULL;
+        }
+        capacity *= 2;
+        conf.ifc_len = capacity * sizeof(*buf);
+        buf = malloc(conf.ifc_len);
+        if (!buf)
+            return NULL;
+        conf.ifc_req = buf;
+        if (ioctl(sock, SIOCGIFCONF, &conf) < 0) {
+            free(buf);
+            return NULL;
+        }
+        *count = conf.ifc_len / sizeof(*buf);
+        if (*count < capacity)
+            return buf;
+        free(buf);
+    }
 }
 
 /*
@@ -524,26 +574,22 @@ int
 getifaddrs(struct ifaddrs **ifap)
 {
     int sock;
-    struct ifconf ifc;
     struct ifreq *ifr;
-    char buf[4096];
     struct ifaddrs *head = NULL, **tail = &head;
     int i, n;
 
+    if (!ifap) {
+        errno = EINVAL;
+        return -1;
+    }
     sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0)
         return -1;
-
-    ifc.ifc_len = sizeof(buf);
-    ifc.ifc_buf = buf;
-
-    if (ioctl(sock, SIOCGIFCONF, &ifc) < 0) {
+    ifr = interface_list(sock, &n);
+    if (!ifr) {
         close(sock);
         return -1;
     }
-
-    n = ifc.ifc_len / sizeof(struct ifreq);
-    ifr = ifc.ifc_req;
 
     for (i = 0; i < n; i++) {
         struct ifaddrs *ifa;
@@ -551,14 +597,13 @@ getifaddrs(struct ifaddrs **ifap)
         struct ifreq flagreq, maskreq;
 
         ifa = (struct ifaddrs *)calloc(1, sizeof(struct ifaddrs));
-        if (!ifa) {
-            freeifaddrs(head);
-            close(sock);
-            errno = ENOMEM;
-            return -1;
-        }
-
+        if (!ifa)
+            goto nomem;
+        *tail = ifa;
+        tail = &ifa->ifa_next;
         ifa->ifa_name = strdup(ifr[i].ifr_name);
+        if (!ifa->ifa_name)
+            goto nomem;
 
         /* Get flags */
         memset(&flagreq, 0, sizeof(flagreq));
@@ -568,30 +613,33 @@ getifaddrs(struct ifaddrs **ifap)
 
         /* Address */
         addr = (struct sockaddr_in *)calloc(1, sizeof(*addr));
-        if (addr) {
-            memcpy(addr, &ifr[i].ifr_addr, sizeof(struct sockaddr_in));
-            ifa->ifa_addr = (struct sockaddr *)addr;
-        }
+        if (!addr)
+            goto nomem;
+        memcpy(addr, &ifr[i].ifr_addr, sizeof(*addr));
+        ifa->ifa_addr = (struct sockaddr *)addr;
 
         /* Netmask */
         memset(&maskreq, 0, sizeof(maskreq));
         strcpy(maskreq.ifr_name, ifr[i].ifr_name);
         if (ioctl(sock, SIOCGIFNETMASK, &maskreq) == 0) {
             mask = (struct sockaddr_in *)calloc(1, sizeof(*mask));
-            if (mask) {
-                memcpy(mask, &maskreq.ifr_addr, sizeof(struct sockaddr_in));
-                ifa->ifa_netmask = (struct sockaddr *)mask;
-            }
+            if (!mask)
+                goto nomem;
+            memcpy(mask, &maskreq.ifr_addr, sizeof(*mask));
+            ifa->ifa_netmask = (struct sockaddr *)mask;
         }
-
-        ifa->ifa_next = NULL;
-        *tail = ifa;
-        tail = &ifa->ifa_next;
     }
 
+    free(ifr);
     close(sock);
     *ifap = head;
     return 0;
+nomem:
+    freeifaddrs(head);
+    free(ifr);
+    close(sock);
+    errno = ENOMEM;
+    return -1;
 }
 
 void
@@ -609,99 +657,131 @@ freeifaddrs(struct ifaddrs *ifa)
     }
 }
 
-/*
- * if_nametoindex — map interface name to index (RFC 3493)
- *
- * Uses SIOCGIFINDEX ioctl.  On Solaris 7 this ioctl may not exist
- * (it was added in later Solaris versions), so we fall back to
- * scanning SIOCGIFCONF and assigning indices based on position.
- */
-#ifndef HAVE_IF_NAMETOINDEX
-unsigned int
-if_nametoindex(const char *ifname)
+/* SIOCGIFINDEX returns the kernel index used by sockets. */
+static unsigned int interface_index(int sock, const char *name)
 {
-    int sock;
-
-    if (!ifname)
+    struct ifreq req;
+    if (!name || !*name || strlen(name) >= sizeof(req.ifr_name)) {
+        errno = ENXIO;
         return 0;
-
-    sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock < 0)
-        return 0;
-
-    /*
-     * Solaris 7 likely lacks SIOCGIFINDEX, so we always use the
-     * SIOCGIFCONF fallback: scan the interface list and assign
-     * 1-based indices by position.
-     */
-    {
-        struct ifconf ifc;
-        char buf[4096];
-        struct ifreq *ifr_p;
-        int n, i;
-
-        ifc.ifc_len = sizeof(buf);
-        ifc.ifc_buf = buf;
-
-        if (ioctl(sock, SIOCGIFCONF, &ifc) < 0) {
-            close(sock);
-            return 0;
-        }
-
-        n = ifc.ifc_len / sizeof(struct ifreq);
-        ifr_p = ifc.ifc_req;
-
-        for (i = 0; i < n; i++) {
-            if (strcmp(ifr_p[i].ifr_name, ifname) == 0) {
-                close(sock);
-                return (unsigned int)(i + 1);  /* indices are 1-based */
-            }
-        }
     }
-
-    close(sock);
-    return 0;
+    memset(&req, 0, sizeof(req));
+    strcpy(req.ifr_name, name);
+    if (ioctl(sock, SIOCGIFINDEX, &req) < 0)
+        return 0;
+    return req.ifr_index;
 }
 
-char *
-if_indextoname(unsigned int ifindex, char *ifname)
+unsigned int if_nametoindex(const char *name)
 {
-    int sock;
-    struct ifconf ifc;
-    char buf[4096];
-    struct ifreq *ifr_p;
-    int n;
+    struct if_nameindex *list;
+    unsigned int index = 0;
+    size_t i;
+    if (!name || !*name || strlen(name) >= IFNAMSIZ) {
+        errno = ENXIO;
+        return 0;
+    }
+    list = if_nameindex();
+    if (!list)
+        return 0;
+    for (i = 0; list[i].if_name; ++i)
+        if (strcmp(list[i].if_name, name) == 0) {
+            index = list[i].if_index;
+            break;
+        }
+    if_freenameindex(list);
+    if (!index)
+        errno = ENXIO;
+    return index;
+}
 
-    if (ifindex == 0 || !ifname)
-        return NULL;
+void if_freenameindex(struct if_nameindex *list)
+{
+    size_t i;
+    if (list) {
+        for (i = 0; list[i].if_name; ++i)
+            free(list[i].if_name);
+        free(list);
+    }
+}
 
-    sock = socket(AF_INET, SOCK_DGRAM, 0);
+struct if_nameindex *if_nameindex(void)
+{
+    int sock = socket(AF_INET, SOCK_DGRAM, 0);
+    struct if_nameindex *list = NULL;
+    struct ifreq *rows;
+    int count, i, used = 0, use_positions = 0;
     if (sock < 0)
         return NULL;
+    rows = interface_list(sock, &count);
+    if (!rows)
+        goto done;
+    list = calloc(count + 1, sizeof(*list));
+    if (!list)
+        goto done;
+    for (i = 0; i < count; ++i) {
+        char *name = rows[i].ifr_name;
+        unsigned int index;
+        int j;
+        for (j = 0; j < used && strcmp(list[j].if_name, name); ++j)
+            ;
+        if (j < used)
+            continue;
+        index = interface_index(sock, name);
+        if (!index) {
+            /* Solaris 7 exposes the ioctl in its headers, but some kernels
+             * return ENOENT even for lo0. Preserve the existing 1-based
+             * convention consistently across all three lookup functions. */
+            if (errno != ENOENT && errno != ENOTTY && errno != EINVAL &&
+                errno != ENOSYS && errno != EOPNOTSUPP)
+                goto fail;
+            use_positions = 1;
+        } else {
+            for (j = 0; j < used && list[j].if_index != index; ++j)
+                ;
+            if (j < used)
+                continue;
+        }
+        list[used].if_name = strdup(name);
+        if (!list[used].if_name)
+            goto fail;
+        list[used++].if_index = index;
+    }
+    if (use_positions)
+        for (i = 0; i < used; ++i)
+            list[i].if_index = i + 1;
+    goto done;
+fail:
+    if_freenameindex(list);
+    list = NULL;
+done:
+    free(rows);
+    close(sock);
+    return list;
+}
 
-    ifc.ifc_len = sizeof(buf);
-    ifc.ifc_buf = buf;
-
-    if (ioctl(sock, SIOCGIFCONF, &ifc) < 0) {
-        close(sock);
+char *if_indextoname(unsigned int index, char *name)
+{
+    struct if_nameindex *list;
+    size_t i;
+    if (!name || index == 0) {
+        errno = ENXIO;
         return NULL;
     }
-
-    n = ifc.ifc_len / sizeof(struct ifreq);
-    ifr_p = ifc.ifc_req;
-
-    /* ifindex is 1-based (matching if_nametoindex fallback) */
-    if ((int)ifindex <= n) {
-        strncpy(ifname, ifr_p[ifindex - 1].ifr_name, IFNAMSIZ - 1);
-        ifname[IFNAMSIZ - 1] = '\0';
-        close(sock);
-        return ifname;
+    list = if_nameindex();
+    if (!list)
+        return NULL;
+    for (i = 0; list[i].if_name; ++i) {
+        if (list[i].if_index == index) {
+            strcpy(name, list[i].if_name);
+            if_freenameindex(list);
+            return name;
+        }
     }
-
-    close(sock);
+    if_freenameindex(list);
+    errno = ENXIO;
     return NULL;
 }
-#endif /* HAVE_IF_NAMETOINDEX */
 
 /*
  * accept4 — accept a connection with flags (SOCK_CLOEXEC, SOCK_NONBLOCK).
