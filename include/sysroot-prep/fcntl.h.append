@@ -52,10 +52,8 @@
 #define O_DIRECTORY 0x1000000
 #endif
 
-/* O_NOFOLLOW — fail if path is a symlink (POSIX 2008) */
-#ifndef O_NOFOLLOW
-#define O_NOFOLLOW 0x20000
-#endif
+/* Leave O_NOFOLLOW to the vendor header. Solaris 7 open() accepts and
+ * ignores the later flag value, so advertising it disables caller fallbacks. */
 
 /* POSIX 2008 file-control APIs declared in <fcntl.h> that Solaris 7
  * lacks. libsolcompat provides runtime implementations. Signatures
