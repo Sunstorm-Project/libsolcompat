@@ -134,7 +134,7 @@ duplocale(locale_t locobj)
  *
  * Solaris 7 has sem_wait() and sem_trywait() (POSIX.1b real-time) but
  * not sem_timedwait() (POSIX.1-2001).  We emulate by polling sem_trywait()
- * with nanosleep() intervals.
+ * with bounded poll() intervals.
  *
  * This is not efficient for long waits, but Python's usage is primarily
  * for thread synchronization with short timeouts.  For the single-CPU
@@ -158,18 +158,22 @@ sem_timedwait(sem_t *sem, const struct timespec *abs_timeout)
         if (errno != EAGAIN)
             return -1; /* Real error, not just "would block" */
 
-        /* Check if we've exceeded the deadline */
-        gettimeofday(&now, NULL);
-        if (now.tv_sec > abs_timeout->tv_sec ||
-            (now.tv_sec == abs_timeout->tv_sec &&
-             now.tv_usec * 1000L >= abs_timeout->tv_nsec)) {
+        /* POSIX permits immediate acquisition without inspecting the deadline. */
+        if (abs_timeout->tv_nsec < 0 || abs_timeout->tv_nsec >= 1000000000L) {
+            errno = EINVAL;
+            return -1;
+        }
+        if (gettimeofday(&now, NULL) < 0)
+            return -1;
+        long long remaining = ((long long)abs_timeout->tv_sec - now.tv_sec) *
+            1000000000LL + abs_timeout->tv_nsec - now.tv_usec * 1000L;
+        if (remaining <= 0) {
             errno = ETIMEDOUT;
             return -1;
         }
-
-        /* 10ms poll via poll() — avoids the nanosleep@@SUNW_0.7
-           versioned symbol that would require -lrt at link time. */
-        poll(NULL, 0, 10);
+        int delay = remaining >= 10000000 ? 10 : (int)((remaining + 999999) / 1000000);
+        if (poll(NULL, 0, delay) < 0)
+            return -1;
     }
 }
 #endif /* HAVE_SEM_TIMEDWAIT */
