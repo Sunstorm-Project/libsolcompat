@@ -350,39 +350,33 @@ alphasort(const struct dirent **a, const struct dirent **b)
 DIR *
 fdopendir(int fd)
 {
-    /*
-     * Solaris 7 has no fdopendir.  Approximate by using fchdir + getcwd
-     * to find the directory path, then opendir() on it.
-     * Solaris 7 /proc/self/fd/N entries are NOT symlinks so readlink
-     * does not work.
-     */
-    char dirpath[1024];
-    int saved;
-    char *p;
+    struct stat st;
+    DIR *stream;
+    int placeholder, flags;
 
-    saved = open(".", O_RDONLY);
-    if (saved < 0) {
+    if (fstat(fd, &st) < 0)
+        return NULL;
+    if (!S_ISDIR(st.st_mode)) {
+        errno = ENOTDIR;
+        return NULL;
+    }
+    flags = fcntl(fd, F_GETFL);
+    if (flags < 0)
+        return NULL;
+    if ((flags & O_ACCMODE) == O_WRONLY) {
         errno = EBADF;
         return NULL;
     }
-
-    if (fchdir(fd) < 0) {
-        close(saved);
-        errno = EBADF;
+    /* Let libc initialize its own stream buffer and private locking state.
+     * Its documented dd_fd is the descriptor read and closed by libc.
+     * No directory entries have been read from the placeholder. */
+    stream = opendir("/");
+    if (!stream)
         return NULL;
-    }
-
-    p = getcwd(dirpath, sizeof(dirpath));
-
-    fchdir(saved);
-    close(saved);
-
-    if (p == NULL) {
-        errno = EBADF;
-        return NULL;
-    }
-
-    return opendir(dirpath);
+    placeholder = stream->dd_fd;
+    stream->dd_fd = fd;
+    close(placeholder);
+    return stream;
 }
 
 /*
