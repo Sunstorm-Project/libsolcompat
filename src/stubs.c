@@ -196,12 +196,6 @@ extern int ioctl(int, int, ...);
 
 #include <langinfo.h>
 
-/* Solaris 7 net/if.h lacks struct if_nameindex — define it here */
-struct if_nameindex {
-    unsigned int if_index;
-    char        *if_name;
-};
-
 /*
  * sockatmark — test whether socket is at out-of-band mark.
  * POSIX.1-2001. Solaris 7 has the ioctl but not the function wrapper.
@@ -363,31 +357,6 @@ pthread_attr_setstack(pthread_attr_t *attribute,
     return pthread_attr_setstacksize(attribute, stack_size);
 }
 #endif
-
-/*
- * if_nameindex / if_freenameindex — enumerate network interfaces.
- * POSIX.1-2001. Solaris 7 has SIOCGIFCONF but not this wrapper.
- */
-struct if_nameindex *
-if_nameindex(void)
-{
-    /* Minimal implementation: return empty list.
-     * A full implementation would use SIOCGIFCONF + SIOCGIFINDEX. */
-    struct if_nameindex *name_index_list;
-    name_index_list = (struct if_nameindex *)calloc(1, sizeof(struct if_nameindex));
-    if (name_index_list) {
-        name_index_list[0].if_index = 0;
-        name_index_list[0].if_name = NULL;
-    }
-    return name_index_list;
-}
-
-void
-if_freenameindex(struct if_nameindex *name_index_list)
-{
-    /* A full implementation would free each if_name string */
-    free(name_index_list);
-}
 
 /*
  * mq_timedreceive / mq_timedsend — timed message queue operations.

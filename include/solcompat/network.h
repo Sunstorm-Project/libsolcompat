@@ -489,18 +489,7 @@ struct ifaddrs {
 int  getifaddrs(struct ifaddrs **ifap);
 void freeifaddrs(struct ifaddrs *ifa);
 
-/* --- if_nametoindex / if_indextoname (RFC 3493) --- */
-/*
- * Needed for IPv6 scope IDs and modern socket code.
- * Implementation uses SIOCGIFINDEX/SIOCGIFCONF ioctls.
- */
-unsigned int if_nametoindex(const char *ifname);
-char        *if_indextoname(unsigned int ifindex, char *ifname);
-
-/* IF_NAMESIZE — POSIX constant for max interface name length */
-#ifndef IF_NAMESIZE
-#define IF_NAMESIZE 16
-#endif
+#include "interfaces.h"
 #ifndef IFNAMSIZ
 #define IFNAMSIZ IF_NAMESIZE
 #endif

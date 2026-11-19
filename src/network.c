@@ -25,6 +25,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <ctype.h>
+#include <limits.h>
 
 /* SOCK_CLOEXEC / SOCK_NONBLOCK — Linux/BSD socket flags */
 #ifndef SOCK_CLOEXEC
@@ -516,6 +517,39 @@ inet_pton(int af, const char *src, void *dst)
     return -1;
 }
 
+/* Leave room for an interface added between the count and list ioctls.
+ * If the returned buffer is full, grow and enumerate again. */
+static struct ifreq *interface_list(int sock, int *count)
+{
+    int capacity;
+    struct ifconf conf;
+    struct ifreq *buf;
+    if (ioctl(sock, SIOCGIFNUM, &capacity) < 0)
+        return NULL;
+    if (capacity < 8)
+        capacity = 8;
+    for (;;) {
+        if (capacity > INT_MAX / (2 * (int)sizeof(*buf))) {
+            errno = ENOBUFS;
+            return NULL;
+        }
+        capacity *= 2;
+        conf.ifc_len = capacity * sizeof(*buf);
+        buf = malloc(conf.ifc_len);
+        if (!buf)
+            return NULL;
+        conf.ifc_req = buf;
+        if (ioctl(sock, SIOCGIFCONF, &conf) < 0) {
+            free(buf);
+            return NULL;
+        }
+        *count = conf.ifc_len / sizeof(*buf);
+        if (*count < capacity)
+            return buf;
+        free(buf);
+    }
+}
+
 /*
  * getifaddrs — enumerate network interfaces
  * Uses SIOCGIFCONF ioctl which is available on Solaris 7
@@ -524,26 +558,22 @@ int
 getifaddrs(struct ifaddrs **ifap)
 {
     int sock;
-    struct ifconf ifc;
     struct ifreq *ifr;
-    char buf[4096];
     struct ifaddrs *head = NULL, **tail = &head;
     int i, n;
 
+    if (!ifap) {
+        errno = EINVAL;
+        return -1;
+    }
     sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0)
         return -1;
-
-    ifc.ifc_len = sizeof(buf);
-    ifc.ifc_buf = buf;
-
-    if (ioctl(sock, SIOCGIFCONF, &ifc) < 0) {
+    ifr = interface_list(sock, &n);
+    if (!ifr) {
         close(sock);
         return -1;
     }
-
-    n = ifc.ifc_len / sizeof(struct ifreq);
-    ifr = ifc.ifc_req;
 
     for (i = 0; i < n; i++) {
         struct ifaddrs *ifa;
@@ -551,14 +581,13 @@ getifaddrs(struct ifaddrs **ifap)
         struct ifreq flagreq, maskreq;
 
         ifa = (struct ifaddrs *)calloc(1, sizeof(struct ifaddrs));
-        if (!ifa) {
-            freeifaddrs(head);
-            close(sock);
-            errno = ENOMEM;
-            return -1;
-        }
-
+        if (!ifa)
+            goto nomem;
+        *tail = ifa;
+        tail = &ifa->ifa_next;
         ifa->ifa_name = strdup(ifr[i].ifr_name);
+        if (!ifa->ifa_name)
+            goto nomem;
 
         /* Get flags */
         memset(&flagreq, 0, sizeof(flagreq));
@@ -568,30 +597,33 @@ getifaddrs(struct ifaddrs **ifap)
 
         /* Address */
         addr = (struct sockaddr_in *)calloc(1, sizeof(*addr));
-        if (addr) {
-            memcpy(addr, &ifr[i].ifr_addr, sizeof(struct sockaddr_in));
-            ifa->ifa_addr = (struct sockaddr *)addr;
-        }
+        if (!addr)
+            goto nomem;
+        memcpy(addr, &ifr[i].ifr_addr, sizeof(*addr));
+        ifa->ifa_addr = (struct sockaddr *)addr;
 
         /* Netmask */
         memset(&maskreq, 0, sizeof(maskreq));
         strcpy(maskreq.ifr_name, ifr[i].ifr_name);
         if (ioctl(sock, SIOCGIFNETMASK, &maskreq) == 0) {
             mask = (struct sockaddr_in *)calloc(1, sizeof(*mask));
-            if (mask) {
-                memcpy(mask, &maskreq.ifr_addr, sizeof(struct sockaddr_in));
-                ifa->ifa_netmask = (struct sockaddr *)mask;
-            }
+            if (!mask)
+                goto nomem;
+            memcpy(mask, &maskreq.ifr_addr, sizeof(*mask));
+            ifa->ifa_netmask = (struct sockaddr *)mask;
         }
-
-        ifa->ifa_next = NULL;
-        *tail = ifa;
-        tail = &ifa->ifa_next;
     }
 
+    free(ifr);
     close(sock);
     *ifap = head;
     return 0;
+nomem:
+    freeifaddrs(head);
+    free(ifr);
+    close(sock);
+    errno = ENOMEM;
+    return -1;
 }
 
 void
@@ -609,99 +641,131 @@ freeifaddrs(struct ifaddrs *ifa)
     }
 }
 
-/*
- * if_nametoindex — map interface name to index (RFC 3493)
- *
- * Uses SIOCGIFINDEX ioctl.  On Solaris 7 this ioctl may not exist
- * (it was added in later Solaris versions), so we fall back to
- * scanning SIOCGIFCONF and assigning indices based on position.
- */
-#ifndef HAVE_IF_NAMETOINDEX
-unsigned int
-if_nametoindex(const char *ifname)
+/* SIOCGIFINDEX returns the kernel index used by sockets. */
+static unsigned int interface_index(int sock, const char *name)
 {
-    int sock;
-
-    if (!ifname)
+    struct ifreq req;
+    if (!name || !*name || strlen(name) >= sizeof(req.ifr_name)) {
+        errno = ENXIO;
         return 0;
-
-    sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock < 0)
-        return 0;
-
-    /*
-     * Solaris 7 likely lacks SIOCGIFINDEX, so we always use the
-     * SIOCGIFCONF fallback: scan the interface list and assign
-     * 1-based indices by position.
-     */
-    {
-        struct ifconf ifc;
-        char buf[4096];
-        struct ifreq *ifr_p;
-        int n, i;
-
-        ifc.ifc_len = sizeof(buf);
-        ifc.ifc_buf = buf;
-
-        if (ioctl(sock, SIOCGIFCONF, &ifc) < 0) {
-            close(sock);
-            return 0;
-        }
-
-        n = ifc.ifc_len / sizeof(struct ifreq);
-        ifr_p = ifc.ifc_req;
-
-        for (i = 0; i < n; i++) {
-            if (strcmp(ifr_p[i].ifr_name, ifname) == 0) {
-                close(sock);
-                return (unsigned int)(i + 1);  /* indices are 1-based */
-            }
-        }
     }
-
-    close(sock);
-    return 0;
+    memset(&req, 0, sizeof(req));
+    strcpy(req.ifr_name, name);
+    if (ioctl(sock, SIOCGIFINDEX, &req) < 0)
+        return 0;
+    return req.ifr_index;
 }
 
-char *
-if_indextoname(unsigned int ifindex, char *ifname)
+unsigned int if_nametoindex(const char *name)
 {
-    int sock;
-    struct ifconf ifc;
-    char buf[4096];
-    struct ifreq *ifr_p;
-    int n;
+    struct if_nameindex *list;
+    unsigned int index = 0;
+    size_t i;
+    if (!name || !*name || strlen(name) >= IFNAMSIZ) {
+        errno = ENXIO;
+        return 0;
+    }
+    list = if_nameindex();
+    if (!list)
+        return 0;
+    for (i = 0; list[i].if_name; ++i)
+        if (strcmp(list[i].if_name, name) == 0) {
+            index = list[i].if_index;
+            break;
+        }
+    if_freenameindex(list);
+    if (!index)
+        errno = ENXIO;
+    return index;
+}
 
-    if (ifindex == 0 || !ifname)
-        return NULL;
+void if_freenameindex(struct if_nameindex *list)
+{
+    size_t i;
+    if (list) {
+        for (i = 0; list[i].if_name; ++i)
+            free(list[i].if_name);
+        free(list);
+    }
+}
 
-    sock = socket(AF_INET, SOCK_DGRAM, 0);
+struct if_nameindex *if_nameindex(void)
+{
+    int sock = socket(AF_INET, SOCK_DGRAM, 0);
+    struct if_nameindex *list = NULL;
+    struct ifreq *rows;
+    int count, i, used = 0, use_positions = 0;
     if (sock < 0)
         return NULL;
+    rows = interface_list(sock, &count);
+    if (!rows)
+        goto done;
+    list = calloc(count + 1, sizeof(*list));
+    if (!list)
+        goto done;
+    for (i = 0; i < count; ++i) {
+        char *name = rows[i].ifr_name;
+        unsigned int index;
+        int j;
+        for (j = 0; j < used && strcmp(list[j].if_name, name); ++j)
+            ;
+        if (j < used)
+            continue;
+        index = interface_index(sock, name);
+        if (!index) {
+            /* Solaris 7 exposes the ioctl in its headers, but some kernels
+             * return ENOENT even for lo0. Preserve the existing 1-based
+             * convention consistently across all three lookup functions. */
+            if (errno != ENOENT && errno != ENOTTY && errno != EINVAL &&
+                errno != ENOSYS && errno != EOPNOTSUPP)
+                goto fail;
+            use_positions = 1;
+        } else {
+            for (j = 0; j < used && list[j].if_index != index; ++j)
+                ;
+            if (j < used)
+                continue;
+        }
+        list[used].if_name = strdup(name);
+        if (!list[used].if_name)
+            goto fail;
+        list[used++].if_index = index;
+    }
+    if (use_positions)
+        for (i = 0; i < used; ++i)
+            list[i].if_index = i + 1;
+    goto done;
+fail:
+    if_freenameindex(list);
+    list = NULL;
+done:
+    free(rows);
+    close(sock);
+    return list;
+}
 
-    ifc.ifc_len = sizeof(buf);
-    ifc.ifc_buf = buf;
-
-    if (ioctl(sock, SIOCGIFCONF, &ifc) < 0) {
-        close(sock);
+char *if_indextoname(unsigned int index, char *name)
+{
+    struct if_nameindex *list;
+    size_t i;
+    if (!name || index == 0) {
+        errno = ENXIO;
         return NULL;
     }
-
-    n = ifc.ifc_len / sizeof(struct ifreq);
-    ifr_p = ifc.ifc_req;
-
-    /* ifindex is 1-based (matching if_nametoindex fallback) */
-    if ((int)ifindex <= n) {
-        strncpy(ifname, ifr_p[ifindex - 1].ifr_name, IFNAMSIZ - 1);
-        ifname[IFNAMSIZ - 1] = '\0';
-        close(sock);
-        return ifname;
+    list = if_nameindex();
+    if (!list)
+        return NULL;
+    for (i = 0; list[i].if_name; ++i) {
+        if (list[i].if_index == index) {
+            strcpy(name, list[i].if_name);
+            if_freenameindex(list);
+            return name;
+        }
     }
-
-    close(sock);
+    if_freenameindex(list);
+    errno = ENXIO;
     return NULL;
 }
-#endif /* HAVE_IF_NAMETOINDEX */
 
 /*
  * accept4 — accept a connection with flags (SOCK_CLOEXEC, SOCK_NONBLOCK).
