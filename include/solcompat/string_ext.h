@@ -51,6 +51,9 @@ char *strsignal(int signum);
  */
 char *strerror_r(int errnum, char *buf, size_t buflen);
 
+int ffsl(long);
+int ffsll(long long);
+
 #ifdef __cplusplus
 }
 #endif

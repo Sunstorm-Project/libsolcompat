@@ -255,3 +255,13 @@ strerror_l(int errnum, locale_t locale)
     (void)locale;
     return strerror(errnum);
 }
+
+int ffsl(long x)
+{
+    return x ? __builtin_ctzl((unsigned long)x) + 1 : 0;
+}
+
+int ffsll(long long x)
+{
+    return x ? __builtin_ctzll((unsigned long long)x) + 1 : 0;
+}

@@ -27,6 +27,7 @@ int asprintf(char **strp, const char *fmt, ...);
 
 /* POSIX.1-2008 dprintf — fprintf to a file descriptor */
 int dprintf(int fd, const char *fmt, ...);
+int vdprintf(int fd, const char *fmt, va_list ap);
 
 /* POSIX.1-2008 getline / getdelim — dynamic line reading */
 ssize_t getline(char **lineptr, size_t *n, FILE *stream);

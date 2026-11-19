@@ -1,0 +1,12 @@
+#ifndef _SOLCOMPAT_TERMIOS_H_APPEND
+#define _SOLCOMPAT_TERMIOS_H_APPEND
+#include <sys/termios.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
+int tcgetwinsize(int fd, struct winsize *size);
+int tcsetwinsize(int fd, const struct winsize *size);
+#ifdef __cplusplus
+}
+#endif
+#endif

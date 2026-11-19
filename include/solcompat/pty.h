@@ -27,6 +27,9 @@ int login_tty(int fd);
 
 void cfmakeraw(struct termios *termios_p);
 
+int tcgetwinsize(int fd, struct winsize *size);
+int tcsetwinsize(int fd, const struct winsize *size);
+
 #ifdef __cplusplus
 }
 #endif
