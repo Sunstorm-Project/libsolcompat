@@ -2,7 +2,7 @@
 
 POSIX.1-2024 compatibility library for Solaris 7 SPARC.
 
-libsolcompat bridges the gap between Solaris 7's SUSv2/POSIX.1-1997 APIs and the POSIX.1-2024 (Issue 8) standard. It provides 300+ functions across 23 source files that are missing from Solaris 7 but required by current versions of GCC, GNU coreutils, Python, OpenSSL, git, SDL2, ScummVM, and other tools.
+libsolcompat bridges the gap between Solaris 7's SUSv2/POSIX.1-1997 APIs and the POSIX.1-2024 (Issue 8) standard. It provides compatibility functions that are missing from Solaris 7 but required by current versions of GCC, GNU coreutils, Python, OpenSSL, git, SDL2, ScummVM, and other tools.
 
 Part of the [Sunstorm Project](https://github.com/Sunstorm-Project). Installed as Wave 0 in the SST build pipeline — every subsequent package links against it.
 
@@ -15,9 +15,9 @@ Part of the [Sunstorm Project](https://github.com/Sunstorm-Project). Installed a
 | **stdio** | `getline`, `getdelim`, `vasprintf`, `asprintf`, `dprintf`, `fmemopen`, `open_memstream`, `preadv`, `pwritev` |
 | **stdlib** | `setenv`, `unsetenv`, `mkdtemp`, `_Exit`, `strtoimax`, `strtoumax`, `strtof`, `strtold`, `atoll`, `qsort_r`, `imaxabs`, `imaxdiv` |
 | **c99_types** | `SCN*` scan format macros, `INTMAX_C`/`UINTMAX_C` |
-| **network** | `getaddrinfo`/`freeaddrinfo`/`gai_strerror`/`getnameinfo`, `inet_ntop`/`inet_pton`, full IPv6 types (`struct sockaddr_in6`, `struct sockaddr_storage`, `IN6_IS_ADDR_*`), `getifaddrs`/`freeifaddrs`, `if_nametoindex`/`if_indextoname`/`if_nameindex`, `accept4`, `sockatmark` |
+| **network** | `getaddrinfo`/`freeaddrinfo`/`gai_strerror`/`getnameinfo`, `inet_ntop`/`inet_pton`, full IPv6 types (`struct sockaddr_in6`, `struct sockaddr_storage`, `IN6_IS_ADDR_*`), `getifaddrs`/`freeifaddrs`, `if_nametoindex`/`if_indextoname`/`if_nameindex` (kernel indices where supported, otherwise one-based interface-list positions), `accept4`, `sockatmark` |
 | **clock** | `CLOCK_MONOTONIC` (via `gethrtime()`), `CLOCK_PROCESS_CPUTIME_ID`, `CLOCK_THREAD_CPUTIME_ID`, `clock_nanosleep`, `timegm` |
-| **math** | 100+ C99 functions: all float (`fabsf`, `sinf`, ...) and long double (`fabsl`, `sinl`, ...) variants, `round`, `trunc`, `log2`, `exp2`, `fdim`, `fmin`, `fmax`, `tgamma`, `nearbyint`, `lrint`/`llrint`, `lround`/`llround`, `nan`/`nanf`/`nanl`, `fpclassify`, `NAN`, `INFINITY`, `cexp` |
+| **math** | 100+ C99 functions: single-, double-, and binary128 fused multiply-add, full-width long-double scaling and adjacent values, plus legacy long-double transcendental wrappers that calculate in double precision, `round`, `trunc`, `log2`, `exp2`, `fdim`, `fmin`, `fmax`, `tgamma`, `nearbyint`, `lrint`/`llrint`, `lround`/`llround`, `nan`/`nanf`/`nanl`, `fpclassify`, `NAN`, `INFINITY`, `cexp` |
 | **fenv** | Full C99 `<fenv.h>`: `fegetround`/`fesetround`, `feclearexcept`/`feraiseexcept`/`fetestexcept`, `fegetenv`/`fesetenv`, `feholdexcept`/`feupdateenv` — real SPARC FSR implementation |
 | **memory** | `posix_memalign`, `aligned_alloc`, `reallocarray`, `posix_madvise`, `MAP_ANONYMOUS` wrapper (redirects through `/dev/zero`) |
 | **filesystem** | `utimes`, `futimens`, `utimensat`, `flock`, `scandir`/`alphasort`, `fdopendir`, `dirfd`, `posix_fadvise`, `posix_fallocate` |
@@ -28,8 +28,8 @@ Part of the [Sunstorm Project](https://github.com/Sunstorm-Project). Installed a
 | **random** | `explicit_bzero`, `getentropy`, `arc4random`/`arc4random_buf`/`arc4random_uniform` |
 | **ctype** | `isblank`, locale-aware `_l` variants: `isalnum_l`, `isalpha_l`, `isblank_l`, `iscntrl_l`, `isdigit_l`, `isgraph_l`, `islower_l`, `isprint_l`, `ispunct_l`, `isspace_l`, `isupper_l`, `isxdigit_l`, `tolower_l`, `toupper_l` |
 | **locale** | `newlocale`/`uselocale`/`freelocale`/`duplocale`, `locale_t`, `LC_*_MASK`, `LC_GLOBAL_LOCALE`, `nl_langinfo_l` |
-| **threading** | `pthread_setname_np`, `sem_timedwait`, `pthread_condattr_getclock`/`setclock`, `pthread_attr_getstack`/`setstack` |
-| **mqueue** | `mq_timedreceive`, `mq_timedsend` |
+| **threading** | `pthread_setname_np`, `sem_timedwait`, `pthread_mutex_timedlock`, `pthread_rwlock_timedrdlock`/`pthread_rwlock_timedwrlock`, `pthread_condattr_getclock`/`setclock`, `pthread_attr_getstack`/`setstack` |
+| **mqueue** | `mq_timedreceive` and `mq_timedsend` currently return `ENOSYS`. |
 | **getopt** | `getopt_long`, `getopt_long_only` |
 | **atomic** | GCC `__atomic_*` builtins (load/store/exchange/CAS/fetch_add/fetch_or/...) for 1/4/8-byte types, plus Solaris-style `atomic_add_int`/`atomic_cas_uint`/`atomic_swap_ptr` |
 | **hwcap** | `getisax()` stub (Solaris 9+ feature) |
