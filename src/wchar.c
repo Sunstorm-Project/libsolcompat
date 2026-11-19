@@ -82,6 +82,81 @@ wcsstr(const wchar_t *haystack, const wchar_t *needle)
 /* wcrtomb, wcsrtombs, mbsrtowcs: provided by Solaris 7's libc.
  * Do NOT reimplement — the system versions handle the locale correctly. */
 
+/* A size query converts a private copy of the state and leaves *src alone. */
+size_t
+mbsnrtowcs(wchar_t *dst, const char **src, size_t bytes, size_t limit,
+          mbstate_t *state)
+{
+    static mbstate_t internal;
+    mbstate_t copy;
+    const char *p = *src;
+    size_t count = 0;
+    if (!state) state = &internal;
+    if (!dst) {
+        copy = *state;
+        state = &copy;
+    }
+    while (bytes && (!dst || count < limit)) {
+        wchar_t wc;
+        size_t n = mbrtowc(&wc, p, bytes, state);
+        if (n == (size_t)-1) {
+            if (dst) *src = p;
+            return n;
+        }
+        if (n == (size_t)-2) {
+            p += bytes;
+            break;
+        }
+        if (dst) dst[count] = wc;
+        if (!n) {
+            p = NULL;
+            break;
+        }
+        p += n;
+        bytes -= n;
+        ++count;
+    }
+    if (dst) *src = p;
+    return count;
+}
+
+size_t
+wcsnrtombs(char *dst, const wchar_t **src, size_t chars, size_t limit,
+          mbstate_t *state)
+{
+    static mbstate_t internal;
+    mbstate_t copy;
+    const wchar_t *p = *src;
+    size_t count = 0;
+    if (!state) state = &internal;
+    if (!dst) {
+        copy = *state;
+        state = &copy;
+    }
+    while (chars && (!dst || count < limit)) {
+        char bytes[MB_LEN_MAX];
+        mbstate_t next = *state;
+        size_t n = wcrtomb(bytes, *p, &next);
+        if (n == (size_t)-1) {
+            if (dst) *src = p;
+            return n;
+        }
+        if (dst && n > limit - count) break;
+        if (dst) memcpy(dst + count, bytes, n);
+        *state = next;
+        count += n;
+        if (!*p) {
+            --count;  /* Exclude the terminating byte, retaining any shift bytes. */
+            p = NULL;
+            break;
+        }
+        ++p;
+        --chars;
+    }
+    if (dst) *src = p;
+    return count;
+}
+
 int
 wctob(wint_t c)
 {

@@ -1,6 +1,7 @@
 #include <wchar.h>
 #include <stdio.h>
 #include <locale.h>
+#include <string.h>
 #include <dlfcn.h>
 int main(void)
 {
@@ -15,6 +16,17 @@ int main(void)
         wcscasecmp(L"Solaris",L"soLARIS") || wcsncasecmp(L"tea",L"TEst",2) ||
         wcscasecmp(L"a",L"B")>=0 || wcsncasecmp(L"a",L"B",0))
         return 1;
+    const char *bytes = "abcd", *start = bytes;
+    const wchar_t *wide = L"abcd", *wstart = wide;
+    char output[6];
+    mbstate_t state = {0};
+    if (mbsnrtowcs(NULL,&bytes,3,0,&state)!=3 || bytes!=start ||
+        mbsnrtowcs(dst,&bytes,4,2,&state)!=2 || bytes!=start+2 ||
+        mbsnrtowcs(dst,&bytes,3,3,&state)!=2 || bytes || wcscmp(dst,L"cd") ||
+        wcsnrtombs(NULL,&wide,3,0,&state)!=3 || wide!=wstart ||
+        wcsnrtombs(output,&wide,4,2,&state)!=2 || wide!=wstart+2 ||
+        wcsnrtombs(output,&wide,3,3,&state)!=2 || wide || strcmp(output,"cd"))
+        return 5;
     void *libc = dlopen("libc.so.1", RTLD_LAZY);
     int (*native_wctob)(wint_t) = libc ? dlsym(libc, "wctob") : NULL;
     if (!native_wctob) return 2;
