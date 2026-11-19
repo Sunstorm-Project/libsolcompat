@@ -6,6 +6,7 @@
  */
 
 #include <wchar.h>
+#include <wctype.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -264,4 +265,55 @@ c16rtomb(char *s, _sol_char16_t c16, mbstate_t *ps)
         return (size_t)-1;  /* low without high — encoding error */
     }
     return wcrtomb(s, (wchar_t)c16, state);
+}
+
+wchar_t *wcpcpy(wchar_t *dst, const wchar_t *src)
+{
+    while ((*dst = *src++) != L'\0')
+        ++dst;
+    return dst;
+}
+
+wchar_t *wcpncpy(wchar_t *dst, const wchar_t *src, size_t n)
+{
+    size_t count = wcsnlen(src, n);
+    wmemcpy(dst, src, count);
+    wmemset(dst + count, L'\0', n - count);
+    return dst + count;
+}
+
+size_t wcslcpy(wchar_t *dst, const wchar_t *src, size_t size)
+{
+    size_t length = wcslen(src);
+    if (size) {
+        size_t copy = length < size ? length : size - 1;
+        wmemcpy(dst, src, copy);
+        dst[copy] = L'\0';
+    }
+    return length;
+}
+
+size_t wcslcat(wchar_t *dst, const wchar_t *src, size_t size)
+{
+    size_t used = wcsnlen(dst, size);
+    if (used == size)
+        return size + wcslen(src);
+    return used + wcslcpy(dst + used, src, size - used);
+}
+
+int wcsncasecmp(const wchar_t *a, const wchar_t *b, size_t n)
+{
+    while (n--) {
+        wint_t x = towlower(*a++), y = towlower(*b++);
+        if (x != y)
+            return x < y ? -1 : 1;
+        if (!x)
+            break;
+    }
+    return 0;
+}
+
+int wcscasecmp(const wchar_t *a, const wchar_t *b)
+{
+    return wcsncasecmp(a, b, (size_t)-1);
 }

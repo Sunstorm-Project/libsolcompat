@@ -1,0 +1,2 @@
+/* Solaris 7 net/if.h embeds sockaddr fields without including their definition. */
+#include <sys/socket.h>
