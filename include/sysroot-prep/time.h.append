@@ -59,7 +59,7 @@ int clock_nanosleep(clockid_t clock_id, int flags,
                     struct timespec *remain);
 
 /* BSD/GNU timegm — inverse of gmtime. libsolcompat implementation
- * in src/clock.c uses mktime + timezone fixup. */
+ * in src/clock.c performs a UTC calendar conversion. */
 struct tm;
 time_t timegm(struct tm *tm);
 

@@ -15,11 +15,6 @@
 #include <string.h>
 #include <errno.h>
 
-/* Forward declarations for functions implemented in stdlib.c —
-   Solaris 7 stdlib.h doesn't declare these. */
-int setenv(const char *name, const char *value, int overwrite);
-int unsetenv(const char *name);
-
 /* gethrtime() is a Solaris builtin — returns hrtime_t (nanoseconds) */
 extern hrtime_t gethrtime(void);
 
@@ -188,38 +183,42 @@ clock_nanosleep(clockid_t clk_id, int flags,
     }
 }
 
-/*
- * timegm — interpret struct tm as UTC and return time_t.
- *
- * Solaris 7 has mktime (local time) but not timegm (UTC).
- * We use the portable setenv("TZ","UTC")/mktime/restore approach.
- *
- * Not thread-safe, but neither is mktime on Solaris 7.
- * Single-CPU QEMU makes this a non-issue in practice.
- */
+/* Convert a proleptic Gregorian date directly to days since 1970-01-01.
+ * March-based years put leap day at the end of each four-year cycle. */
 time_t
 timegm(struct tm *tm)
 {
+    long long year, month, era, year_in_era, days, seconds;
     time_t result;
-    char *saved_tz;
-    char *tz_env;
+    struct tm normalized;
 
-    tz_env = getenv("TZ");
-    saved_tz = tz_env ? strdup(tz_env) : NULL;
-
-    setenv("TZ", "UTC", 1);
-    tzset();
-
-    result = mktime(tm);
-
-    if (saved_tz != NULL) {
-        setenv("TZ", saved_tz, 1);
-        free(saved_tz);
-    } else {
-        unsetenv("TZ");
+    if (!tm) {
+        errno = EINVAL;
+        return (time_t)-1;
     }
-    tzset();
-
+    year = (long long)tm->tm_year + 1900;
+    month = tm->tm_mon;
+    year += month / 12;
+    month %= 12;
+    if (month < 0) {
+        month += 12;
+        --year;
+    }
+    if (month < 2)
+        --year;
+    month = (month + 10) % 12;
+    era = (year >= 0 ? year : year - 399) / 400;
+    year_in_era = year - era * 400;
+    days = era * 146097 + year_in_era * 365 + year_in_era / 4 -
+        year_in_era / 100 + (153 * month + 2) / 5 + tm->tm_mday - 1 - 719468;
+    seconds = days * 86400 + (long long)tm->tm_hour * 3600 +
+        (long long)tm->tm_min * 60 + tm->tm_sec;
+    result = (time_t)seconds;
+    if ((long long)result != seconds || !gmtime_r(&result, &normalized)) {
+        errno = EOVERFLOW;
+        return (time_t)-1;
+    }
+    *tm = normalized;
     return result;
 }
 
