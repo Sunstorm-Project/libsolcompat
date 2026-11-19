@@ -8,6 +8,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -15,6 +16,7 @@ extern "C" {
 
 void explicit_bzero(void *s, size_t n);
 
+ssize_t getrandom(void *buffer, size_t length, unsigned int flags);
 int getentropy(void *buffer, size_t length);
 
 uint32_t arc4random(void);

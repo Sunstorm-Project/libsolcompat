@@ -5,8 +5,7 @@
  * getrandom.c and packages using it (bash, coreutils, Python, git,
  * openssl, openssh, gettext, sudo, wget) include this header
  * unconditionally. libsolcompat's src/random.c provides an
- * implementation that delegates to getentropy() (which reads
- * /dev/urandom).
+ * implementation backed by Solaris random devices and PRNGD.
  *
  * Part of libsolcompat — https://github.com/Sunstorm-Project/libsolcompat
  */
@@ -16,8 +15,7 @@
 
 #include <sys/types.h>   /* ssize_t, size_t */
 
-/* Flags match Linux values; libsolcompat's getrandom ignores them
- * because /dev/urandom is already non-blocking and pseudo-random. */
+/* Flags match the Linux API. Nonblocking requests use device reads or EGD command 1. */
 #ifndef GRND_NONBLOCK
 #define GRND_NONBLOCK 0x0001
 #endif

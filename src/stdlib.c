@@ -96,9 +96,8 @@ unsetenv(const char *name)
  * Fill 6 bytes of buffer with Base-62-ish random characters from the
  * TMPNAM_ALPHABET. Used by mkdtemp's TOCTOU-free loop below.
  *
- * Entropy source: getentropy (which in turn reads /dev/urandom; falls
- * back to the weak per-process mixer if SOLCOMPAT_ALLOW_WEAK_RANDOM is
- * set). If getentropy fails, we fall back to time^pid XOR state —
+ * Entropy source: getentropy. If unavailable, temporary name generation
+ * falls back to time^pid XOR state —
  * still predictable but at least non-static between processes.
  *
  * 62^6 = 5.68e10 possible suffixes per template, which is more than

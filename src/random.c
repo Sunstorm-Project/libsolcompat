@@ -9,13 +9,11 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <time.h>
+#include <limits.h>
+#include <sys/random.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
-
-/* Solaris gethrtime for entropy mixing */
-extern long long gethrtime(void);
 
 /*
  * EGD (Entropy Gathering Daemon) client.
@@ -188,33 +186,6 @@ get_random_bytes(void *buf, size_t len)
     return egd_get_bytes(buf, len);
 }
 
-/*
- * Fallback PRNG seeded from system state.
- * NOT cryptographically secure — only used when /dev/random
- * is unavailable.
- */
-static void
-fallback_random_bytes(void *buf, size_t len)
-{
-    unsigned char *p = (unsigned char *)buf;
-    static int seeded = 0;
-    static unsigned long state;
-    size_t i;
-
-    if (!seeded) {
-        long long hr = gethrtime();
-        state = (unsigned long)hr ^ (unsigned long)getpid() ^
-                (unsigned long)time(NULL) ^ (unsigned long)&state;
-        seeded = 1;
-    }
-
-    for (i = 0; i < len; i++) {
-        /* Simple LCG — not crypto grade */
-        state = state * 1103515245UL + 12345UL;
-        p[i] = (unsigned char)(state >> 16);
-    }
-}
-
 int
 getentropy(void *buffer, size_t length)
 {
@@ -223,67 +194,84 @@ getentropy(void *buffer, size_t length)
         return -1;
     }
 
+    if (length && !buffer) {
+        errno = EFAULT;
+        return -1;
+    }
     if (get_random_bytes(buffer, length) == 0)
         return 0;
-
-    /*
-     * No /dev/random or /dev/urandom available.
-     *
-     * Silently falling back to the LCG was a cryptographic footgun:
-     * OpenSSL / OpenSSH / Python's `secrets` / any caller of
-     * getentropy() may use the result as seed material. If this function silently
-     * returns LCG output, session keys / nonces / CSRF tokens become
-     * predictable with zero diagnostic.  A loud failure is strictly
-     * better than a silent weak-entropy substitution.
-     *
-     * If a caller explicitly wants the predictable fallback (e.g. for
-     * testing), they can set SOLCOMPAT_ALLOW_WEAK_RANDOM=1.
-     *
-     * Base Solaris 7 without SUNWski has neither /dev/random nor
-     * /dev/urandom, so this path is hit by default on vanilla installs.
-     * The right remediation is to ship SUNWski or a userspace RNG;
-     * libsolcompat refuses to paper over its absence with an LCG.
-     */
-    if (getenv("SOLCOMPAT_ALLOW_WEAK_RANDOM") != NULL) {
-        fallback_random_bytes(buffer, length);
-        return 0;
-    }
     errno = EIO;
     return -1;
 }
 
-/*
- * getrandom — Linux 3.17 syscall interface. Solaris 7 has no equivalent.
- * We delegate to get_random_bytes() (which tries /dev/urandom, /dev/random,
- * then the EGD pool) and ignore the flags — all three (GRND_NONBLOCK,
- * GRND_RANDOM, GRND_INSECURE) are approximately satisfied because every
- * source we use is non-blocking and kernel-pseudo-random.  Returns the
- * number of bytes written, or -1 / errno on error.
- *
- * gnulib's getrandom.c and many packages (bash, coreutils, Python,
- * git, openssl, openssh, gettext, sudo, wget) include <sys/random.h>
- * unconditionally and call this.  Python in particular calls it during
- * interpreter init for hash randomization; returning a weak LCG there
- * is the same cryptographic footgun described on getentropy above, so
- * we fail loudly rather than silently substitute.
- */
+/* Read available bytes only. PRNGD command 1 reports its available count
+ * immediately; command 2 would wait for enough entropy to fill the request. */
+static ssize_t
+random_nowait(void *buf, size_t len)
+{
+    static const char *const paths[] = { "/dev/urandom", "/dev/random" };
+    size_t i;
+    for (i = 0; i < sizeof(paths) / sizeof(paths[0]); ++i) {
+        int fd = open(paths[i], O_RDONLY | O_NONBLOCK);
+        if (fd >= 0) {
+            ssize_t n = read(fd, buf, len);
+            int error = errno;
+            close(fd);
+            if (n > 0)
+                return n;
+            if (n < 0 && error == EINTR) {
+                errno = error;
+                return -1;
+            }
+        }
+    }
+    int sock = egd_connect();
+    if (sock >= 0) {
+        unsigned char count;
+        unsigned char request[2] = { 1, len > EGD_MAX_REQUEST ? EGD_MAX_REQUEST : len };
+        int error = EIO;
+        if (write(sock, request, sizeof(request)) == sizeof(request) &&
+            read_all(sock, &count, 1) == 0) {
+            if (!count)
+                error = EAGAIN;
+            else if (count <= request[1] && read_all(sock, buf, count) == 0) {
+                close(sock);
+                return count;
+            }
+        }
+        close(sock);
+        errno = error;
+        return -1;
+    }
+    errno = EAGAIN;
+    return -1;
+}
+
 ssize_t
 getrandom(void *buf, size_t buflen, unsigned int flags)
 {
-    (void)flags;
+    if ((flags & ~(GRND_NONBLOCK | GRND_RANDOM | GRND_INSECURE)) ||
+        ((flags & GRND_RANDOM) && (flags & GRND_INSECURE))) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (buflen == 0)
+        return 0;
+    if (!buf) {
+        errno = EFAULT;
+        return -1;
+    }
+    if (buflen > SSIZE_MAX)
+        buflen = SSIZE_MAX;
+    if (flags & GRND_NONBLOCK)
+        return random_nowait(buf, buflen);
     if (get_random_bytes(buf, buflen) == 0)
         return (ssize_t)buflen;
-
-    if (getenv("SOLCOMPAT_ALLOW_WEAK_RANDOM") != NULL) {
-        fallback_random_bytes(buf, buflen);
-        return (ssize_t)buflen;
-    }
     errno = EIO;
     return -1;
 }
 
-/* These APIs have no error return. Never expose partially filled output
- * or use the optional weak test generator when the entropy source fails. */
+/* These APIs have no error return. Never expose partially filled output. */
 void
 arc4random_buf(void *buf, size_t nbytes)
 {

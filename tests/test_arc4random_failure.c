@@ -1,6 +1,8 @@
 /* Run in a Solaris test root without random devices or an EGD socket. */
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/random.h>
+#include <errno.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <string.h>
@@ -45,12 +47,23 @@ static int test_egd(void)
                     _exit(2);
             }
         }
+        close(fd);
+        fd = accept(server, NULL, NULL);
+        unsigned char cmd, count;
+        unsigned char reply[] = { 2, 0x23, 0x45 };
+        if (fd < 0 || read(fd, &cmd, 1) != 1 || read(fd, &count, 1) != 1 ||
+            cmd != 1 || count != 4 || write(fd, reply, sizeof(reply)) != sizeof(reply))
+            _exit(3);
         _exit(sent != sizeof(bytes));
     }
     if (child < 0)
         return 6;
     alarm(15);
     arc4random_buf(bytes, sizeof(bytes));
+    unsigned char partial[4] = { 0 };
+    if (getrandom(partial, sizeof(partial), GRND_NONBLOCK) != 2 ||
+        partial[0] != 0x23 || partial[1] != 0x45 || partial[2] != 0)
+        return 11;
     close(server);
     unlink(addr.sun_path);
     if (waitpid(child, &status, 0) != child || status != 0)
@@ -74,6 +87,13 @@ int main(void)
     if (putenv("SOLCOMPAT_ALLOW_WEAK_RANDOM=1") ||
         putenv("SOLCOMPAT_EGD_SOCKET=/missing-egd-for-test"))
         return 2;
+    if (getentropy(&byte, 1) != -1 || errno != EIO ||
+        getrandom(&byte, 1, 0) != -1 || errno != EIO ||
+        getrandom(&byte, 1, GRND_NONBLOCK) != -1 || errno != EAGAIN ||
+        getrandom(&byte, 0, 0) != 0 ||
+        getrandom(&byte, 0, ~0U) != -1 || errno != EINVAL ||
+        getrandom(&byte, 1, GRND_RANDOM | GRND_INSECURE) != -1 || errno != EINVAL)
+        return 10;
     child = fork();
     if (child < 0)
         return 3;
