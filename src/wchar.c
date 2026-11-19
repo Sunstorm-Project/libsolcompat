@@ -9,6 +9,8 @@
 #include <wctype.h>
 #include <string.h>
 #include <stdlib.h>
+#include <limits.h>
+#include <errno.h>
 
 /* ================================================================
  * Wide memory operations
@@ -83,9 +85,14 @@ wcsstr(const wchar_t *haystack, const wchar_t *needle)
 int
 wctob(wint_t c)
 {
-    if (c >= 0 && c < 256)
-        return (int)c;
-    return -1;  /* EOF */
+    mbstate_t state = {0};
+    char bytes[MB_LEN_MAX];
+    int saved_errno = errno;
+    if (c == WEOF)
+        return -1;
+    size_t count = wcrtomb(bytes, (wchar_t)c, &state);
+    errno = saved_errno;
+    return count == 1 ? (unsigned char)bytes[0] : -1;
 }
 
 /*
