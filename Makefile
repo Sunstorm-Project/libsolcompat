@@ -424,7 +424,7 @@ COMPAT_TESTS = $(addprefix tests/test_,printf_compat mntent_compat mnttab_native
     long_double snprintf_bounds dl_iterate_phdr timestamps getcwd_compat \
     socket_flags socket_flag_failures spawn_actions at_flags fstatat_layout \
     pipe_flags execvpe_env clock_deadline timegm_utc semaphore_deadline \
-    fma fmal scalblnl neighbors math_classify inet_text interfaces nameinfo timed_locks)
+    fma fmal scalblnl neighbors math_classify inet_text interfaces nameinfo addrinfo timed_locks)
 
 compat-tests: $(COMPAT_TESTS)
 $(COMPAT_TESTS): %: %.c $(SONAME)
